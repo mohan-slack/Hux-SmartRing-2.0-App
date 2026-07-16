@@ -5,20 +5,23 @@
 import 'package:flutter/material.dart';
 
 import 'core/meaning/readout_service.dart';
+import 'core/meaning/weekly_story.dart';
 import 'core/storage/health_store.dart';
 import 'core/sync/sync_service.dart';
-import 'screens/today_screen.dart';
+import 'screens/app_shell.dart';
 
 class HuxApp extends StatelessWidget {
   final HealthStore store;
   final SyncService syncService;
   final ReadoutService readoutService;
+  final WeeklyStoryService storyService;
 
   const HuxApp({
     super.key,
     required this.store,
     required this.syncService,
     required this.readoutService,
+    required this.storyService,
   });
 
   @override
@@ -27,10 +30,11 @@ class HuxApp extends StatelessWidget {
       title: 'HUX',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
-      home: TodayScreen(
+      home: AppShell(
         store: store,
         syncService: syncService,
         readoutService: readoutService,
+        storyService: storyService,
       ),
     );
   }

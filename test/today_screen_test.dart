@@ -36,7 +36,7 @@ void main() {
   }
 
   testWidgets(
-      'renders headline, the demo banner, and actions once already synced',
+      'renders headline and actions once already synced',
       (tester) async {
     late SqliteHealthStore store;
     late MockRingAdapter ring;
@@ -79,7 +79,6 @@ void main() {
     ));
     await settle(tester);
 
-    expect(find.text('DEMO — simulated ring data'), findsOneWidget);
     expect(find.text(expectedReadout.headline), findsOneWidget);
     for (final action in expectedReadout.actions) {
       expect(find.text(action), findsOneWidget);
@@ -137,8 +136,6 @@ void main() {
     ));
     await settle(tester);
 
-    expect(find.text('DEMO — simulated ring data'), findsOneWidget);
-    expect(find.text('Still learning'), findsOneWidget);
     expect(find.textContaining('learning your body'), findsOneWidget);
   });
 }

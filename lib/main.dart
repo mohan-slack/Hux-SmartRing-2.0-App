@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'app.dart';
 import 'core/meaning/readout_service.dart';
+import 'core/meaning/weekly_story.dart';
 import 'core/ring/mock_ring_adapter.dart';
 import 'core/storage/sqlite_health_store.dart';
 import 'core/sync/sync_service.dart';
@@ -26,10 +27,12 @@ Future<void> main() async {
 
   final syncService = SyncService(ring, store);
   final readoutService = ReadoutService(store);
+  final storyService = WeeklyStoryService(store);
 
   runApp(HuxApp(
     store: store,
     syncService: syncService,
     readoutService: readoutService,
+    storyService: storyService,
   ));
 }

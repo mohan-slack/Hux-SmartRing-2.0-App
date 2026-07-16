@@ -100,18 +100,7 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            const _DemoBanner(),
-            Expanded(child: _buildBody()),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _buildBody();
 
   Widget _buildBody() {
     switch (_phase) {
@@ -130,26 +119,6 @@ class _TodayScreenState extends State<TodayScreen> {
           child: _ReadoutBody(readout: _readout!, lastNight: _lastNight),
         );
     }
-  }
-}
-
-/// Unmissable — screenshots of this build must never be mistaken for
-/// real ring data.
-class _DemoBanner extends StatelessWidget {
-  const _DemoBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: Colors.amber,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      child: const Text(
-        'DEMO — simulated ring data',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-      ),
-    );
   }
 }
 
@@ -257,14 +226,6 @@ class _RecoveryHeader extends StatelessWidget {
         RecoveryState.learning => Colors.grey,
       };
 
-  String get _stateLabel => switch (state) {
-        RecoveryState.recharged => 'Recharged',
-        RecoveryState.steady => 'Steady',
-        RecoveryState.stretched => 'Stretched',
-        RecoveryState.rundown => 'Rundown',
-        RecoveryState.learning => 'Still learning',
-      };
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -280,14 +241,7 @@ class _RecoveryHeader extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_stateLabel,
-                  style: Theme.of(context).textTheme.labelLarge),
-              Text(headline, style: Theme.of(context).textTheme.headlineSmall),
-            ],
-          ),
+          child: Text(headline, style: Theme.of(context).textTheme.headlineSmall),
         ),
       ],
     );

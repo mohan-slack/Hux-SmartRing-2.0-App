@@ -22,6 +22,7 @@
 
 import '../ring/ring_models.dart';
 import 'baseline.dart';
+import 'content/action_content.dart';
 import 'daily_readout.dart';
 
 class MeaningEngine {
@@ -105,9 +106,12 @@ class MeaningEngine {
         ? DataQuality.full
         : (considered >= 2 ? DataQuality.partial : DataQuality.sparse);
 
-    final composed =
-        _compose(state, hrvScore: hrvScore, sleepScore: sleepScore,
-            hrScore: hrScore, tempScore: tempScore);
+    final composed = _compose(state,
+        date: date,
+        hrvScore: hrvScore,
+        sleepScore: sleepScore,
+        hrScore: hrScore,
+        tempScore: tempScore);
 
     return DailyReadout(
       date: date,
@@ -189,10 +193,14 @@ class MeaningEngine {
   }
 
   // ---- text composition: plain English, always tied to the user's own
-  // baseline, never generic filler, never medical language ----
+  // baseline, never generic filler, never medical language. Actions
+  // come from the Desi Plate content library (content/action_content.dart),
+  // picked deterministically by date so the same day always reads the
+  // same but consecutive days differ.
 
   _Composed _compose(
     RecoveryState state, {
+    required DateTime date,
     required int? hrvScore,
     required int? sleepScore,
     required int? hrScore,
@@ -200,37 +208,35 @@ class MeaningEngine {
   }) {
     String headline;
     String meaning;
-    final actions = <String>[];
+
+    // Which of HRV/sleep/HR is worst drives both the "why" sentence and
+    // which action bucket to draw from. Only stretched/rundown ever
+    // point at a specific signal — a good day has nothing to blame.
+    final dominant =
+        state == RecoveryState.stretched || state == RecoveryState.rundown
+            ? _dominantNegativeSignal(hrvScore, sleepScore, hrScore)
+            : DominantSignal.none;
 
     switch (state) {
       case RecoveryState.recharged:
-        headline = 'Recharged — strong recovery today';
+        headline = 'Strong recovery today';
         meaning = 'Your HRV and sleep last night were above your usual '
             'range, a sign your body recovered well.';
-        actions.add('Good day to push a harder workout or a longer walk');
-        actions.add('Use the extra energy on your most demanding task');
         break;
       case RecoveryState.steady:
-        headline = 'Steady — right in your normal range';
+        headline = 'Right in your normal range';
         meaning = "Last night's readings were close to your usual "
             'numbers, no strong signal either way.';
-        actions.add('Stick with your regular routine today');
-        actions.add("Keep tonight's bedtime consistent with your usual");
         break;
       case RecoveryState.stretched:
-        headline = 'A bit stretched today — ease up slightly';
-        meaning = _worstSignalSentence(hrvScore, sleepScore, hrScore) ??
+        headline = 'A bit stretched — ease up';
+        meaning = _signalSentence(dominant) ??
             'A couple of signals were mildly below your usual overnight.';
-        actions.add(
-            'Dial back workout intensity — a light walk over a hard session');
-        actions.add('Aim for lights-out 30-45 minutes earlier tonight');
         break;
       case RecoveryState.rundown:
-        headline = 'Running low today — prioritize recovery';
-        meaning = _worstSignalSentence(hrvScore, sleepScore, hrScore) ??
+        headline = 'Running low — prioritize recovery';
+        meaning = _signalSentence(dominant) ??
             'Several signals were well below your usual overnight.';
-        actions.add('Skip intense training today and prioritize rest');
-        actions.add('Get to bed earlier and keep hydration up today');
         break;
       case RecoveryState.learning:
         // Handled before _compose is ever called.
@@ -239,47 +245,62 @@ class MeaningEngine {
         break;
     }
 
+    final actions = state == RecoveryState.learning
+        ? <String>[]
+        : ActionContent.pickActions(state, dominant, date);
+
     if (tempScore != null && tempScore < 0) {
       meaning += ' Your skin temperature was outside your usual range '
           'overnight — your body is working harder than usual.';
-      const tempAction =
-          'Prioritize rest today — your temperature was outside your '
-          'usual range overnight';
-      if (actions.length >= 2) {
-        actions[actions.length - 1] = tempAction;
-      } else {
-        actions.add(tempAction);
+      final tempActions = ActionContent.pickActions(
+          state, DominantSignal.temp, date,
+          count: 1);
+      if (tempActions.isNotEmpty) {
+        final tempAction = tempActions.first;
+        if (actions.length >= 2) {
+          actions[actions.length - 1] = tempAction;
+        } else {
+          actions.add(tempAction);
+        }
       }
     }
 
     return _Composed(headline: headline, meaning: meaning, actions: actions);
   }
 
-  /// Names the worst-scoring of the three named signals, in the user's
-  /// own terms. Returns null if none of them are actually negative
-  /// (e.g. the state was driven down by temperature alone).
-  String? _worstSignalSentence(int? hrv, int? sleep, int? hr) {
-    final entries = <MapEntry<String, int>>[
-      if (hrv != null) MapEntry('hrv', hrv),
-      if (sleep != null) MapEntry('sleep', sleep),
-      if (hr != null) MapEntry('hr', hr),
+  /// Which of HRV/sleep/HR is most negative, in the user's own terms.
+  /// Returns [DominantSignal.none] if none of the three are actually
+  /// negative (e.g. the state was driven down by temperature alone).
+  DominantSignal _dominantNegativeSignal(int? hrv, int? sleep, int? hr) {
+    final entries = <MapEntry<DominantSignal, int>>[
+      if (hrv != null) MapEntry(DominantSignal.hrv, hrv),
+      if (sleep != null) MapEntry(DominantSignal.sleep, sleep),
+      if (hr != null) MapEntry(DominantSignal.hr, hr),
     ];
-    if (entries.isEmpty) return null;
+    if (entries.isEmpty) return DominantSignal.none;
     entries.sort((a, b) => a.value.compareTo(b.value));
     final worst = entries.first;
-    if (worst.value >= 0) return null;
+    return worst.value < 0 ? worst.key : DominantSignal.none;
+  }
 
-    switch (worst.key) {
-      case 'hrv':
+  /// The "why" sentence for the dominant negative signal. Null for
+  /// [DominantSignal.none]/[DominantSignal.temp] — temperature gets its
+  /// own sentence appended separately, and "none" falls back to a
+  /// generic multi-signal sentence at the call site.
+  String? _signalSentence(DominantSignal signal) {
+    switch (signal) {
+      case DominantSignal.hrv:
         return 'Your HRV was well below your usual last night, a sign '
             'your body is still catching up.';
-      case 'sleep':
+      case DominantSignal.sleep:
         return 'You slept noticeably less than your usual last night.';
-      case 'hr':
+      case DominantSignal.hr:
         return 'Your heart rate stayed higher than your usual overnight, '
             'a sign of extra strain.';
+      case DominantSignal.temp:
+      case DominantSignal.none:
+        return null;
     }
-    return null;
   }
 }
 
