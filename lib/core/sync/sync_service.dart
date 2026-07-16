@@ -23,7 +23,6 @@
 import 'dart:async';
 
 import '../ring/ring_adapter.dart';
-import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
 
 /// What a sync attempt produced.

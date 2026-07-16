@@ -58,6 +58,7 @@ print('Slept ${night.totalSleep.inMinutes} min, '
 lib/core/ring/       Data models, adapter interface, mock TM21
 lib/core/storage/    HealthStore interface + SQLite implementation
 lib/core/sync/       SyncService: overlap, retry, watermark
+lib/core/meaning/    Meaning/Action engine: baseline, scoring, readout
 test/                Contract tests for all of the above
 ```
 
@@ -69,13 +70,37 @@ Storage guarantees (enforced by schema + tests, not by discipline):
   makes it harmless
 - deleteAllData() wipes everything: the DPDP "delete my data" hook
 
+The Meaning/Action engine (`lib/core/meaning/`) turns numbers into a
+daily readout — the product, not a dashboard:
+- `baseline.dart` — `PersonalBaseline`: medians (not means) of the
+  user's own last-14-days HRV, resting HR, sleep duration, and skin
+  temperature. Fewer than 3 days of history is `insufficient` — the
+  engine won't guess at a body it doesn't know yet.
+- `daily_readout.dart` — the output model: a `RecoveryState`
+  (recharged/steady/stretched/rundown/learning), a headline, a plain-
+  English "why" tied to the user's own numbers, 1-2 concrete actions,
+  and a `DataQuality` marker for how much of last night's data existed.
+- `meaning_engine.dart` — **pure Dart, zero Flutter/storage imports.**
+  Scores HRV, sleep duration (+ a deep-sleep floor), resting HR, and
+  skin temperature, each *relative to the user's own baseline*, never
+  a population norm. Thresholds and weights are named constants with
+  tuning comments. Deterministic: same inputs, same readout, always.
+  Missing readings are skipped, never guessed at.
+- `readout_service.dart` — the only file allowed to touch `HealthStore`;
+  loads history, builds the baseline, and calls the engine.
+
+Wellness-only wording is enforced by construction, not convention: the
+worst-case language anywhere in a readout is "your body is working
+harder than usual" — no diagnoses, no disease names, no alarm.
+
 ## What comes next (in order)
 
-1. **Meaning/Action engine** — pure Dart, consumes models, emits the
-   daily readout. The product. Owned by us, never by eIoT.
-2. **Screens** — Today, Sleep, Trends, Settings.
-3. **Health-store adapter** — real data from Apple Health / Health
+1. **Screens** — Today, Sleep, Trends, Settings, wired to
+   `ReadoutService`.
+2. **Health-store adapter** — real data from Apple Health / Health
    Connect (dev tool; see wiki page 6 for the SDNN/RMSSD warning).
+3. **eIoT ring adapter** — swap in the real TM21 SDK behind
+   `RingAdapter` once eIoT delivers it.
 
 ## Deliberate constraints (do not "fix" these)
 

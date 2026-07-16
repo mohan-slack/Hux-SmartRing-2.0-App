@@ -4,3 +4,7 @@ linter:
   rules:
     prefer_final_locals: true
     avoid_print: true
+    # Every file here opens with a `///` header doc comment describing its
+    # purpose — a deliberate house style, not an oversight. This lint wants
+    # a `library;` directive attached to it instead; keep the style.
+    dangling_library_doc_comments: false

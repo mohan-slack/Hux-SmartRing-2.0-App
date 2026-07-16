@@ -35,7 +35,8 @@ void main() {
     await store.close();
   });
 
-  test('second sync with overlap does not duplicate data', () async {
+  test('second sync with overlap never loses or duplicates a reading',
+      () async {
     final ring = MockRingAdapter(seed: 3);
     final store = await openStore();
     final sync = SyncService(ring, store,
@@ -47,6 +48,7 @@ void main() {
     await sync.syncNow();
     final afterFirst = await store.snapshotsBetween(
         DateTime.utc(2000), DateTime.now().toUtc());
+    final firstTimestamps = afterFirst.map((s) => s.timestamp).toSet();
 
     // Immediately sync again: everything fetched is inside the overlap.
     final second = await sync.syncNow();
@@ -54,11 +56,18 @@ void main() {
 
     final afterSecond = await store.snapshotsBetween(
         DateTime.utc(2000), DateTime.now().toUtc());
+    final secondTimestamps = afterSecond.map((s) => s.timestamp).toSet();
 
-    // Idempotent store: overlap re-fetch must not inflate the count
-    // (a few NEW minutes may have passed, so allow a tiny delta).
-    expect(afterSecond.length - afterFirst.length, lessThanOrEqualTo(2),
-        reason: 'overlap must be deduplicated by the store');
+    // The mock rolls its ~7% miss chance independently on every fetch, so
+    // the overlap window can legitimately gain snapshots the ring dropped
+    // the first time and filled in on the retry — that's the overlap
+    // doing its job, not a bug. What idempotency actually guarantees:
+    // nothing already synced is ever lost, and no timestamp is ever
+    // stored more than once.
+    expect(secondTimestamps.containsAll(firstTimestamps), isTrue,
+        reason: 'overlap must never lose an already-synced reading');
+    expect(afterSecond.length, secondTimestamps.length,
+        reason: 'no timestamp should ever be stored more than once');
 
     await sync.dispose();
     await ring.dispose();
