@@ -3,12 +3,15 @@
 /// is cheap.
 ///
 /// Talks only to [HealthStore] (to check "have we ever synced"),
-/// [SyncService], and [ReadoutService] — never to a RingAdapter or SQL.
+/// [SyncService], [ReadoutService], and [ModeService] — never to a
+/// RingAdapter or SQL.
 
 import 'package:flutter/material.dart';
 
 import '../core/meaning/daily_readout.dart';
 import '../core/meaning/readout_service.dart';
+import '../core/modes/event_mode_engine.dart';
+import '../core/modes/mode_service.dart';
 import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
@@ -19,12 +22,23 @@ class TodayScreen extends StatefulWidget {
   final HealthStore store;
   final SyncService syncService;
   final ReadoutService readoutService;
+  final ModeService modeService;
+
+  /// Pinged whenever this tab becomes visible again after the user
+  /// switched away and back (see AppShell) — IndexedStack keeps this
+  /// screen's State alive rather than rebuilding it, so without this
+  /// it would never notice something changed elsewhere (e.g. a mode
+  /// started from the Modes tab). Optional: tests that mount
+  /// TodayScreen on its own don't need one.
+  final Listenable? refreshSignal;
 
   const TodayScreen({
     super.key,
     required this.store,
     required this.syncService,
     required this.readoutService,
+    required this.modeService,
+    this.refreshSignal,
   });
 
   @override
@@ -35,12 +49,27 @@ class _TodayScreenState extends State<TodayScreen> {
   _Phase _phase = _Phase.loadingReadout;
   DailyReadout? _readout;
   SleepSession? _lastNight;
+  ModeStrip? _modeStrip;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    widget.refreshSignal?.addListener(_onRefreshSignal);
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshSignal?.removeListener(_onRefreshSignal);
+    super.dispose();
+  }
+
+  /// Re-reads the store, but only once we actually have something on
+  /// screen to refresh — while still syncing/loading/erroring, the
+  /// in-flight bootstrap already has this covered.
+  void _onRefreshSignal() {
+    if (_phase == _Phase.ready) _loadReadout();
   }
 
   /// First open: sync automatically only if we've never synced before.
@@ -74,10 +103,12 @@ class _TodayScreenState extends State<TodayScreen> {
     if (mounted) setState(() => _phase = _Phase.loadingReadout);
     final readout = await widget.readoutService.today();
     final lastNight = await widget.readoutService.lastNight();
+    final modeStrip = await widget.modeService.currentStrip(readout: readout);
     if (!mounted) return;
     setState(() {
       _readout = readout;
       _lastNight = lastNight;
+      _modeStrip = modeStrip;
       _phase = _Phase.ready;
     });
   }
@@ -116,7 +147,11 @@ class _TodayScreenState extends State<TodayScreen> {
       case _Phase.ready:
         return RefreshIndicator(
           onRefresh: _refresh,
-          child: _ReadoutBody(readout: _readout!, lastNight: _lastNight),
+          child: _ReadoutBody(
+            readout: _readout!,
+            lastNight: _lastNight,
+            modeStrip: _modeStrip,
+          ),
         );
     }
   }
@@ -188,8 +223,13 @@ class _ErrorView extends StatelessWidget {
 class _ReadoutBody extends StatelessWidget {
   final DailyReadout readout;
   final SleepSession? lastNight;
+  final ModeStrip? modeStrip;
 
-  const _ReadoutBody({required this.readout, required this.lastNight});
+  const _ReadoutBody({
+    required this.readout,
+    required this.lastNight,
+    required this.modeStrip,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +243,10 @@ class _ReadoutBody extends StatelessWidget {
         _ActionsList(actions: readout.actions),
         const SizedBox(height: 12),
         _DataQualityCaption(quality: readout.dataQuality),
+        if (modeStrip != null) ...[
+          const SizedBox(height: 16),
+          _ModeStripCard(strip: modeStrip!),
+        ],
         if (lastNight != null) ...[
           const Divider(height: 32),
           _LastNightStats(session: lastNight!),
@@ -299,6 +343,47 @@ class _DataQualityCaption extends StatelessWidget {
   }
 }
 
+/// The active event mode's compact strip: phase, days-to-go, and
+/// today's themed action. On day 0 this is the readiness card instead
+/// (same widget — [ModeStrip.phase] already reflects that).
+class _ModeStripCard extends StatelessWidget {
+  final ModeStrip strip;
+
+  const _ModeStripCard({required this.strip});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDayZero = strip.phase == ModePhase.theDay;
+
+    return Card(
+      color: isDayZero ? scheme.tertiaryContainer : scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(strip.phaseLabel,
+                    style: Theme.of(context).textTheme.labelLarge),
+                if (!strip.isWrapUp)
+                  Text(
+                    strip.daysToGo == 0 ? 'Today' : '${strip.daysToGo}d to go',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(strip.themedAction),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _LastNightStats extends StatelessWidget {
   final SleepSession session;
 
@@ -331,9 +416,12 @@ class _LastNightStats extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(row.key),
+                // Expanded, not spaceBetween: a long label (a bigger
+                // accessibility font, a longer localized string down
+                // the line) shrinks/wraps instead of overflowing the
+                // row — the value on the right always stays intact.
+                Expanded(child: Text(row.key)),
                 Text(row.value),
               ],
             ),

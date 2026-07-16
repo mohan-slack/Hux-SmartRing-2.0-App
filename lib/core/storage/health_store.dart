@@ -10,6 +10,7 @@
 /// - No health data leaves the phone in v1. This interface has no
 ///   network concepts at all — that is deliberate.
 
+import '../modes/mode.dart';
 import '../ring/ring_models.dart';
 
 abstract class HealthStore {
@@ -43,6 +44,16 @@ abstract class HealthStore {
   /// Wipe everything. Used by "delete my data" (a DPDP requirement)
   /// and by tests. Irreversible by design.
   Future<void> deleteAllData();
+
+  /// Persists the active event mode, replacing whatever was active
+  /// before — at most one event mode is ever active at a time.
+  Future<void> saveModeState(EventModeConfig config);
+
+  /// The active event mode, or null if none is running.
+  Future<EventModeConfig?> loadModeState();
+
+  /// Ends the active mode, if any. A no-op if none is running.
+  Future<void> clearModeState();
 
   Future<void> close();
 }

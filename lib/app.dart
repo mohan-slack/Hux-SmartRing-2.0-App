@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
+import 'core/modes/mode_service.dart';
 import 'core/storage/health_store.dart';
 import 'core/sync/sync_service.dart';
 import 'screens/app_shell.dart';
@@ -15,6 +16,7 @@ class HuxApp extends StatelessWidget {
   final SyncService syncService;
   final ReadoutService readoutService;
   final WeeklyStoryService storyService;
+  final ModeService modeService;
 
   const HuxApp({
     super.key,
@@ -22,6 +24,7 @@ class HuxApp extends StatelessWidget {
     required this.syncService,
     required this.readoutService,
     required this.storyService,
+    required this.modeService,
   });
 
   @override
@@ -35,6 +38,7 @@ class HuxApp extends StatelessWidget {
         syncService: syncService,
         readoutService: readoutService,
         storyService: storyService,
+        modeService: modeService,
       ),
     );
   }

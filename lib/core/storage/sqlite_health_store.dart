@@ -14,8 +14,11 @@
 /// - `meta` is a tiny key-value table for the sync watermark and any
 ///   future flags. Not a dumping ground.
 
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
+import '../modes/mode.dart';
 import '../ring/ring_models.dart';
 import 'health_store.dart';
 
@@ -24,7 +27,10 @@ class SqliteHealthStore implements HealthStore {
 
   SqliteHealthStore._(this._db);
 
-  static const _schemaVersion = 1;
+  /// Schema history:
+  /// v1 — snapshots, sleep_sessions, sleep_segments, meta.
+  /// v2 — added mode_state (event modes: Big Day, Shaadi, Exam Season).
+  static const _schemaVersion = 2;
 
   /// Opens (and if needed creates) the database at [path].
   /// Pass an in-memory path in tests via sqflite_common_ffi.
@@ -37,6 +43,7 @@ class SqliteHealthStore implements HealthStore {
         version: _schemaVersion,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
+        onUpgrade: _onUpgrade,
       ),
     );
     return SqliteHealthStore._(db);
@@ -81,6 +88,27 @@ class SqliteHealthStore implements HealthStore {
         value TEXT NOT NULL
       )
     ''');
+    await _createModeStateTable(db);
+  }
+
+  static Future<void> _createModeStateTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE mode_state (
+        mode_id TEXT PRIMARY KEY,
+        json TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// Migrations run in order; each `if` is a one-way step so opening a
+  /// very old database still walks every version in between. v1->v2
+  /// only ADDS a table — existing snapshots/sessions/watermark are
+  /// never touched, see sqlite_health_store_test.dart for the proof.
+  static Future<void> _onUpgrade(
+      Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createModeStateTable(db);
+    }
   }
 
   // ---- snapshots ----------------------------------------------------
@@ -264,6 +292,35 @@ class SqliteHealthStore implements HealthStore {
     );
   }
 
+  // ---- event modes ---------------------------------------------------
+
+  @override
+  Future<void> saveModeState(EventModeConfig config) async {
+    await _db.transaction((txn) async {
+      // Delete-then-insert enforces "at most one active mode" even
+      // though mode_id is the primary key: switching from shaadi to
+      // examSeason must not leave shaadi's row behind.
+      await txn.delete('mode_state');
+      await txn.insert('mode_state', {
+        'mode_id': config.id.name,
+        'json': jsonEncode(config.toJson()),
+      });
+    });
+  }
+
+  @override
+  Future<EventModeConfig?> loadModeState() async {
+    final rows = await _db.query('mode_state', limit: 1);
+    if (rows.isEmpty) return null;
+    final json = jsonDecode(rows.first['json'] as String) as Map<String, Object?>;
+    return EventModeConfig.fromJson(json);
+  }
+
+  @override
+  Future<void> clearModeState() async {
+    await _db.delete('mode_state');
+  }
+
   // ---- lifecycle ----------------------------------------------------
 
   @override
@@ -273,6 +330,7 @@ class SqliteHealthStore implements HealthStore {
       await txn.delete('sleep_sessions');
       await txn.delete('snapshots');
       await txn.delete('meta');
+      await txn.delete('mode_state');
     });
   }
 

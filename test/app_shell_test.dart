@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hux_app/core/meaning/readout_service.dart';
 import 'package:hux_app/core/meaning/weekly_story.dart';
+import 'package:hux_app/core/modes/mode_service.dart';
 import 'package:hux_app/core/ring/mock_ring_adapter.dart';
 import 'package:hux_app/core/storage/sqlite_health_store.dart';
 import 'package:hux_app/core/sync/sync_service.dart';
@@ -25,7 +26,7 @@ void main() {
   }
 
   testWidgets(
-      'the demo banner stays visible across Today, Trends, and Story',
+      'the demo banner stays visible across Today, Trends, Story, and Modes',
       (tester) async {
     late SqliteHealthStore store;
     late MockRingAdapter ring;
@@ -57,6 +58,7 @@ void main() {
         syncService: syncService,
         readoutService: ReadoutService(store),
         storyService: WeeklyStoryService(store),
+        modeService: ModeService(store),
       ),
     ));
     await settle(tester);
@@ -72,6 +74,11 @@ void main() {
     await settle(tester);
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
     expect(find.text('Your week, in plain words'), findsOneWidget);
+
+    await tester.tap(find.text('Modes'));
+    await settle(tester);
+    expect(find.text('DEMO — simulated ring data'), findsOneWidget);
+    expect(find.text('Modes'), findsWidgets);
 
     await tester.tap(find.text('Today'));
     await settle(tester);
@@ -109,6 +116,7 @@ void main() {
         syncService: syncService,
         readoutService: ReadoutService(store),
         storyService: WeeklyStoryService(store),
+        modeService: ModeService(store),
       ),
     ));
     await settle(tester);
@@ -135,5 +143,76 @@ void main() {
         tester.widget(find.byWidgetPredicate((w) => w is SegmentedButton));
     final selected = (segmented as dynamic).selected as Set;
     expect(selected.first.toString(), contains('thirtyDays'));
+  });
+
+  testWidgets(
+      'starting a mode on the Modes tab shows up on Today after switching '
+      'back — regression test: IndexedStack keeps Today alive, so it '
+      'must be told to refresh rather than silently going stale',
+      (tester) async {
+    late SqliteHealthStore store;
+    late MockRingAdapter ring;
+    late SyncService syncService;
+
+    await tester.runAsync(() async {
+      store = await SqliteHealthStore.open(inMemoryDatabasePath,
+          factory: databaseFactoryFfi);
+      ring = MockRingAdapter(seed: 17);
+      syncService = SyncService(
+        ring,
+        store,
+        firstSyncWindow: const Duration(days: 10),
+        maxAttempts: 5,
+        baseBackoff: const Duration(milliseconds: 10),
+      );
+      await syncService.syncNow();
+    });
+    addTearDown(() async {
+      await syncService.dispose();
+      await ring.dispose();
+      await store.close();
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: AppShell(
+        store: store,
+        syncService: syncService,
+        readoutService: ReadoutService(store),
+        storyService: WeeklyStoryService(store),
+        modeService: ModeService(store),
+      ),
+    ));
+    await settle(tester);
+
+    // No mode active yet: Today must not show a ModeStrip card.
+    expect(find.textContaining('days to go'), findsNothing);
+
+    // Start Big Day from the Modes tab.
+    await tester.tap(find.text('Modes'));
+    await settle(tester);
+
+    await tester.tap(find.text('Big Day'));
+    await settle(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Choose a date'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start mode'));
+    await settle(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Active: Big Day'), findsOneWidget);
+
+    // Switch back to Today: it must reflect the mode that was started
+    // while this tab's State sat alive in the background.
+    await tester.tap(find.text('Today'));
+    await settle(tester);
+
+    await tester.scrollUntilVisible(find.textContaining('d to go'), 300);
+    await tester.pump();
+    expect(find.textContaining('d to go'), findsOneWidget);
   });
 }

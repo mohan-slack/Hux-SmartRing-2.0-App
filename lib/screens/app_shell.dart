@@ -1,16 +1,18 @@
 /// The app's top-level shell: bottom navigation across Today, Trends,
-/// and Story. The demo banner is pinned here, above all three tabs —
-/// a single, unmissable element rather than three copies that could
-/// drift out of sync. Each tab keeps its own state when you switch
-/// away and back (IndexedStack builds every tab once and keeps them
-/// alive, rather than disposing and rebuilding on every switch).
+/// Story, and Modes. The demo banner is pinned here, above all four
+/// tabs — a single, unmissable element rather than four copies that
+/// could drift out of sync. Each tab keeps its own state when you
+/// switch away and back (IndexedStack builds every tab once and keeps
+/// them alive, rather than disposing and rebuilding on every switch).
 
 import 'package:flutter/material.dart';
 
 import '../core/meaning/readout_service.dart';
 import '../core/meaning/weekly_story.dart';
+import '../core/modes/mode_service.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+import 'modes_screen.dart';
 import 'story_screen.dart';
 import 'today_screen.dart';
 import 'trends_screen.dart';
@@ -20,6 +22,7 @@ class AppShell extends StatefulWidget {
   final SyncService syncService;
   final ReadoutService readoutService;
   final WeeklyStoryService storyService;
+  final ModeService modeService;
 
   const AppShell({
     super.key,
@@ -27,6 +30,7 @@ class AppShell extends StatefulWidget {
     required this.syncService,
     required this.readoutService,
     required this.storyService,
+    required this.modeService,
   });
 
   @override
@@ -35,6 +39,25 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+
+  /// IndexedStack keeps Today's State alive when you switch away —
+  /// that's the point, tab state survives. But it also means Today
+  /// never re-reads the store on its own if something changed it
+  /// elsewhere (e.g. starting a mode from the Modes tab). Ping this
+  /// every time Today becomes the visible tab so it refreshes instead
+  /// of silently showing what it looked like when it was last built.
+  final _todayRefresh = ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _todayRefresh.dispose();
+    super.dispose();
+  }
+
+  void _onDestinationSelected(int index) {
+    setState(() => _index = index);
+    if (index == 0) _todayRefresh.value++;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,9 +74,12 @@ class _AppShellState extends State<AppShell> {
                     store: widget.store,
                     syncService: widget.syncService,
                     readoutService: widget.readoutService,
+                    modeService: widget.modeService,
+                    refreshSignal: _todayRefresh,
                   ),
                   TrendsScreen(store: widget.store),
                   StoryScreen(storyService: widget.storyService),
+                  ModesScreen(modeService: widget.modeService),
                 ],
               ),
             ),
@@ -62,12 +88,13 @@ class _AppShellState extends State<AppShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
+        onDestinationSelected: _onDestinationSelected,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
           NavigationDestination(
               icon: Icon(Icons.show_chart), label: 'Trends'),
           NavigationDestination(icon: Icon(Icons.menu_book), label: 'Story'),
+          NavigationDestination(icon: Icon(Icons.flag), label: 'Modes'),
         ],
       ),
     );

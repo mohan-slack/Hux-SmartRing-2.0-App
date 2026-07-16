@@ -14,6 +14,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hux_app/core/meaning/daily_readout.dart';
 import 'package:hux_app/core/meaning/readout_service.dart';
+import 'package:hux_app/core/modes/content/event_content.dart';
+import 'package:hux_app/core/modes/mode.dart';
+import 'package:hux_app/core/modes/mode_service.dart';
 import 'package:hux_app/core/ring/mock_ring_adapter.dart';
 import 'package:hux_app/core/ring/ring_models.dart';
 import 'package:hux_app/core/storage/sqlite_health_store.dart';
@@ -75,6 +78,7 @@ void main() {
         store: store,
         syncService: syncService,
         readoutService: readoutService,
+        modeService: ModeService(store),
       ),
     ));
     await settle(tester);
@@ -132,10 +136,76 @@ void main() {
         store: store,
         syncService: syncService,
         readoutService: readoutService,
+        modeService: ModeService(store),
       ),
     ));
     await settle(tester);
 
     expect(find.textContaining('learning your body'), findsOneWidget);
+  });
+
+  testWidgets('shows the ModeStrip card when an event mode is active',
+      (tester) async {
+    late SqliteHealthStore store;
+    late MockRingAdapter ring;
+    late SyncService syncService;
+    late ReadoutService readoutService;
+    late ModeService modeService;
+    late String expectedAction;
+
+    await tester.runAsync(() async {
+      store = await openStore();
+      ring = MockRingAdapter(seed: 21);
+      syncService = SyncService(
+        ring,
+        store,
+        firstSyncWindow: const Duration(days: 10),
+        maxAttempts: 5,
+        baseBackoff: const Duration(milliseconds: 10),
+      );
+      readoutService = ReadoutService(store);
+      modeService = ModeService(store);
+
+      final outcome = await syncService.syncNow();
+      expect(outcome.success, isTrue, reason: outcome.error ?? '');
+
+      // 10 days out lands squarely in the "Build" phase (8-21 days).
+      final now = DateTime.now();
+      await modeService.startMode(EventModeConfig(
+        id: ModeId.shaadi,
+        targetDate: now.add(const Duration(days: 10)),
+        label: 'Test wedding',
+        startedAt: now,
+      ));
+      expectedAction =
+          EventContent.pickPhaseAction(ModeId.shaadi, EventPhase.build, now);
+    });
+    addTearDown(() async {
+      await syncService.dispose();
+      await ring.dispose();
+      await store.close();
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: TodayScreen(
+        store: store,
+        syncService: syncService,
+        readoutService: readoutService,
+        modeService: modeService,
+      ),
+    ));
+    await settle(tester);
+
+    // The ModeStrip card sits below the fold on the default test
+    // surface — a plain ListView only builds elements for what's near
+    // the viewport, so scroll it into view rather than guessing a
+    // taller surface size (which just moves the same problem to
+    // whatever content is now off to the side).
+    await tester.scrollUntilVisible(find.text('Build'), 300);
+    await tester.pump();
+
+    expect(find.text('Build'), findsOneWidget);
+    expect(find.text('10d to go'), findsOneWidget);
+    expect(find.text(expectedAction), findsOneWidget);
   });
 }

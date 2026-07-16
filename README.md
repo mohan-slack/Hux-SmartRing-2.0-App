@@ -61,7 +61,8 @@ lib/core/sync/       SyncService: overlap, retry, watermark
 lib/core/meaning/    Meaning/Action engine: baseline, scoring, readout,
                      Desi Plate action content, Weekly Body Story
 lib/core/trends/     Pure per-night chart data (gaps, personal band)
-lib/screens/         Today, Trends, Story — tabbed under one app shell
+lib/core/modes/      Mode machinery: Big Day, Shaadi, Exam Season
+lib/screens/         Today, Trends, Story, Modes — one tabbed app shell
 lib/app.dart         HuxApp: MaterialApp + object-graph injection
 lib/main.dart        Composition root — the one eIoT swap point
 test/                Contract tests for all of the above
@@ -119,19 +120,65 @@ Trends screen: one row per calendar night (missing nights stay in the
 list with null fields, so the UI renders a gap, never a zero), plus the
 personal sleep-duration target band (baseline median ± 10%).
 
-The three screens (`lib/screens/`) live under one bottom-navigation
+The four screens (`lib/screens/`) live under one bottom-navigation
 shell (`app_shell.dart`) with an unmissable amber "DEMO — simulated
 ring data" banner pinned above all of them — screenshots of this build
 must never be mistaken for a real ring. Each tab's state survives
 switching away and back (`IndexedStack`, not a rebuilding `TabView`).
 
+**Modes** (`lib/core/modes/`) are HUX's differentiation: the same
+Meaning engine, re-aimed at a life moment — a target date, phased
+coaching leading up to it, and a readiness message on the day itself.
+One mechanic, three themes so far (Big Day, Shaadi, Exam Season); Night
+Shift and Fasting are a later phase built on the same machinery.
+- `mode.dart` — the model. `ModeId` + `EventModeConfig` (a mode, aimed
+  at a target date, with an optional label). At most ONE event mode is
+  active at a time — starting a new one replaces the old, with a UI
+  confirmation. Persisted via three new `HealthStore` methods
+  (`saveModeState`/`loadModeState`/`clearModeState`) backed by a new
+  `mode_state` table — schema v1→v2, an additive migration (old
+  snapshots/sessions/watermark data is untouched; see the migration
+  test in `sqlite_health_store_test.dart`).
+- `event_mode_engine.dart` — **pure Dart.** Modes DECORATE a readout
+  `MeaningEngine` already computed; this file never rescoring
+  anything. Turns days-to-go into a phase (Foundation >21d, Build
+  8-21d, Taper 2-7d, Eve 1d, The day 0d, then a one-time "how it went"
+  wrap-up once the date has passed) and pulls the phase's themed
+  action from the content pack. "Days to go" compares calendar dates
+  in the device's LOCAL timezone on purpose — `targetDate` round-trips
+  through storage as UTC (this app's usual convention), and comparing
+  in UTC directly can land on the wrong calendar day by the user's own
+  clock (e.g. IST is UTC+5:30).
+- `content/event_content.dart` — the three themes' copy, same
+  determinism/forbidden-words rules as Desi Plate. Big Day is neutral
+  ("your presentation/interview/match"); Exam Season is UPSC/CA
+  register (study blocks, "an hour of sleep beats a 4am cram", exam-eve
+  logistics); Shaadi is warm and NEVER appearance-based — coach energy
+  and calm, never "look slimmer/better" or weight talk. All three are
+  additionally scanned for "guarantee" language and fasting terms
+  (fasting is the next phase, not this one).
+- `mode_service.dart` — the only file here allowed to touch
+  `HealthStore`. Loads the active config, asks the engine what to
+  show, and clears the mode once it auto-completes (the one side
+  effect the pure engine can't have).
+
+On Today, an active mode shows as a compact strip between the readout
+and Last night: phase, days-to-go, themed action — the readiness card
+on day 0. The Modes tab lists all three, lets you set one up (date +
+optional label) or end the active one, and asks to replace if you
+start a different mode while one's already running.
+
 ## What comes next (in order)
 
-1. **Settings screen** — data export/delete (the DPDP hook already
+1. **Night Shift and Fasting modes** — same mechanic as the event
+   modes (this phase's `EventModeEngine`/content-pack machinery was
+   built with these as the next extension point; see `ModeId`), but
+   ongoing/recurring rather than counting down to a single date.
+2. **Settings screen** — data export/delete (the DPDP hook already
    exists in `HealthStore.deleteAllData()`), ring pairing UI.
-2. **Health-store adapter** — real data from Apple Health / Health
+3. **Health-store adapter** — real data from Apple Health / Health
    Connect (dev tool; see wiki page 6 for the SDNN/RMSSD warning).
-3. **eIoT ring adapter** — swap in the real TM21 SDK behind
+4. **eIoT ring adapter** — swap in the real TM21 SDK behind
    `RingAdapter` once eIoT delivers it.
 
 ## Deliberate constraints (do not "fix" these)
@@ -146,3 +193,15 @@ switching away and back (`IndexedStack`, not a rebuilding `TabView`).
   `Matrix4` method that only exists in a newer `vector_math` than this
   SDK will resolve. 0.66.2 is the newest version that actually compiles
   here — revisit the pin next Flutter SDK upgrade.
+
+## Known issue (not introduced this phase, not yet fixed)
+
+`mock_ring_adapter_test.dart`'s "24h sync returns snapshots and one
+night of sleep" depends on the real wall clock rather than an
+injectable time source: `MockRingAdapter.syncSince` anchors a night to
+23:00 on `since`'s calendar date and only counts it if that's before
+`now - 7h`. Run the test in roughly the first 7 hours after local
+midnight and the arithmetic can land on zero nights for a 24h window.
+Fix belongs in `mock_ring_adapter.dart` (inject `now`, or anchor
+differently) — flagged here rather than fixed in this phase, since it
+predates and is unrelated to the mode machinery this phase added.
