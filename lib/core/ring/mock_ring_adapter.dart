@@ -132,9 +132,20 @@ class MockRingAdapter implements RingAdapter {
     }
 
     final sleepSessions = <SleepSession>[];
-    // One sleep session per night boundary crossed since `since`.
-    var night = DateTime(since.year, since.month, since.day, 23);
-    while (night.isBefore(now.subtract(const Duration(hours: 7)))) {
+    // One sleep session per elapsed ~24h period inside the sync window,
+    // anchored on ELAPSED TIME since `since` rather than the wall-clock
+    // hour `now` happens to be. The previous version anchored to 23:00
+    // on `since`'s calendar date and only counted a night if it finished
+    // before `now - 7h`; that made the count depend on what hour of the
+    // real day the sync happened to run — a sync starting in the first
+    // ~7h after local midnight could land on zero nights for a 24h
+    // window (see the regression test in mock_ring_adapter_test.dart).
+    // Anchoring the first candidate bedtime shortly after `since` and
+    // requiring an 11h margin before `now` (generous — covers the
+    // generator's up-to-11h totalTimeInBed) makes the count depend only
+    // on the LENGTH of the sync window, never on the time of day it runs.
+    var night = since.add(const Duration(hours: 1));
+    while (night.add(const Duration(hours: 11)).isBefore(now)) {
       sleepSessions.add(_generateNight(night));
       night = night.add(const Duration(days: 1));
     }

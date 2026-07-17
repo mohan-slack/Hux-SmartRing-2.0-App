@@ -10,11 +10,27 @@ import 'package:flutter/material.dart';
 
 import '../core/meaning/daily_readout.dart';
 import '../core/meaning/readout_service.dart';
+import '../core/meaning/sleep_wording.dart';
 import '../core/modes/event_mode_engine.dart';
+import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
 import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+
+/// One line combining whichever lifestyle modes are active, or null if
+/// none are. Deliberately just concatenation, not a wall of chips —
+/// Today's readout is the hero; this rides alongside the event-mode
+/// strip as at most one extra line, never a second card.
+String? _lifestyleChipText(ActiveContext context) {
+  final parts = <String>[];
+  if (context.nightShiftActive) parts.add('Night shift');
+  if (context.fastDayNumber != null && context.fasting != null) {
+    parts.add('${context.fasting!.type.displayName} — '
+        'day ${context.fastDayNumber}');
+  }
+  return parts.isEmpty ? null : parts.join(' · ');
+}
 
 enum _Phase { syncing, loadingReadout, ready, error }
 
@@ -50,6 +66,7 @@ class _TodayScreenState extends State<TodayScreen> {
   DailyReadout? _readout;
   SleepSession? _lastNight;
   ModeStrip? _modeStrip;
+  ActiveContext _activeContext = const ActiveContext();
   String? _errorMessage;
 
   @override
@@ -104,11 +121,13 @@ class _TodayScreenState extends State<TodayScreen> {
     final readout = await widget.readoutService.today();
     final lastNight = await widget.readoutService.lastNight();
     final modeStrip = await widget.modeService.currentStrip(readout: readout);
+    final activeContext = await widget.modeService.activeContext();
     if (!mounted) return;
     setState(() {
       _readout = readout;
       _lastNight = lastNight;
       _modeStrip = modeStrip;
+      _activeContext = activeContext;
       _phase = _Phase.ready;
     });
   }
@@ -151,6 +170,7 @@ class _TodayScreenState extends State<TodayScreen> {
             readout: _readout!,
             lastNight: _lastNight,
             modeStrip: _modeStrip,
+            activeContext: _activeContext,
           ),
         );
     }
@@ -224,19 +244,33 @@ class _ReadoutBody extends StatelessWidget {
   final DailyReadout readout;
   final SleepSession? lastNight;
   final ModeStrip? modeStrip;
+  final ActiveContext activeContext;
 
   const _ReadoutBody({
     required this.readout,
     required this.lastNight,
     required this.modeStrip,
+    required this.activeContext,
   });
 
   @override
   Widget build(BuildContext context) {
+    final chipText = _lifestyleChipText(activeContext);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _RecoveryHeader(state: readout.state, headline: readout.headline),
+        if (chipText != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Chip(
+              label: Text(chipText),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         Text(readout.meaning),
         const SizedBox(height: 16),
@@ -249,7 +283,12 @@ class _ReadoutBody extends StatelessWidget {
         ],
         if (lastNight != null) ...[
           const Divider(height: 32),
-          _LastNightStats(session: lastNight!),
+          _LastNightStats(
+            session: lastNight!,
+            sectionLabel:
+                SleepWording(nightShiftActive: activeContext.nightShiftActive)
+                    .sectionLabel,
+          ),
         ],
       ],
     );
@@ -386,8 +425,9 @@ class _ModeStripCard extends StatelessWidget {
 
 class _LastNightStats extends StatelessWidget {
   final SleepSession session;
+  final String sectionLabel;
 
-  const _LastNightStats({required this.session});
+  const _LastNightStats({required this.session, required this.sectionLabel});
 
   String _formatDuration(Duration d) {
     final hours = d.inHours;
@@ -410,7 +450,7 @@ class _LastNightStats extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Last night', style: Theme.of(context).textTheme.labelLarge),
+        Text(sectionLabel, style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
         for (final row in rows)
           Padding(

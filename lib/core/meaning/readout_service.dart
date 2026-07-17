@@ -4,14 +4,18 @@
 /// import storage. Loads what [MeaningEngine] needs, calls it, hands
 /// back a [DailyReadout]. Contains no scoring logic itself.
 
+import '../modes/mode.dart';
+import '../modes/mode_service.dart';
 import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
 import 'baseline.dart';
+import 'content/fasting_content.dart';
 import 'daily_readout.dart';
 import 'meaning_engine.dart';
 
 class ReadoutService {
   final HealthStore _store;
+  final ModeService? _modeService;
   final MeaningEngine _engine;
 
   /// Baseline window: how many days of history feed the personal
@@ -25,8 +29,17 @@ class ReadoutService {
   /// letting genuinely old data pass as current.
   static const staleNightThreshold = Duration(hours: 36);
 
-  ReadoutService(this._store, {MeaningEngine engine = const MeaningEngine()})
-      : _engine = engine;
+  /// [modeService] is optional so existing callers (and every test that
+  /// doesn't care about lifestyle modes) are unaffected — without it,
+  /// [today] behaves exactly as before (no Night Shift wording swap, no
+  /// Fasting Companion filtering/content). The composition root passes
+  /// a real one; see main.dart.
+  ReadoutService(
+    this._store, {
+    ModeService? modeService,
+    MeaningEngine engine = const MeaningEngine(),
+  })  : _modeService = modeService,
+        _engine = engine;
 
   /// Builds today's readout from whatever is currently in the store.
   /// [now] is injectable for tests; defaults to the real clock.
@@ -46,11 +59,50 @@ class ReadoutService {
     final todaySnapshots =
         await _store.snapshotsBetween(todayStart, reference);
 
-    return _engine.evaluate(
+    final context = _modeService == null
+        ? const ActiveContext()
+        : await _modeService.activeContext(now: reference);
+    final fastingToday = context.fastingActiveOn(reference);
+
+    final readout = _engine.evaluate(
       date: DateTime(reference.year, reference.month, reference.day),
       baseline: baseline,
       lastNight: lastNight,
       todaySnapshots: todaySnapshots,
+      nightShiftActive: context.nightShiftActive,
+      excludeDaytimeFood: fastingToday,
+    );
+
+    if (!fastingToday || readout.state == RecoveryState.learning) {
+      return readout;
+    }
+
+    // Layer in ONE fasting-specific action, the same way the engine
+    // already swaps in a temperature-specific one — MeaningEngine stays
+    // generic (it only ever sees `excludeDaytimeFood`, a bool), so the
+    // Fasting Companion copy pack lives here, at the service layer.
+    final fasting = context.fasting!;
+    final extra = FastingContent.pickForDay(
+      fasting.type,
+      context.fastDayNumber!,
+      reference,
+      eatingWindowStartHour: fasting.eatingWindowStartHour,
+      eatingWindowEndHour: fasting.eatingWindowEndHour,
+    );
+    final actions = [...readout.actions];
+    if (actions.length >= 2) {
+      actions[actions.length - 1] = extra;
+    } else {
+      actions.add(extra);
+    }
+
+    return DailyReadout(
+      date: readout.date,
+      state: readout.state,
+      headline: readout.headline,
+      meaning: readout.meaning,
+      actions: actions,
+      dataQuality: readout.dataQuality,
     );
   }
 

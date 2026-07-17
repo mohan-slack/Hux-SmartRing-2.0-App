@@ -65,7 +65,10 @@ void main() {
 
       // ~1 reading per 10 min over 24h, minus ~7% gaps.
       expect(result.snapshots.length, greaterThan(100));
-      expect(result.sleepSessions.length, greaterThanOrEqualTo(1));
+      // Deterministic by window length, not by wall-clock time-of-day —
+      // see the anchor-scheme comment in mock_ring_adapter.dart. This
+      // used to flake when run in the first ~7h after local midnight.
+      expect(result.sleepSessions.length, 1);
       expect(result.syncedUpTo.isAfter(result.snapshots.last.timestamp),
           isTrue);
 

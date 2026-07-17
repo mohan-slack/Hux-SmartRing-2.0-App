@@ -59,9 +59,11 @@ lib/core/ring/       Data models, adapter interface, mock TM21
 lib/core/storage/    HealthStore interface + SQLite implementation
 lib/core/sync/       SyncService: overlap, retry, watermark
 lib/core/meaning/    Meaning/Action engine: baseline, scoring, readout,
-                     Desi Plate action content, Weekly Body Story
+                     Desi Plate action content, Weekly Body Story,
+                     sleep wording (Night Shift), Fasting Companion pack
 lib/core/trends/     Pure per-night chart data (gaps, personal band)
-lib/core/modes/      Mode machinery: Big Day, Shaadi, Exam Season
+lib/core/modes/      Mode machinery: event modes (Big Day, Shaadi, Exam
+                     Season) + lifestyle modes (Night Shift, Fasting)
 lib/screens/         Today, Trends, Story, Modes — one tabbed app shell
 lib/app.dart         HuxApp: MaterialApp + object-graph injection
 lib/main.dart        Composition root — the one eIoT swap point
@@ -127,10 +129,13 @@ must never be mistaken for a real ring. Each tab's state survives
 switching away and back (`IndexedStack`, not a rebuilding `TabView`).
 
 **Modes** (`lib/core/modes/`) are HUX's differentiation: the same
-Meaning engine, re-aimed at a life moment — a target date, phased
-coaching leading up to it, and a readiness message on the day itself.
-One mechanic, three themes so far (Big Day, Shaadi, Exam Season); Night
-Shift and Fasting are a later phase built on the same machinery.
+Meaning engine, re-aimed at either a life moment (an EVENT mode — a
+target date, phased coaching leading up to it, a readiness message on
+the day itself) or how the user lives day to day (a LIFESTYLE mode —
+no date, just a change in voice/advice while it's active). Three event
+themes so far (Big Day, Shaadi, Exam Season) plus two lifestyle modes
+this phase (Night Shift, Fasting Companion) — see below for how the
+two kinds differ and coexist.
 - `mode.dart` — the model. `ModeId` + `EventModeConfig` (a mode, aimed
   at a target date, with an optional label). At most ONE event mode is
   active at a time — starting a new one replaces the old, with a UI
@@ -155,8 +160,9 @@ Shift and Fasting are a later phase built on the same machinery.
   register (study blocks, "an hour of sleep beats a 4am cram", exam-eve
   logistics); Shaadi is warm and NEVER appearance-based — coach energy
   and calm, never "look slimmer/better" or weight talk. All three are
-  additionally scanned for "guarantee" language and fasting terms
-  (fasting is the next phase, not this one).
+  additionally scanned for "guarantee" language and fasting terms —
+  fasting has its own dedicated lifestyle mode and content pack (see
+  below), so it has no business showing up in an EVENT mode's copy.
 - `mode_service.dart` — the only file here allowed to touch
   `HealthStore`. Loads the active config, asks the engine what to
   show, and clears the mode once it auto-completes (the one side
@@ -168,17 +174,64 @@ on day 0. The Modes tab lists all three, lets you set one up (date +
 optional label) or end the active one, and asks to replace if you
 start a different mode while one's already running.
 
+**Lifestyle modes** — Night Shift and Fasting Companion — are the
+second kind of mode this phase adds. Where an EVENT mode counts down to
+a date, a LIFESTYLE mode describes how the user lives right now and
+changes the app's voice/advice while it's active: no target date, no
+phases, no auto-complete. At most one of each kind is active at a
+time, but a lifestyle mode CAN run alongside the active event mode
+(and alongside each other) — they answer different questions. Both are
+keyed under `LifestyleModeId` in the same `mode_state` table event
+modes already use (`mode_id` is just a different string per kind) —
+**no schema migration was needed**, since `mode_state(mode_id TEXT
+PRIMARY KEY, json TEXT)` already accepts arbitrary keys.
+- **Night Shift** (`NightShiftConfig`: usual sleep start/end hour) —
+  when active, `sleep_wording.dart`'s `SleepWording` swaps every
+  "last night" / "overnight" / "tonight" in the readout for "last
+  sleep" / "during your last sleep" / "before your next sleep", in
+  ONE place — `MeaningEngine` takes a plain `nightShiftActive` bool and
+  never imports anything from `core/modes`, keeping the engine pure.
+  Baseline and staleness logic already work on the user's own sleep
+  *sessions*, not clock hours, so a 9am–4pm sleeper needs no scoring
+  changes — just the wording swap.
+- **Fasting Companion** (`FastingConfig`: type — Roza, Navratri,
+  Ekadashi, Karwa Chauth, or custom — plus a date range and an optional
+  eating window) — on an active fast day, `ActionContent`'s library is
+  filtered by a new `ActionTag` on every existing action
+  (`daytimeFood`/`eveningFood`/`activity`/`sleep`/`breathing`/`neutral`);
+  `MeaningEngine` takes a plain `excludeDaytimeFood` bool and drops any
+  `daytimeFood`-tagged action, so a fasting user is never told to have
+  lunch or afternoon chai. `content/fasting_content.dart` is a small
+  (~15-string) pack `ReadoutService` layers one pick from into today's
+  actions — sleep-honesty (suhoor/sehri-specific for Roza, generic
+  elsewhere), eating-window-relative hydration, energy pacing, wind-
+  down, and a day-N acknowledgement ("day 4 of Roza — your numbers
+  reflect the observance, not a problem"). Hard rule, tested by scan:
+  never advises breaking, shortening, or skipping the fast. Weekly Body
+  Story adds one neutral observation when 3+ days of the week fall
+  inside an active fast.
+- On Today, active lifestyle modes show as a single one-line context
+  chip under the headline ("Night shift", "Roza — day 4", or both) —
+  never a second card; the readout stays the hero even with an event-
+  mode strip also showing. The Modes screen's new Lifestyle section
+  lists both with their own setup (hour pickers for Night Shift; fast
+  type + date range + optional eating window for Fasting) and shows
+  active ones as compact chips with an End affordance.
+- `ReadoutService` and `WeeklyStoryService` are the only files that
+  assemble lifestyle context from storage; `readout_service.dart`
+  takes an optional `ModeService` (defaulting to no lifestyle modes
+  active, so every existing caller/test is unaffected) purely to build
+  that context and layer in the Fasting Companion action — the
+  filtering decision itself still happens inside `MeaningEngine` via
+  the two plain booleans above.
+
 ## What comes next (in order)
 
-1. **Night Shift and Fasting modes** — same mechanic as the event
-   modes (this phase's `EventModeEngine`/content-pack machinery was
-   built with these as the next extension point; see `ModeId`), but
-   ongoing/recurring rather than counting down to a single date.
-2. **Settings screen** — data export/delete (the DPDP hook already
+1. **Settings screen** — data export/delete (the DPDP hook already
    exists in `HealthStore.deleteAllData()`), ring pairing UI.
-3. **Health-store adapter** — real data from Apple Health / Health
+2. **Health-store adapter** — real data from Apple Health / Health
    Connect (dev tool; see wiki page 6 for the SDNN/RMSSD warning).
-4. **eIoT ring adapter** — swap in the real TM21 SDK behind
+3. **eIoT ring adapter** — swap in the real TM21 SDK behind
    `RingAdapter` once eIoT delivers it.
 
 ## Deliberate constraints (do not "fix" these)
@@ -193,15 +246,21 @@ start a different mode while one's already running.
   `Matrix4` method that only exists in a newer `vector_math` than this
   SDK will resolve. 0.66.2 is the newest version that actually compiles
   here — revisit the pin next Flutter SDK upgrade.
+- Fasting content deliberately reuses generic phrasing across fast
+  types where it makes sense ("Navratri/Ekadashi phrasing kept generic
+  enough to share") — unlike Desi Plate and the event-mode content
+  packs, `FastingContent.allStrings` is not expected to be fully
+  duplicate-free; only Desi Plate/Event Content carry that stricter bar.
 
-## Known issue (not introduced this phase, not yet fixed)
+## Previously known issue (fixed this phase)
 
 `mock_ring_adapter_test.dart`'s "24h sync returns snapshots and one
-night of sleep" depends on the real wall clock rather than an
-injectable time source: `MockRingAdapter.syncSince` anchors a night to
-23:00 on `since`'s calendar date and only counts it if that's before
-`now - 7h`. Run the test in roughly the first 7 hours after local
-midnight and the arithmetic can land on zero nights for a 24h window.
-Fix belongs in `mock_ring_adapter.dart` (inject `now`, or anchor
-differently) — flagged here rather than fixed in this phase, since it
-predates and is unrelated to the mode machinery this phase added.
+night of sleep" used to depend on the real wall clock: it anchored a
+night to 23:00 on `since`'s calendar date and only counted it if that
+was before `now - 7h`, so running it in the first ~7h after local
+midnight could land on zero nights for a 24h window. Fixed in
+`mock_ring_adapter.dart` by anchoring the first candidate bedtime to
+elapsed time since `since` (not `since`'s calendar date), so the count
+depends only on the sync window's length, never on the wall-clock hour
+it happens to run at. The assertion is now `sleepSessions.length == 1`
+for a 24h window, not just `>= 1`.

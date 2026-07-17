@@ -13,6 +13,7 @@
 /// Wellness wording only — same medical-language ban as the rest of the
 /// app. Vegetarian-first, Indian-context register where food comes up.
 
+import '../modes/mode.dart';
 import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
 
@@ -58,6 +59,11 @@ class WeeklyStoryService {
   static const _hrvDeadbandMs = 3;
   static const _hrDeadbandBpm = 2;
 
+  /// At least this many days of the week observing a fast and the story
+  /// says so — a fasting week's numbers reflect the observance, not
+  /// something to be concerned about.
+  static const minFastDaysForNote = 3;
+
   WeeklyStoryService(this._store);
 
   Future<WeeklyStory> buildStory({DateTime? now}) async {
@@ -97,6 +103,9 @@ class WeeklyStoryService {
         if (obs != null) observations.add(obs);
       }
     }
+
+    final fastingObs = await _fastingObservation(thisWeekStart, reference);
+    if (fastingObs != null) observations.add(fastingObs);
 
     return WeeklyStory(
       title: 'Your week, in plain words',
@@ -229,6 +238,28 @@ class WeeklyStoryService {
             'last week.'
         : 'You had ${b - a} fewer active day${b - a == 1 ? '' : 's'} than '
             'last week.';
+  }
+
+  /// When [minFastDaysForNote]+ days of THIS week fall inside the
+  /// active Fasting Companion window, one neutral acknowledgement —
+  /// null otherwise (no fast configured, or too few days of it this
+  /// week to be the story). Only looks at the currently active fasting
+  /// config, since past fasts aren't kept once ended, same as every
+  /// other mode_state row.
+  Future<String?> _fastingObservation(
+      DateTime thisWeekStart, DateTime reference) async {
+    final fasting = await _store.loadFastingState();
+    if (fasting == null) return null;
+
+    final fastDays = List.generate(
+            7, (i) => thisWeekStart.add(Duration(days: i)))
+        .where(fasting.isActiveOn)
+        .length;
+    if (fastDays < minFastDaysForNote) return null;
+
+    return 'A fasting week (${fasting.type.displayName}) reads '
+        'differently — your numbers reflect the observance, not a '
+        'problem.';
   }
 
   String _coverageNote(int thisNights, int lastNights) {

@@ -30,7 +30,22 @@ class SqliteHealthStore implements HealthStore {
   /// Schema history:
   /// v1 — snapshots, sleep_sessions, sleep_segments, meta.
   /// v2 — added mode_state (event modes: Big Day, Shaadi, Exam Season).
+  ///
+  /// Lifestyle modes (Night Shift, Fasting) added later reuse this same
+  /// v2 `mode_state` table — it's already `(mode_id TEXT PRIMARY KEY,
+  /// json TEXT)`, so a lifestyle mode is just a row under its own
+  /// [LifestyleModeId] key, disjoint from the [ModeId] keys event modes
+  /// use. No new column, no new table, no version bump.
   static const _schemaVersion = 2;
+
+  /// Event-mode keys in the shared `mode_state` table — used to scope
+  /// [saveModeState]/[loadModeState]/[clearModeState] so they only ever
+  /// touch the (at most one) active EVENT mode, never a lifestyle row.
+  static final List<String> _eventModeIds =
+      ModeId.values.map((m) => m.name).toList(growable: false);
+
+  static String get _eventModeIdPlaceholders =>
+      List.filled(_eventModeIds.length, '?').join(',');
 
   /// Opens (and if needed creates) the database at [path].
   /// Pass an in-memory path in tests via sqflite_common_ffi.
@@ -297,10 +312,16 @@ class SqliteHealthStore implements HealthStore {
   @override
   Future<void> saveModeState(EventModeConfig config) async {
     await _db.transaction((txn) async {
-      // Delete-then-insert enforces "at most one active mode" even
-      // though mode_id is the primary key: switching from shaadi to
-      // examSeason must not leave shaadi's row behind.
-      await txn.delete('mode_state');
+      // Delete-then-insert enforces "at most one active EVENT mode"
+      // even though mode_id is the primary key: switching from shaadi
+      // to examSeason must not leave shaadi's row behind. Scoped to
+      // event-mode keys only — a lifestyle row (night shift, fasting)
+      // must survive an event mode being started or replaced.
+      await txn.delete(
+        'mode_state',
+        where: 'mode_id IN ($_eventModeIdPlaceholders)',
+        whereArgs: _eventModeIds,
+      );
       await txn.insert('mode_state', {
         'mode_id': config.id.name,
         'json': jsonEncode(config.toJson()),
@@ -310,7 +331,12 @@ class SqliteHealthStore implements HealthStore {
 
   @override
   Future<EventModeConfig?> loadModeState() async {
-    final rows = await _db.query('mode_state', limit: 1);
+    final rows = await _db.query(
+      'mode_state',
+      where: 'mode_id IN ($_eventModeIdPlaceholders)',
+      whereArgs: _eventModeIds,
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     final json = jsonDecode(rows.first['json'] as String) as Map<String, Object?>;
     return EventModeConfig.fromJson(json);
@@ -318,7 +344,72 @@ class SqliteHealthStore implements HealthStore {
 
   @override
   Future<void> clearModeState() async {
-    await _db.delete('mode_state');
+    await _db.delete(
+      'mode_state',
+      where: 'mode_id IN ($_eventModeIdPlaceholders)',
+      whereArgs: _eventModeIds,
+    );
+  }
+
+  // ---- lifestyle modes ------------------------------------------------
+  // Each kind lives at its own fixed mode_id key (disjoint from the
+  // event-mode keys above), so a plain REPLACE insert is enough to
+  // enforce "at most one active mode of this kind" — no delete-then-
+  // insert needed, and starting/ending one never touches the other
+  // kind's row or the active event mode's row.
+
+  @override
+  Future<void> saveNightShiftState(NightShiftConfig config) async {
+    await _db.insert(
+      'mode_state',
+      {
+        'mode_id': LifestyleModeId.nightShift.name,
+        'json': jsonEncode(config.toJson()),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<NightShiftConfig?> loadNightShiftState() async {
+    final rows = await _db.query('mode_state',
+        where: 'mode_id = ?', whereArgs: [LifestyleModeId.nightShift.name]);
+    if (rows.isEmpty) return null;
+    return NightShiftConfig.fromJson(
+        jsonDecode(rows.first['json'] as String) as Map<String, Object?>);
+  }
+
+  @override
+  Future<void> clearNightShiftState() async {
+    await _db.delete('mode_state',
+        where: 'mode_id = ?', whereArgs: [LifestyleModeId.nightShift.name]);
+  }
+
+  @override
+  Future<void> saveFastingState(FastingConfig config) async {
+    await _db.insert(
+      'mode_state',
+      {
+        'mode_id': LifestyleModeId.fasting.name,
+        'json': jsonEncode(config.toJson()),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<FastingConfig?> loadFastingState() async {
+    final rows = await _db.query('mode_state',
+        where: 'mode_id = ?', whereArgs: [LifestyleModeId.fasting.name]);
+    if (rows.isEmpty) return null;
+    return FastingConfig.fromJson(
+        jsonDecode(rows.first['json'] as String) as Map<String, Object?>);
+  }
+
+  @override
+  Future<void> clearFastingState() async {
+    await _db.delete('mode_state',
+        where: 'mode_id = ?', whereArgs: [LifestyleModeId.fasting.name]);
   }
 
   // ---- lifecycle ----------------------------------------------------

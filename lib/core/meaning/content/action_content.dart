@@ -26,101 +26,244 @@ import '../daily_readout.dart';
 /// stretched/rundown day driven by several mild signals together.
 enum DominantSignal { hrv, sleep, hr, temp, none }
 
+/// What kind of suggestion an action is, so the engine can filter by
+/// context without touching the copy itself. An action can carry more
+/// than one tag (e.g. a dinner-and-early-night suggestion is both
+/// `eveningFood` and `sleep`).
+///
+/// `daytimeFood` is the one Fasting Companion cares about: on an active
+/// fast day, any action naming a daytime meal/snack/chai gets filtered
+/// out (see [pickActions]'s `excludeDaytimeFood`) rather than telling
+/// someone observing a fast to have lunch.
+enum ActionTag { daytimeFood, eveningFood, activity, sleep, breathing, neutral }
+
+class _Action {
+  final String text;
+  final Set<ActionTag> tags;
+  const _Action(this.text, this.tags);
+}
+
 class ActionContent {
   const ActionContent._();
 
-  static const Map<RecoveryState, Map<DominantSignal, List<String>>>
+  static const Map<RecoveryState, Map<DominantSignal, List<_Action>>>
       _library = {
     RecoveryState.recharged: {
       DominantSignal.none: [
-        "Good day for that harder session or the long walk you postponed",
-        "Use the extra energy today — tackle the task you've been "
-            'putting off',
-        'A good day to batch-cook something wholesome for the week — '
-            'dal and sabzi now save you tonight',
+        _Action(
+          "Good day for that harder session or the long walk you postponed",
+          {ActionTag.activity},
+        ),
+        _Action(
+          "Use the extra energy today — tackle the task you've been "
+              'putting off',
+          {ActionTag.neutral},
+        ),
+        _Action(
+          'A good day to batch-cook something wholesome for the week — '
+              'dal and sabzi now save you tonight',
+          {ActionTag.eveningFood},
+        ),
       ],
       DominantSignal.temp: [
-        'Still a good day to move, but keep a bottle of water within '
-            'reach',
-        'Take the workout outdoors if you can — fresh air, easy pace',
-        'Add a slice of lemon to your water today and keep meals light',
+        _Action(
+          'Still a good day to move, but keep a bottle of water within '
+              'reach',
+          {ActionTag.activity},
+        ),
+        _Action(
+          'Take the workout outdoors if you can — fresh air, easy pace',
+          {ActionTag.activity},
+        ),
+        _Action(
+          'Add a slice of lemon to your water today and keep meals light',
+          {ActionTag.daytimeFood},
+        ),
       ],
     },
     RecoveryState.steady: {
       DominantSignal.none: [
-        'Stick with your regular routine today — nothing to change',
-        'A good day for a simple home-cooked thali and your usual walk',
-        "Keep tonight's bedtime consistent with your usual",
+        _Action(
+          'Stick with your regular routine today — nothing to change',
+          {ActionTag.neutral},
+        ),
+        _Action(
+          'A good day for a simple home-cooked thali and your usual walk',
+          {ActionTag.daytimeFood, ActionTag.activity},
+        ),
+        _Action(
+          "Keep tonight's bedtime consistent with your usual",
+          {ActionTag.sleep},
+        ),
       ],
       DominantSignal.temp: [
-        'Keep today low-key — a light khichdi dinner and an early '
-            'night',
-        'Sip water through the day and skip the extra chai today',
-        'A gentle walk instead of an intense workout today',
+        _Action(
+          'Keep today low-key — a light khichdi dinner and an early '
+              'night',
+          {ActionTag.eveningFood, ActionTag.sleep},
+        ),
+        _Action(
+          'Sip water through the day and skip the extra chai today',
+          {ActionTag.daytimeFood},
+        ),
+        _Action(
+          'A gentle walk instead of an intense workout today',
+          {ActionTag.activity},
+        ),
       ],
     },
     RecoveryState.stretched: {
       DominantSignal.hrv: [
-        "Swap the gym for a slow walk today — let your body catch up",
-        '10 minutes of slow breathing after dinner — anulom-vilom pace',
-        'Keep dinner light tonight — moong dal khichdi over something '
-            'heavy',
+        _Action(
+          "Swap the gym for a slow walk today — let your body catch up",
+          {ActionTag.activity},
+        ),
+        _Action(
+          '10 minutes of slow breathing after dinner — anulom-vilom pace',
+          {ActionTag.breathing},
+        ),
+        _Action(
+          'Keep dinner light tonight — moong dal khichdi over something '
+              'heavy',
+          {ActionTag.eveningFood},
+        ),
       ],
       DominantSignal.sleep: [
-        'Aim for lights-out 30-45 minutes earlier tonight',
-        "Skip the afternoon chai — it'll only push bedtime later",
-        'A 20-minute nap after lunch beats pushing through the '
-            'afternoon slump',
+        _Action(
+          'Aim for lights-out 30-45 minutes earlier tonight',
+          {ActionTag.sleep},
+        ),
+        _Action(
+          "Skip the afternoon chai — it'll only push bedtime later",
+          {ActionTag.daytimeFood},
+        ),
+        _Action(
+          'A 20-minute nap after lunch beats pushing through the '
+              'afternoon slump',
+          {ActionTag.sleep},
+        ),
       ],
       DominantSignal.hr: [
-        'Dial back workout intensity — a light walk over a hard '
-            'session',
-        'Swap evening chai for haldi doodh or tulsi tea tonight',
-        'Keep dinner early and light tonight — give your body time to '
-            'wind down',
+        _Action(
+          'Dial back workout intensity — a light walk over a hard '
+              'session',
+          {ActionTag.activity},
+        ),
+        _Action(
+          'Swap evening chai for haldi doodh or tulsi tea tonight',
+          {ActionTag.eveningFood},
+        ),
+        _Action(
+          'Keep dinner early and light tonight — give your body time to '
+              'wind down',
+          {ActionTag.eveningFood, ActionTag.sleep},
+        ),
       ],
       DominantSignal.temp: [
-        'Prioritize rest today — keep meals light and hydration up',
-        'Swap the workout for a slow walk and an early night',
-        'Keep today unhurried — dal-chawal and an early wind-down',
+        _Action(
+          'Prioritize rest today — keep meals light and hydration up',
+          {ActionTag.neutral},
+        ),
+        _Action(
+          'Swap the workout for a slow walk and an early night',
+          {ActionTag.activity, ActionTag.sleep},
+        ),
+        _Action(
+          'Keep today unhurried — dal-chawal and an early wind-down',
+          {ActionTag.daytimeFood, ActionTag.sleep},
+        ),
       ],
       DominantSignal.none: [
-        'Ease off the intensity today — a light walk over a hard '
-            'session',
-        "Keep tonight's wind-down simple: dim the lights, put the "
-            'phone down early',
-        'A lighter dinner tonight — khichdi or soup over something '
-            'heavy',
+        _Action(
+          'Ease off the intensity today — a light walk over a hard '
+              'session',
+          {ActionTag.activity},
+        ),
+        _Action(
+          "Keep tonight's wind-down simple: dim the lights, put the "
+              'phone down early',
+          {ActionTag.sleep},
+        ),
+        _Action(
+          'A lighter dinner tonight — khichdi or soup over something '
+              'heavy',
+          {ActionTag.eveningFood},
+        ),
       ],
     },
     RecoveryState.rundown: {
       DominantSignal.hrv: [
-        'Skip intense training today — a short walk is plenty',
-        'A slow, extended anulom-vilom session before bed tonight',
-        'Keep meals simple today — moong dal khichdi is easy on the '
-            'body',
+        _Action(
+          'Skip intense training today — a short walk is plenty',
+          {ActionTag.activity},
+        ),
+        _Action(
+          'A slow, extended anulom-vilom session before bed tonight',
+          {ActionTag.breathing, ActionTag.sleep},
+        ),
+        _Action(
+          'Keep meals simple today — moong dal khichdi is easy on the '
+              'body',
+          {ActionTag.daytimeFood},
+        ),
       ],
       DominantSignal.sleep: [
-        'Get to bed earlier tonight — even 30 extra minutes helps',
-        'Skip the late-night screen time and wind down with a book '
-            'instead',
-        "A short nap today is fine — you're running on a sleep deficit",
+        _Action(
+          'Get to bed earlier tonight — even 30 extra minutes helps',
+          {ActionTag.sleep},
+        ),
+        _Action(
+          'Skip the late-night screen time and wind down with a book '
+              'instead',
+          {ActionTag.sleep},
+        ),
+        _Action(
+          "A short nap today is fine — you're running on a sleep deficit",
+          {ActionTag.sleep},
+        ),
       ],
       DominantSignal.hr: [
-        'Skip the workout today — a short walk is enough',
-        'Swap coffee for tulsi tea today and keep hydration up',
-        'Keep dinner early and light — give your heart rate room to '
-            'settle',
+        _Action(
+          'Skip the workout today — a short walk is enough',
+          {ActionTag.activity},
+        ),
+        _Action(
+          'Swap coffee for tulsi tea today and keep hydration up',
+          {ActionTag.daytimeFood},
+        ),
+        _Action(
+          'Keep dinner early and light — give your heart rate room to '
+              'settle',
+          {ActionTag.eveningFood},
+        ),
       ],
       DominantSignal.temp: [
-        'Take it easy today — prioritize rest and stay hydrated',
-        'Keep meals light — khichdi or dal-rice over anything heavy',
-        'Skip the gym today; a short, slow walk is plenty',
+        _Action(
+          'Take it easy today — prioritize rest and stay hydrated',
+          {ActionTag.neutral},
+        ),
+        _Action(
+          'Keep meals light — khichdi or dal-rice over anything heavy',
+          {ActionTag.daytimeFood},
+        ),
+        _Action(
+          'Skip the gym today; a short, slow walk is plenty',
+          {ActionTag.activity},
+        ),
       ],
       DominantSignal.none: [
-        'Skip intense training today and prioritize rest',
-        'Get to bed earlier and keep hydration up through the day',
-        'Keep today light — simple meals and an early night',
+        _Action(
+          'Skip intense training today and prioritize rest',
+          {ActionTag.activity},
+        ),
+        _Action(
+          'Get to bed earlier and keep hydration up through the day',
+          {ActionTag.sleep},
+        ),
+        _Action(
+          'Keep today light — simple meals and an early night',
+          {ActionTag.sleep},
+        ),
       ],
     },
   };
@@ -130,11 +273,18 @@ class ActionContent {
   /// bucket for the combination (e.g. recharged + hrv). Returns an
   /// empty list for [RecoveryState.learning], which has no bucket —
   /// that state's copy comes from [DailyReadout.learning] instead.
+  ///
+  /// [excludeDaytimeFood] drops any action tagged [ActionTag.daytimeFood]
+  /// before picking — set by [MeaningEngine] when a Fasting Companion
+  /// window is active today, so a fasting user never gets told to have
+  /// lunch or afternoon chai. Every bucket keeps at least one non-food
+  /// variant, so this never empties a bucket out entirely.
   static List<String> pickActions(
     RecoveryState state,
     DominantSignal signal,
     DateTime date, {
     int count = 2,
+    bool excludeDaytimeFood = false,
   }) {
     final buckets = _library[state];
     if (buckets == null) return const [];
@@ -142,9 +292,14 @@ class ActionContent {
         buckets[signal] ?? buckets[DominantSignal.none] ?? const [];
     if (variants.isEmpty) return const [];
 
+    final eligible = excludeDaytimeFood
+        ? variants.where((a) => !a.tags.contains(ActionTag.daytimeFood)).toList()
+        : variants;
+    if (eligible.isEmpty) return const [];
+
     return [
-      for (var i = 0; i < count && i < variants.length; i++)
-        variants[(date.day + i) % variants.length],
+      for (var i = 0; i < count && i < eligible.length; i++)
+        eligible[(date.day + i) % eligible.length].text,
     ];
   }
 
@@ -153,5 +308,6 @@ class ActionContent {
   static List<String> get allStrings => _library.values
       .expand((bySignal) => bySignal.values)
       .expand((variants) => variants)
+      .map((a) => a.text)
       .toList();
 }

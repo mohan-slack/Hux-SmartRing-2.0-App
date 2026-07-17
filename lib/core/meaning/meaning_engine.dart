@@ -24,6 +24,7 @@ import '../ring/ring_models.dart';
 import 'baseline.dart';
 import 'content/action_content.dart';
 import 'daily_readout.dart';
+import 'sleep_wording.dart';
 
 class MeaningEngine {
   // ---- HRV signal: last night's avgHrvMs vs baseline median ----------
@@ -72,11 +73,19 @@ class MeaningEngine {
 
   /// Evaluate one day. [date] is passed in explicitly (not read from the
   /// system clock) so the engine stays a pure function of its inputs.
+  ///
+  /// [nightShiftActive] and [excludeDaytimeFood] are plain booleans, not
+  /// the lifestyle-mode types themselves — deciding "is a lifestyle mode
+  /// active" is a storage-touching question for [ReadoutService]; this
+  /// engine only ever needs the yes/no answer, keeping it free of any
+  /// dependency on core/modes.
   DailyReadout evaluate({
     required DateTime date,
     required PersonalBaseline baseline,
     required SleepSession? lastNight,
     required List<HealthSnapshot> todaySnapshots,
+    bool nightShiftActive = false,
+    bool excludeDaytimeFood = false,
   }) {
     if (baseline.insufficient) {
       return DailyReadout.learning(date, daysOfData: baseline.daysOfData);
@@ -111,7 +120,9 @@ class MeaningEngine {
         hrvScore: hrvScore,
         sleepScore: sleepScore,
         hrScore: hrScore,
-        tempScore: tempScore);
+        tempScore: tempScore,
+        wording: SleepWording(nightShiftActive: nightShiftActive),
+        excludeDaytimeFood: excludeDaytimeFood);
 
     return DailyReadout(
       date: date,
@@ -205,6 +216,8 @@ class MeaningEngine {
     required int? sleepScore,
     required int? hrScore,
     required int? tempScore,
+    required SleepWording wording,
+    required bool excludeDaytimeFood,
   }) {
     String headline;
     String meaning;
@@ -220,23 +233,25 @@ class MeaningEngine {
     switch (state) {
       case RecoveryState.recharged:
         headline = 'Strong recovery today';
-        meaning = 'Your HRV and sleep last night were above your usual '
-            'range, a sign your body recovered well.';
+        meaning = 'Your HRV and sleep ${wording.lastSleepPeriod} were '
+            'above your usual range, a sign your body recovered well.';
         break;
       case RecoveryState.steady:
         headline = 'Right in your normal range';
-        meaning = "Last night's readings were close to your usual "
-            'numbers, no strong signal either way.';
+        meaning = "${wording.lastSleepPossessive} readings were close to "
+            'your usual numbers, no strong signal either way.';
         break;
       case RecoveryState.stretched:
         headline = 'A bit stretched — ease up';
-        meaning = _signalSentence(dominant) ??
-            'A couple of signals were mildly below your usual overnight.';
+        meaning = _signalSentence(dominant, wording) ??
+            'A couple of signals were mildly below your usual '
+                '${wording.duringLastSleep}.';
         break;
       case RecoveryState.rundown:
         headline = 'Running low — prioritize recovery';
-        meaning = _signalSentence(dominant) ??
-            'Several signals were well below your usual overnight.';
+        meaning = _signalSentence(dominant, wording) ??
+            'Several signals were well below your usual '
+                '${wording.duringLastSleep}.';
         break;
       case RecoveryState.learning:
         // Handled before _compose is ever called.
@@ -247,14 +262,16 @@ class MeaningEngine {
 
     final actions = state == RecoveryState.learning
         ? <String>[]
-        : ActionContent.pickActions(state, dominant, date);
+        : ActionContent.pickActions(state, dominant, date,
+            excludeDaytimeFood: excludeDaytimeFood);
 
     if (tempScore != null && tempScore < 0) {
       meaning += ' Your skin temperature was outside your usual range '
-          'overnight — your body is working harder than usual.';
+          '${wording.duringLastSleep} — your body is working harder '
+          'than usual.';
       final tempActions = ActionContent.pickActions(
           state, DominantSignal.temp, date,
-          count: 1);
+          count: 1, excludeDaytimeFood: excludeDaytimeFood);
       if (tempActions.isNotEmpty) {
         final tempAction = tempActions.first;
         if (actions.length >= 2) {
@@ -287,16 +304,17 @@ class MeaningEngine {
   /// [DominantSignal.none]/[DominantSignal.temp] — temperature gets its
   /// own sentence appended separately, and "none" falls back to a
   /// generic multi-signal sentence at the call site.
-  String? _signalSentence(DominantSignal signal) {
+  String? _signalSentence(DominantSignal signal, SleepWording wording) {
     switch (signal) {
       case DominantSignal.hrv:
-        return 'Your HRV was well below your usual last night, a sign '
-            'your body is still catching up.';
+        return 'Your HRV was well below your usual ${wording.duringLastSleep}, '
+            'a sign your body is still catching up.';
       case DominantSignal.sleep:
-        return 'You slept noticeably less than your usual last night.';
+        return 'You got noticeably less sleep than usual '
+            '${wording.duringLastSleep}.';
       case DominantSignal.hr:
-        return 'Your heart rate stayed higher than your usual overnight, '
-            'a sign of extra strain.';
+        return 'Your heart rate stayed higher than your usual '
+            '${wording.duringLastSleep}, a sign of extra strain.';
       case DominantSignal.temp:
       case DominantSignal.none:
         return null;

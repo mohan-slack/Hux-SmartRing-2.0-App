@@ -29,6 +29,41 @@ class ModeService {
   /// Ends the active mode, if any.
   Future<void> endMode() => _store.clearModeState();
 
+  // ---- lifestyle modes ------------------------------------------------
+  // Night Shift and Fasting each have at most one active config, but a
+  // lifestyle mode can coexist with the active event mode above (and
+  // with each other) — see mode.dart's doc comment on [LifestyleModeId].
+
+  Future<void> startNightShift(NightShiftConfig config) =>
+      _store.saveNightShiftState(config);
+
+  Future<void> endNightShift() => _store.clearNightShiftState();
+
+  Future<NightShiftConfig?> activeNightShift() => _store.loadNightShiftState();
+
+  Future<void> startFasting(FastingConfig config) =>
+      _store.saveFastingState(config);
+
+  Future<void> endFasting() => _store.clearFastingState();
+
+  Future<FastingConfig?> activeFasting() => _store.loadFastingState();
+
+  /// Everything the Meaning engine and the screens need about which
+  /// lifestyle modes are active right now, built fresh from storage —
+  /// see [ActiveContext].
+  Future<ActiveContext> activeContext({DateTime? now}) async {
+    final today = now ?? DateTime.now();
+    final nightShift = await _store.loadNightShiftState();
+    final fasting = await _store.loadFastingState();
+    final fastingToday = fasting != null && fasting.isActiveOn(today);
+    return ActiveContext(
+      nightShiftActive: nightShift != null,
+      nightShift: nightShift,
+      fasting: fasting,
+      fastDayNumber: fastingToday ? fasting.dayNumberOn(today) : null,
+    );
+  }
+
   /// The strip to show on Today, or null if no mode is active. When
   /// the active mode's target date has passed, this returns ONE final
   /// wrap-up strip and clears the mode so it won't show again.

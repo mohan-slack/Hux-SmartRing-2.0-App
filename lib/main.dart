@@ -27,9 +27,9 @@ Future<void> main() async {
   final ring = MockRingAdapter(seed: 42);
 
   final syncService = SyncService(ring, store);
-  final readoutService = ReadoutService(store);
-  final storyService = WeeklyStoryService(store);
   final modeService = ModeService(store);
+  final readoutService = ReadoutService(store, modeService: modeService);
+  final storyService = WeeklyStoryService(store);
 
   runApp(HuxApp(
     store: store,

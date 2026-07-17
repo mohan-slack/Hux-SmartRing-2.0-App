@@ -138,4 +138,86 @@ void main() {
       await store.close();
     });
   });
+
+  group('Lifestyle modes', () {
+    test('activeContext is all-inactive with nothing started', () async {
+      final store = await openStore();
+      final service = ModeService(store);
+
+      final context = await service.activeContext();
+      expect(context.nightShiftActive, isFalse);
+      expect(context.fasting, isNull);
+      expect(context.fastDayNumber, isNull);
+
+      await store.close();
+    });
+
+    test('starting night shift is reflected in activeContext', () async {
+      final store = await openStore();
+      final service = ModeService(store);
+
+      await service.startNightShift(NightShiftConfig(
+        usualSleepStartHour: 9,
+        usualSleepEndHour: 16,
+        startedAt: DateTime.utc(2026, 7, 1),
+      ));
+
+      final context = await service.activeContext();
+      expect(context.nightShiftActive, isTrue);
+      expect(context.nightShift!.usualSleepStartHour, 9);
+
+      await service.endNightShift();
+      expect((await service.activeContext()).nightShiftActive, isFalse);
+
+      await store.close();
+    });
+
+    test('activeContext computes fastDayNumber only on active fast days',
+        () async {
+      final store = await openStore();
+      final service = ModeService(store);
+      final now = DateTime.utc(2026, 3, 5);
+
+      await service.startFasting(FastingConfig(
+        type: FastType.roza,
+        start: DateTime.utc(2026, 3, 1),
+        end: DateTime.utc(2026, 3, 30),
+        startedAt: DateTime.utc(2026, 2, 28),
+      ));
+
+      final inside = await service.activeContext(now: now);
+      expect(inside.fastDayNumber, 5);
+
+      final outside =
+          await service.activeContext(now: DateTime.utc(2026, 4, 1));
+      expect(outside.fastDayNumber, isNull,
+          reason: 'fasting config still exists but today is outside it');
+      expect(outside.fasting, isNotNull,
+          reason: 'the config itself is still there, just not active today');
+
+      await store.close();
+    });
+
+    test('night shift and an active event mode coexist in activeConfig '
+        'and activeContext', () async {
+      final store = await openStore();
+      final service = ModeService(store);
+
+      await service.startMode(EventModeConfig(
+        id: ModeId.bigDay,
+        targetDate: DateTime.utc(2026, 8, 1),
+        startedAt: DateTime.utc(2026, 7, 1),
+      ));
+      await service.startNightShift(NightShiftConfig(
+        usualSleepStartHour: 9,
+        usualSleepEndHour: 16,
+        startedAt: DateTime.utc(2026, 7, 1),
+      ));
+
+      expect((await service.activeConfig())?.id, ModeId.bigDay);
+      expect((await service.activeContext()).nightShiftActive, isTrue);
+
+      await store.close();
+    });
+  });
 }

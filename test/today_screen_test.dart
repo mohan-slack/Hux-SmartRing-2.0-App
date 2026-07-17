@@ -208,4 +208,63 @@ void main() {
     expect(find.text('10d to go'), findsOneWidget);
     expect(find.text(expectedAction), findsOneWidget);
   });
+
+  testWidgets(
+      'shows a lifestyle context chip and "Last sleep" wording when '
+      'Night Shift is active', (tester) async {
+    late SqliteHealthStore store;
+    late MockRingAdapter ring;
+    late SyncService syncService;
+    late ReadoutService readoutService;
+    late ModeService modeService;
+
+    await tester.runAsync(() async {
+      store = await openStore();
+      ring = MockRingAdapter(seed: 33);
+      syncService = SyncService(
+        ring,
+        store,
+        firstSyncWindow: const Duration(days: 10),
+        maxAttempts: 5,
+        baseBackoff: const Duration(milliseconds: 10),
+      );
+      modeService = ModeService(store);
+      readoutService = ReadoutService(store, modeService: modeService);
+
+      final outcome = await syncService.syncNow();
+      expect(outcome.success, isTrue, reason: outcome.error ?? '');
+
+      await modeService.startNightShift(NightShiftConfig(
+        usualSleepStartHour: 9,
+        usualSleepEndHour: 16,
+        startedAt: DateTime.now(),
+      ));
+    });
+    addTearDown(() async {
+      await syncService.dispose();
+      await ring.dispose();
+      await store.close();
+    });
+
+    // Scaffold, not a bare MaterialApp(home:) — same as how AppShell
+    // actually mounts TodayScreen. The chip is a Material `Chip`, which
+    // (unlike everything else on this screen so far) asserts a Material
+    // ancestor exists; the other tests in this file never exercised
+    // that requirement.
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: TodayScreen(
+          store: store,
+          syncService: syncService,
+          readoutService: readoutService,
+          modeService: modeService,
+        ),
+      ),
+    ));
+    await settle(tester);
+
+    expect(find.text('Night shift'), findsOneWidget);
+    expect(find.text('Last sleep'), findsOneWidget);
+    expect(find.text('Last night'), findsNothing);
+  });
 }

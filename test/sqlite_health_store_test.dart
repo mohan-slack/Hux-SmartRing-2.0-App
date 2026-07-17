@@ -165,6 +165,157 @@ void main() {
       expect(await store.loadModeState(), isNull);
       await store.close();
     });
+
+    test('wipes lifestyle mode rows too (night shift and fasting)',
+        () async {
+      final store = await openStore();
+      await store.saveNightShiftState(NightShiftConfig(
+        usualSleepStartHour: 9,
+        usualSleepEndHour: 16,
+        startedAt: DateTime.utc(2026, 7, 1),
+      ));
+      await store.saveFastingState(FastingConfig(
+        type: FastType.roza,
+        start: DateTime.utc(2026, 3, 1),
+        end: DateTime.utc(2026, 3, 30),
+        startedAt: DateTime.utc(2026, 2, 28),
+      ));
+
+      await store.deleteAllData();
+
+      expect(await store.loadNightShiftState(), isNull);
+      expect(await store.loadFastingState(), isNull);
+      await store.close();
+    });
+  });
+
+  group('Lifestyle mode state', () {
+    test('night shift: null before starting, round-trips what was saved',
+        () async {
+      final store = await openStore();
+      expect(await store.loadNightShiftState(), isNull);
+
+      await store.saveNightShiftState(NightShiftConfig(
+        usualSleepStartHour: 8,
+        usualSleepEndHour: 15,
+        startedAt: DateTime.utc(2026, 6, 1),
+      ));
+
+      final loaded = await store.loadNightShiftState();
+      expect(loaded, isNotNull);
+      expect(loaded!.usualSleepStartHour, 8);
+      expect(loaded.usualSleepEndHour, 15);
+      await store.close();
+    });
+
+    test('night shift: saving again replaces, not duplicates', () async {
+      final store = await openStore();
+      await store.saveNightShiftState(NightShiftConfig(
+        usualSleepStartHour: 8,
+        usualSleepEndHour: 15,
+        startedAt: DateTime.utc(2026, 6, 1),
+      ));
+      await store.saveNightShiftState(NightShiftConfig(
+        usualSleepStartHour: 10,
+        usualSleepEndHour: 18,
+        startedAt: DateTime.utc(2026, 6, 2),
+      ));
+
+      final loaded = await store.loadNightShiftState();
+      expect(loaded!.usualSleepStartHour, 10);
+      await store.close();
+    });
+
+    test('night shift: clearNightShiftState ends it', () async {
+      final store = await openStore();
+      await store.saveNightShiftState(NightShiftConfig(
+        usualSleepStartHour: 8,
+        usualSleepEndHour: 15,
+        startedAt: DateTime.utc(2026, 6, 1),
+      ));
+      await store.clearNightShiftState();
+
+      expect(await store.loadNightShiftState(), isNull);
+      await store.close();
+    });
+
+    test('fasting: null before starting, round-trips what was saved',
+        () async {
+      final store = await openStore();
+      expect(await store.loadFastingState(), isNull);
+
+      await store.saveFastingState(FastingConfig(
+        type: FastType.ekadashi,
+        start: DateTime.utc(2026, 5, 5),
+        end: DateTime.utc(2026, 5, 5),
+        startedAt: DateTime.utc(2026, 5, 1),
+      ));
+
+      final loaded = await store.loadFastingState();
+      expect(loaded, isNotNull);
+      expect(loaded!.type, FastType.ekadashi);
+      await store.close();
+    });
+
+    test('fasting: clearFastingState ends it', () async {
+      final store = await openStore();
+      await store.saveFastingState(FastingConfig(
+        type: FastType.ekadashi,
+        start: DateTime.utc(2026, 5, 5),
+        end: DateTime.utc(2026, 5, 5),
+        startedAt: DateTime.utc(2026, 5, 1),
+      ));
+      await store.clearFastingState();
+
+      expect(await store.loadFastingState(), isNull);
+      await store.close();
+    });
+
+    test(
+        'an event mode, night shift, and fasting all coexist without '
+        'interfering with each other', () async {
+      final store = await openStore();
+
+      await store.saveModeState(EventModeConfig(
+        id: ModeId.bigDay,
+        targetDate: DateTime.utc(2026, 8, 1),
+        startedAt: DateTime.utc(2026, 7, 1),
+      ));
+      await store.saveNightShiftState(NightShiftConfig(
+        usualSleepStartHour: 9,
+        usualSleepEndHour: 16,
+        startedAt: DateTime.utc(2026, 7, 1),
+      ));
+      await store.saveFastingState(FastingConfig(
+        type: FastType.roza,
+        start: DateTime.utc(2026, 3, 1),
+        end: DateTime.utc(2026, 3, 30),
+        startedAt: DateTime.utc(2026, 2, 28),
+      ));
+
+      expect((await store.loadModeState())?.id, ModeId.bigDay);
+      expect((await store.loadNightShiftState())?.usualSleepStartHour, 9);
+      expect((await store.loadFastingState())?.type, FastType.roza);
+
+      // Ending the event mode must not touch the lifestyle rows.
+      await store.clearModeState();
+      expect(await store.loadModeState(), isNull);
+      expect((await store.loadNightShiftState())?.usualSleepStartHour, 9);
+      expect((await store.loadFastingState())?.type, FastType.roza);
+
+      // Starting a NEW event mode must not touch the lifestyle rows
+      // either — this is the case saveModeState's old "delete the
+      // whole table" implementation would have broken.
+      await store.saveModeState(EventModeConfig(
+        id: ModeId.shaadi,
+        targetDate: DateTime.utc(2026, 9, 1),
+        startedAt: DateTime.utc(2026, 7, 2),
+      ));
+      expect((await store.loadNightShiftState())?.usualSleepStartHour, 9);
+      expect((await store.loadFastingState())?.type, FastType.roza);
+
+      await store.close();
+    });
   });
 
   group('Event mode state', () {

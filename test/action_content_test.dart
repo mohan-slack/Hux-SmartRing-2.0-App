@@ -109,4 +109,62 @@ void main() {
       }
     });
   });
+
+  group('Fasting Companion filter (excludeDaytimeFood)', () {
+    // Every string this codebase tags ActionTag.daytimeFood — a fasting
+    // user must never see one of these picked for them.
+    const daytimeFoodTexts = [
+      'Add a slice of lemon to your water today and keep meals light',
+      'A good day for a simple home-cooked thali and your usual walk',
+      'Sip water through the day and skip the extra chai today',
+      "Skip the afternoon chai — it'll only push bedtime later",
+      'Keep today unhurried — dal-chawal and an early wind-down',
+      'Keep meals simple today — moong dal khichdi is easy on the body',
+      'Swap coffee for tulsi tea today and keep hydration up',
+      'Keep meals light — khichdi or dal-rice over anything heavy',
+    ];
+
+    test('no daytime-food action is ever picked when excluded, across '
+        'every state, signal, and day of the month', () {
+      for (final state in RecoveryState.values) {
+        if (state == RecoveryState.learning) continue;
+        for (final signal in DominantSignal.values) {
+          for (var day = 1; day <= 31; day++) {
+            final picks = ActionContent.pickActions(
+                state, signal, DateTime(2026, 1, day),
+                excludeDaytimeFood: true);
+            for (final pick in picks) {
+              expect(daytimeFoodTexts, isNot(contains(pick)),
+                  reason: '$state/$signal/day $day picked a daytime-food '
+                      'action while excludeDaytimeFood was true: $pick');
+            }
+          }
+        }
+      }
+    });
+
+    test('filtering never empties a bucket out entirely', () {
+      for (final state in RecoveryState.values) {
+        if (state == RecoveryState.learning) continue;
+        for (final signal in DominantSignal.values) {
+          final picks = ActionContent.pickActions(
+              state, signal, DateTime(2026, 7, 16),
+              excludeDaytimeFood: true);
+          expect(picks, isNotEmpty, reason: '$state/$signal');
+        }
+      }
+    });
+
+    test('without the flag, daytime-food actions can still appear '
+        '(the library is unfiltered by default)', () {
+      final everAppears = List.generate(31, (i) => i + 1).any((day) {
+        final picks = ActionContent.pickActions(
+            RecoveryState.steady, DominantSignal.temp, DateTime(2026, 1, day));
+        return picks.any(daytimeFoodTexts.contains);
+      });
+      expect(everAppears, isTrue,
+          reason: 'steady/temp has a daytime-food variant that should '
+              'surface on some day when not excluded');
+    });
+  });
 }

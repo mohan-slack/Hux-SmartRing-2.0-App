@@ -33,8 +33,8 @@ class EventContent {
             '— start now, not the night before',
         'Build your routine around the big day early: consistent '
             'meals, consistent bedtime',
-        "Use this quiet stretch to test your prep routine, not just "
-            "the material — how you'll eat and sleep matters too",
+        "Use this quiet stretch to test your prep routine — how you'll "
+            'eat and sleep on the day matters as much as the prep itself',
       ],
       EventPhase.build: [
         'Keep bedtime consistent this week — the big day rewards '

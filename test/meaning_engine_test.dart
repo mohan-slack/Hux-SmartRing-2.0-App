@@ -272,6 +272,146 @@ void main() {
     });
   });
 
+  group('Night Shift wording', () {
+    test('never says "last night"/"overnight"/"tonight" when active, '
+        'across every recovery state', () {
+      final scenarios = <SleepSession>[
+        night(
+          stagePlan: [
+            const MapEntry(SleepStage.light, Duration(minutes: 200)),
+            const MapEntry(SleepStage.deep, Duration(minutes: 100)),
+            const MapEntry(SleepStage.rem, Duration(minutes: 170)),
+          ],
+          avgHrv: 60,
+          avgHr: 58,
+          avgTemp: 33.6,
+        ), // recharged/steady
+        night(
+          stagePlan: [
+            const MapEntry(SleepStage.light, Duration(minutes: 200)),
+            const MapEntry(SleepStage.deep, Duration(minutes: 40)),
+            const MapEntry(SleepStage.rem, Duration(minutes: 54)),
+          ],
+          avgHrv: 35,
+          avgHr: 69,
+          avgTemp: 34.4,
+        ), // stretched/rundown, plus a temperature deviation
+      ];
+
+      for (final lastNight in scenarios) {
+        final readout = engine.evaluate(
+          date: today,
+          baseline: baseline,
+          lastNight: lastNight,
+          todaySnapshots: const [],
+          nightShiftActive: true,
+        );
+
+        final text = '${readout.headline} ${readout.meaning}'.toLowerCase();
+        expect(text.contains('last night'), isFalse,
+            reason: 'found "last night" in: $text');
+        expect(text.contains('overnight'), isFalse,
+            reason: 'found "overnight" in: $text');
+        expect(text.contains('tonight'), isFalse,
+            reason: 'found "tonight" in: $text');
+        expect(text.contains('sleep'), isTrue,
+            reason: 'the day-sleeper wording should still mention sleep');
+      }
+    });
+
+    test('a day-sleeper (main sleep 9am-4pm) gets a normal readout, not '
+        'a scolding — baseline and staleness are session-based, not '
+        'clock-hour-based, so this needs no scoring changes', () {
+      final dayLastNight = SleepSession(
+        bedtime: DateTime(2026, 7, 16, 9),
+        wakeTime: DateTime(2026, 7, 16, 16),
+        segments: [
+          SleepSegment(
+              start: DateTime(2026, 7, 16, 9),
+              end: DateTime(2026, 7, 16, 12),
+              stage: SleepStage.light),
+          SleepSegment(
+              start: DateTime(2026, 7, 16, 12),
+              end: DateTime(2026, 7, 16, 14),
+              stage: SleepStage.deep),
+          SleepSegment(
+              start: DateTime(2026, 7, 16, 14),
+              end: DateTime(2026, 7, 16, 16),
+              stage: SleepStage.rem),
+        ],
+        avgHrvMs: 52, // in line with baseline
+        avgHeartRateBpm: 59,
+        avgSkinTempCelsius: 33.6,
+      );
+
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: dayLastNight,
+        todaySnapshots: const [],
+        nightShiftActive: true,
+      );
+
+      expect(
+        readout.state,
+        anyOf(RecoveryState.recharged, RecoveryState.steady),
+        reason: 'a full, on-baseline 7h sleep should never read as '
+            'rundown just because it happened during the day',
+      );
+      expect(readout.dataQuality, DataQuality.full);
+      _expectNoMedicalLanguage(readout);
+    });
+  });
+
+  group('Fasting Companion filter (excludeDaytimeFood)', () {
+    // Short sleep (well below baseline), everything else on-baseline:
+    // sleep is the clear dominant negative signal, landing on the
+    // stretched/sleep action bucket, whose day-4 pick would normally
+    // include the daytime "afternoon chai" suggestion.
+    SleepSession stretchedSleepNight() => night(
+          stagePlan: [
+            const MapEntry(SleepStage.light, Duration(minutes: 150)),
+            const MapEntry(SleepStage.deep, Duration(minutes: 60)),
+            const MapEntry(SleepStage.rem, Duration(minutes: 40)),
+          ], // 250 min, ~40% below the 420 min baseline
+          avgHrv: 48,
+          avgHr: 60,
+          avgTemp: 33.6,
+        );
+
+    test('without the flag, the daytime-food action can appear', () {
+      final readout = engine.evaluate(
+        date: DateTime(2026, 7, 4),
+        baseline: baseline,
+        lastNight: stretchedSleepNight(),
+        todaySnapshots: const [],
+      );
+
+      expect(readout.state, RecoveryState.stretched);
+      expect(
+        readout.actions.any((a) => a.contains('afternoon chai')),
+        isTrue,
+        reason: 'sanity check: day 4 should pick the daytime-food '
+            'variant when nothing filters it out — got ${readout.actions}',
+      );
+    });
+
+    test('with the flag, the same day never surfaces it', () {
+      final readout = engine.evaluate(
+        date: DateTime(2026, 7, 4),
+        baseline: baseline,
+        lastNight: stretchedSleepNight(),
+        todaySnapshots: const [],
+        excludeDaytimeFood: true,
+      );
+
+      expect(readout.state, RecoveryState.stretched);
+      expect(readout.actions.any((a) => a.contains('afternoon chai')), isFalse);
+      expect(readout.actions, isNotEmpty,
+          reason: 'filtering must not empty the actions out entirely');
+    });
+  });
+
   group('Determinism', () {
     test('the same inputs produce an identical readout', () {
       final lastNight = night(

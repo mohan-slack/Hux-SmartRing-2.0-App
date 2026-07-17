@@ -46,7 +46,8 @@ abstract class HealthStore {
   Future<void> deleteAllData();
 
   /// Persists the active event mode, replacing whatever was active
-  /// before — at most one event mode is ever active at a time.
+  /// before — at most one event mode is ever active at a time. Never
+  /// touches lifestyle mode rows (night shift, fasting) — those coexist.
   Future<void> saveModeState(EventModeConfig config);
 
   /// The active event mode, or null if none is running.
@@ -54,6 +55,16 @@ abstract class HealthStore {
 
   /// Ends the active mode, if any. A no-op if none is running.
   Future<void> clearModeState();
+
+  /// Persists (or replaces) the active Night Shift lifestyle mode.
+  Future<void> saveNightShiftState(NightShiftConfig config);
+  Future<NightShiftConfig?> loadNightShiftState();
+  Future<void> clearNightShiftState();
+
+  /// Persists (or replaces) the active Fasting Companion lifestyle mode.
+  Future<void> saveFastingState(FastingConfig config);
+  Future<FastingConfig?> loadFastingState();
+  Future<void> clearFastingState();
 
   Future<void> close();
 }

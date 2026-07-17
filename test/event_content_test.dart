@@ -145,4 +145,38 @@ void main() {
           reason: 'every action should be distinct copy, not a repeat');
     });
   });
+
+  group('Big Day is event-agnostic', () {
+    test('never assumes the event is an exam/study occasion', () {
+      const studyWords = ['material', 'exam', 'study', 'revision', 'syllabus'];
+      for (var day = 1; day <= 31; day++) {
+        final date = DateTime(2026, 1, day);
+        final strings = [
+          EventContent.pickPhaseAction(ModeId.bigDay, EventPhase.foundation, date),
+          EventContent.pickPhaseAction(ModeId.bigDay, EventPhase.build, date),
+          EventContent.pickPhaseAction(ModeId.bigDay, EventPhase.taper, date),
+          EventContent.pickPhaseAction(ModeId.bigDay, EventPhase.eve, date),
+          EventContent.pickWrapUp(ModeId.bigDay, date),
+          for (final state in RecoveryState.values)
+            if (state != RecoveryState.learning)
+              EventContent.pickDayZeroAction(ModeId.bigDay, state, date),
+        ];
+        for (final text in strings) {
+          final lower = text.toLowerCase();
+          for (final word in studyWords) {
+            expect(lower.contains(word), isFalse,
+                reason: '"$word" reads as exam-specific, found in: $text');
+          }
+        }
+      }
+    });
+
+    test('reads correctly for a birthday, wedding function, interview, '
+        'or match — a presentation-and-preparation register, not '
+        'academic', () {
+      final text = EventContent.pickPhaseAction(
+          ModeId.bigDay, EventPhase.foundation, DateTime(2026, 1, 3));
+      expect(text, isNot(contains('the material')));
+    });
+  });
 }

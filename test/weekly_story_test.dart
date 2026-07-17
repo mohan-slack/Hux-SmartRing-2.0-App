@@ -13,6 +13,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hux_app/core/meaning/weekly_story.dart';
+import 'package:hux_app/core/modes/mode.dart';
 import 'package:hux_app/core/ring/ring_models.dart';
 import 'package:hux_app/core/storage/sqlite_health_store.dart';
 
@@ -224,6 +225,85 @@ void main() {
       expect(story.thinData, isTrue);
       expect(story.observations, isNotEmpty);
       expect(story.observations.first.toLowerCase(), contains('not enough'));
+
+      await store.close();
+    });
+  });
+
+  group('Fasting week', () {
+    test('3+ fast days this week adds a neutral acknowledgement', () async {
+      final store = await openStore();
+
+      await store.saveSleepSessions([
+        ...weekOf(
+            startDaysAgo: 14, nights: 7, sleepMinutes: 420, avgHrv: 48,
+            avgHr: 60),
+        ...weekOf(
+            startDaysAgo: 7, nights: 7, sleepMinutes: 380, avgHrv: 44,
+            avgHr: 63),
+      ]);
+      await store.saveFastingState(FastingConfig(
+        type: FastType.navratri,
+        start: now.subtract(const Duration(days: 5)),
+        end: now.subtract(const Duration(days: 1)),
+        startedAt: now.subtract(const Duration(days: 6)),
+      ));
+
+      final story = await WeeklyStoryService(store).buildStory(now: now);
+
+      expect(
+        story.observations.any((o) =>
+            o.contains('fasting week') && o.contains('Navratri fast')),
+        isTrue,
+        reason: 'observations were: ${story.observations}',
+      );
+
+      await store.close();
+    });
+
+    test('fewer than 3 fast days this week adds no note', () async {
+      final store = await openStore();
+
+      await store.saveSleepSessions([
+        ...weekOf(
+            startDaysAgo: 14, nights: 7, sleepMinutes: 420, avgHrv: 48,
+            avgHr: 60),
+        ...weekOf(
+            startDaysAgo: 7, nights: 7, sleepMinutes: 420, avgHrv: 48,
+            avgHr: 60),
+      ]);
+      await store.saveFastingState(FastingConfig(
+        type: FastType.ekadashi,
+        start: now.subtract(const Duration(days: 1)),
+        end: now,
+        startedAt: now.subtract(const Duration(days: 2)),
+      ));
+
+      final story = await WeeklyStoryService(store).buildStory(now: now);
+
+      expect(story.observations.any((o) => o.contains('fasting week')),
+          isFalse);
+
+      await store.close();
+    });
+
+    test('no fasting configured adds no note (existing behavior unchanged)',
+        () async {
+      final store = await openStore();
+
+      await store.saveSleepSessions([
+        ...weekOf(
+            startDaysAgo: 14, nights: 7, sleepMinutes: 420, avgHrv: 48,
+            avgHr: 60),
+        ...weekOf(
+            startDaysAgo: 7, nights: 7, sleepMinutes: 420, avgHrv: 48,
+            avgHr: 60),
+      ]);
+
+      final story = await WeeklyStoryService(store).buildStory(now: now);
+
+      expect(story.observations.any((o) => o.contains('fasting week')),
+          isFalse);
 
       await store.close();
     });
