@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
+import 'core/ring/data_source.dart';
 import 'core/storage/health_store.dart';
 import 'core/sync/sync_service.dart';
 import 'screens/app_shell.dart';
@@ -17,6 +18,7 @@ class HuxApp extends StatelessWidget {
   final ReadoutService readoutService;
   final WeeklyStoryService storyService;
   final ModeService modeService;
+  final RingDataSource dataSource;
 
   const HuxApp({
     super.key,
@@ -25,6 +27,7 @@ class HuxApp extends StatelessWidget {
     required this.readoutService,
     required this.storyService,
     required this.modeService,
+    this.dataSource = RingDataSource.mock,
   });
 
   @override
@@ -39,6 +42,7 @@ class HuxApp extends StatelessWidget {
         readoutService: readoutService,
         storyService: storyService,
         modeService: modeService,
+        dataSource: dataSource,
       ),
     );
   }

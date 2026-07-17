@@ -10,9 +10,18 @@ import 'app.dart';
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
+import 'core/ring/data_source.dart';
+import 'core/ring/health_adapter/health_store_ring_adapter.dart';
 import 'core/ring/mock_ring_adapter.dart';
+import 'core/ring/ring_adapter.dart';
 import 'core/storage/sqlite_health_store.dart';
 import 'core/sync/sync_service.dart';
+
+/// Which [RingAdapter] to wire up — 'mock' (default) or 'health', the
+/// dev-only Apple Health / Health Connect adapter. Pass
+/// `--dart-define=HUX_SOURCE=health` to a `flutter run`/`flutter build`
+/// invocation to switch; the default build is untouched either way.
+const _sourceEnv = String.fromEnvironment('HUX_SOURCE', defaultValue: 'mock');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,11 +29,24 @@ Future<void> main() async {
   final dbPath = p.join(await getDatabasesPath(), 'hux.db');
   final store = await SqliteHealthStore.open(dbPath);
 
-  // MockRingAdapter until eIoT delivers their SDK — swap it for
-  // EIoTRingAdapter here, and nowhere else. chaosMode is off for this
-  // demo build so behaviour stays predictable; flip it on locally to
-  // exercise the reconnect/retry paths.
-  final ring = MockRingAdapter(seed: 42);
+  // The ONE place the source is chosen. Everything below this line
+  // only ever talks to the RingAdapter interface — nothing branches on
+  // _sourceEnv again. When eIoT delivers their SDK, EIoTRingAdapter
+  // joins this switch (or replaces 'mock' as the default) and nowhere
+  // else changes.
+  final RingDataSource dataSource;
+  final RingAdapter ring;
+  switch (_sourceEnv) {
+    case 'health':
+      dataSource = RingDataSource.health;
+      ring = HealthStoreRingAdapter();
+    default:
+      // chaosMode is off for this demo build so behaviour stays
+      // predictable; flip it on locally to exercise the reconnect/
+      // retry paths.
+      dataSource = RingDataSource.mock;
+      ring = MockRingAdapter(seed: 42);
+  }
 
   final syncService = SyncService(ring, store);
   final modeService = ModeService(store);
@@ -37,5 +59,6 @@ Future<void> main() async {
     readoutService: readoutService,
     storyService: storyService,
     modeService: modeService,
+    dataSource: dataSource,
   ));
 }

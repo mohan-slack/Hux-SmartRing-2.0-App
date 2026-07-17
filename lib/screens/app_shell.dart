@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/meaning/weekly_story.dart';
 import '../core/modes/mode_service.dart';
+import '../core/ring/data_source.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
 import 'modes_screen.dart';
@@ -24,6 +25,11 @@ class AppShell extends StatefulWidget {
   final WeeklyStoryService storyService;
   final ModeService modeService;
 
+  /// Which [RingAdapter] the composition root wired up — decides the
+  /// banner's text and color. Defaults to [RingDataSource.mock] so
+  /// every existing caller/test that predates this field is unaffected.
+  final RingDataSource dataSource;
+
   const AppShell({
     super.key,
     required this.store,
@@ -31,6 +37,7 @@ class AppShell extends StatefulWidget {
     required this.readoutService,
     required this.storyService,
     required this.modeService,
+    this.dataSource = RingDataSource.mock,
   });
 
   @override
@@ -65,7 +72,7 @@ class _AppShellState extends State<AppShell> {
       body: SafeArea(
         child: Column(
           children: [
-            const _DemoBanner(),
+            _SourceBanner(source: widget.dataSource),
             Expanded(
               child: IndexedStack(
                 index: _index,
@@ -102,20 +109,35 @@ class _AppShellState extends State<AppShell> {
 }
 
 /// Unmissable — screenshots of this build must never be mistaken for
-/// real ring data, on any tab.
-class _DemoBanner extends StatelessWidget {
-  const _DemoBanner();
+/// real ring data, on any tab. Text and color both follow [source]
+/// truthfully: mock stays the original amber "DEMO" banner; the
+/// health-store dev adapter gets a visually distinct blue-grey "DEV"
+/// banner so the two are never confused for each other either.
+class _SourceBanner extends StatelessWidget {
+  final RingDataSource source;
+
+  const _SourceBanner({required this.source});
+
+  Color get _background => switch (source) {
+        RingDataSource.mock => Colors.amber,
+        RingDataSource.health => Colors.blueGrey,
+      };
+
+  Color get _foreground => switch (source) {
+        RingDataSource.mock => Colors.black,
+        RingDataSource.health => Colors.white,
+      };
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: Colors.amber,
+      color: _background,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      child: const Text(
-        'DEMO — simulated ring data',
+      child: Text(
+        source.bannerText,
         textAlign: TextAlign.center,
-        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        style: TextStyle(fontWeight: FontWeight.bold, color: _foreground),
       ),
     );
   }

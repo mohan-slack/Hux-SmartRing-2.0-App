@@ -55,7 +55,8 @@ print('Slept ${night.totalSleep.inMinutes} min, '
 ## What exists now
 
 ```
-lib/core/ring/       Data models, adapter interface, mock TM21
+lib/core/ring/       Data models, adapter interface, mock TM21, dev-only
+                     Health-Store adapter (health_adapter/), data source switch
 lib/core/storage/    HealthStore interface + SQLite implementation
 lib/core/sync/       SyncService: overlap, retry, watermark
 lib/core/meaning/    Meaning/Action engine: baseline, scoring, readout,
@@ -225,14 +226,124 @@ PRIMARY KEY, json TEXT)` already accepts arbitrary keys.
   filtering decision itself still happens inside `MeaningEngine` via
   the two plain booleans above.
 
+## Health-Store adapter (dev tool, not user-facing)
+
+`lib/core/ring/health_adapter/` is the SECOND real `RingAdapter`
+implementation (after the mock): it reads REAL data from Apple Health
+(iOS) / Google Health Connect (Android) via the `health` package and
+maps it through the exact same pipeline the mock and the eventual eIoT
+adapter use. Purpose: exercise the Meaning engine, Modes, Story, and
+Trends against real human data before the eIoT ring exists. It is
+**read-only** (no write permissions, ever requested) and is impossible
+to confuse with either the demo or a real ring — see the source switch
+below.
+
+- `health_mappers.dart` — **pure Dart.** `mapHrSamples`/`mapHrvSamples`/
+  `mapSpo2`/`mapBodyTemp`/`mapSteps` bucket raw `HealthDataPoint`s onto
+  the same 10-minute grid the mock ring uses (`steps` specifically
+  re-derives the ring model's "cumulative since midnight" contract,
+  which HealthKit/Health Connect don't report natively);
+  `mergeSnapshots` combines the per-metric outputs into one multi-
+  metric `HealthSnapshot` per bucket. `mapSleepSessions` clusters raw
+  sleep-stage points into nights by ELAPSED TIME (a gap of 2h+ starts a
+  new night), not calendar date — so a night crossing midnight is still
+  one session. Every function is unit-tested with hand-built points
+  (overlaps, gaps, a midnight-spanning night, stage-less sources).
+  - **HRV NOTE** (wiki page 6): Apple Health reports HRV as SDNN;
+    Health Connect can report RMSSD — HUX rings use RMSSD. These are
+    DIFFERENT algorithms on different scales. This adapter exists to
+    test the PIPELINE, never to calibrate `MeaningEngine`'s thresholds
+    — don't tune `hrvGoodPct`/etc. against data synced through it.
+    `HealthStoreRingAdapter` requests SDNN on iOS and RMSSD on Android
+    specifically because querying RMSSD on Apple Health doesn't just
+    return empty — it throws ("Not available on platform appleHealth").
+  - **STAGE-LESS SLEEP**: never fabricated. A source with only a
+    generic "asleep" block (`SLEEP_ASLEEP`, no deep/light/REM
+    breakdown) maps its whole block to `light` and is flagged via
+    `MappedSleepSession.hadRealStages = false` (logged by the adapter).
+    The SAME applies to `SLEEP_IN_BED` — what Apple Health's own
+    "Add Data" UI writes for a plain manually-entered sleep span, with
+    no "asleep" signal at all, only "in bed". Treating it as stage-less
+    sleep rather than silently discarding it is what makes the
+    simulator trick below actually work; a real sleep-tracking app or
+    Apple Watch reports proper staged data instead. Either way, deep/
+    REM will read as under-reported for a stage-less night.
+- `health_store_ring_adapter.dart` — the adapter itself. `connect()`
+  calls `Health().configure()` then `requestAuthorization()` for HR,
+  HRV, SpO2, sleep, steps, and body temperature; a refusal (or any
+  error reaching the health app) throws a calm `RingConnectionException`
+  — same recoverable path the UI already has for a failed ring sync,
+  no special-casing needed. `syncSince` queries each health data type
+  INDIVIDUALLY (not one batched call) so one unsupported or quietly-
+  denied type can't take the whole sync down. `liveSnapshots`/
+  `batteryPercent` are real (empty) broadcast streams that simply never
+  emit — there's no live-feed or battery concept for a phone reading
+  its own health app. `vibrate()` is a no-op. Every non-simulator-
+  dependent behavior (permission granted/denied/erroring, the platform-
+  specific HRV type, read-only contract) is covered by
+  `health_store_ring_adapter_test.dart`, which subclasses the `health`
+  package's `Health` (a plain, non-final class) with every method the
+  adapter calls overridden — no platform channel, no real HealthKit
+  connection, ever involved, which is what makes the permission-denied
+  path regression-proof (iOS won't let you re-trigger that system
+  sheet once a decision's been made, so it isn't practically re-
+  testable by hand more than once per install).
+
+**Choosing the source** — `main.dart` picks the adapter via
+`const _sourceEnv = String.fromEnvironment('HUX_SOURCE', defaultValue: 'mock')`,
+the ONE place the choice is made; everything above it only ever talks
+to `RingAdapter`. Run normally for the mock (unchanged, default); pass
+`--dart-define=HUX_SOURCE=health` to use the Health-Store adapter
+instead. The banner pinned above every tab (`lib/core/ring/
+data_source.dart` + `app_shell.dart`'s `_SourceBanner`) always follows
+the source truthfully: amber "DEMO — simulated ring data" for mock,
+distinct blue-grey "DEV — your health app data (not a HUX ring)" for
+health — tested in `app_shell_test.dart`, including that the default
+(mock) is exactly byte-for-byte what it was before this adapter existed.
+
+**Platform setup this phase required:**
+- iOS: `NSHealthShareUsageDescription`/`NSHealthUpdateUsageDescription`
+  in `Info.plist`, a HealthKit entitlement (`Runner.entitlements`,
+  wired into all three build configs via `CODE_SIGN_ENTITLEMENTS`), and
+  the deployment target bumped from 12.0 to **14.0** everywhere
+  (`Podfile` + all three `IPHONEOS_DEPLOYMENT_TARGET` build settings)
+  — the `health` package requires iOS 14+.
+- Android: read-only Health Connect permissions + a package-visibility
+  `<queries>` entry (to check Health Connect is installed) in
+  `AndroidManifest.xml`, `MainActivity` changed from `FlutterActivity`
+  to `FlutterFragmentActivity` (needed for `registerForActivityResult`
+  when requesting permissions on Android 14+), per the `health`
+  package's own setup docs. Not yet verified on a real device/emulator
+  this phase — iOS Simulator was the verification path (see below).
+
+**Verifying with the iOS Simulator's Health app** (no real device
+needed): the Simulator ships with a real, working Health app. Open it
+separately, Browse → (e.g.) Heart → Heart Rate → "Add Data", or
+Sleep → "Add Data" (note: this basic manual entry writes `SLEEP_IN_BED`,
+not `SLEEP_ASLEEP` — see the STAGE-LESS SLEEP note above, which is
+exactly why this adapter treats that type as stage-less rather than
+ignoring it). Add sleep entries for **3+ separate nights** — the
+Meaning engine needs 3+ nights of history before it computes a real
+readout instead of "still learning" — then run HUX with
+`--dart-define=HUX_SOURCE=health` and pull-to-refresh Today. If nothing
+shows up, double-check Settings → Privacy & Security → Health → Data
+Access & Devices → HUX App — HealthKit only shows its permission sheet
+ONCE per install; if you need a truly fresh permission prompt, uninstall
+the app first (`xcrun simctl uninstall <device> in.co.hux.huxApp` on
+the simulator), since revoking access via Settings after already
+granting it doesn't reliably make `requestAuthorization` report denied
+again on iOS (a documented HealthKit privacy limitation, not a bug
+here) — the app will just harmlessly re-sync nothing new and keep
+showing whatever was last cached.
+
 ## What comes next (in order)
 
 1. **Settings screen** — data export/delete (the DPDP hook already
    exists in `HealthStore.deleteAllData()`), ring pairing UI.
-2. **Health-store adapter** — real data from Apple Health / Health
-   Connect (dev tool; see wiki page 6 for the SDNN/RMSSD warning).
-3. **eIoT ring adapter** — swap in the real TM21 SDK behind
-   `RingAdapter` once eIoT delivers it.
+2. **eIoT ring adapter** — swap in the real TM21 SDK behind
+   `RingAdapter` once eIoT delivers it; `HealthStoreRingAdapter` is a
+   worked example of "a second real `RingAdapter` implementation slots
+   in without touching a single screen."
 
 ## Deliberate constraints (do not "fix" these)
 

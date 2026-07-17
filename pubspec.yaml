@@ -13,6 +13,7 @@ dependencies:
   sqflite: ^2.3.3
   path: ^1.9.0
   fl_chart: ^0.66.2
+  health: ^13.3.1
 
 dev_dependencies:
   flutter_test:

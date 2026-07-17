@@ -45,5 +45,14 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Dev-only Health-Store adapter (HUX_SOURCE=health): reads
+	     Apple Health data to exercise the pipeline against real human
+	     data before the eIoT ring exists. Read-only — this app never
+	     writes to Apple Health, so no update-usage prompt is shown, but
+	     the key is still required by HealthKit if it's ever linked in. -->
+	<key>NSHealthShareUsageDescription</key>
+	<string>HUX can read your existing Health data (heart rate, HRV, sleep, steps) as a stand-in for ring data during development. This is read-only and never leaves your phone.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>HUX does not write any data to Health.</string>
 </dict>
 </plist>

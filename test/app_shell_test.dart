@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hux_app/core/meaning/readout_service.dart';
 import 'package:hux_app/core/meaning/weekly_story.dart';
 import 'package:hux_app/core/modes/mode_service.dart';
+import 'package:hux_app/core/ring/data_source.dart';
 import 'package:hux_app/core/ring/mock_ring_adapter.dart';
 import 'package:hux_app/core/storage/sqlite_health_store.dart';
 import 'package:hux_app/core/sync/sync_service.dart';
@@ -214,5 +215,88 @@ void main() {
     await tester.scrollUntilVisible(find.textContaining('d to go'), 300);
     await tester.pump();
     expect(find.textContaining('d to go'), findsOneWidget);
+  });
+
+  group('Source banner', () {
+    test('defaults to mock when dataSource is omitted (backward '
+        'compatible with every existing caller)', () {
+      // AppShell.dataSource defaults to RingDataSource.mock — nothing
+      // to pump here, just pinning the default so it can't drift
+      // silently.
+      const defaultSource = RingDataSource.mock;
+      expect(defaultSource.bannerText, 'DEMO — simulated ring data');
+    });
+
+    testWidgets('shows the DEMO banner for RingDataSource.mock',
+        (tester) async {
+      late SqliteHealthStore store;
+      late MockRingAdapter ring;
+      late SyncService syncService;
+
+      await tester.runAsync(() async {
+        store = await SqliteHealthStore.open(inMemoryDatabasePath,
+            factory: databaseFactoryFfi);
+        ring = MockRingAdapter(seed: 3);
+        syncService = SyncService(ring, store);
+        await syncService.syncNow();
+      });
+      addTearDown(() async {
+        await syncService.dispose();
+        await ring.dispose();
+        await store.close();
+      });
+
+      await tester.pumpWidget(MaterialApp(
+        home: AppShell(
+          store: store,
+          syncService: syncService,
+          readoutService: ReadoutService(store),
+          storyService: WeeklyStoryService(store),
+          modeService: ModeService(store),
+          dataSource: RingDataSource.mock,
+        ),
+      ));
+      await settle(tester);
+
+      expect(find.text('DEMO — simulated ring data'), findsOneWidget);
+      expect(
+          find.text('DEV — your health app data (not a HUX ring)'), findsNothing);
+    });
+
+    testWidgets('shows the distinct DEV banner for RingDataSource.health',
+        (tester) async {
+      late SqliteHealthStore store;
+      late MockRingAdapter ring;
+      late SyncService syncService;
+
+      await tester.runAsync(() async {
+        store = await SqliteHealthStore.open(inMemoryDatabasePath,
+            factory: databaseFactoryFfi);
+        ring = MockRingAdapter(seed: 5);
+        syncService = SyncService(ring, store);
+        await syncService.syncNow();
+      });
+      addTearDown(() async {
+        await syncService.dispose();
+        await ring.dispose();
+        await store.close();
+      });
+
+      await tester.pumpWidget(MaterialApp(
+        home: AppShell(
+          store: store,
+          syncService: syncService,
+          readoutService: ReadoutService(store),
+          storyService: WeeklyStoryService(store),
+          modeService: ModeService(store),
+          dataSource: RingDataSource.health,
+        ),
+      ));
+      await settle(tester);
+
+      expect(
+          find.text('DEV — your health app data (not a HUX ring)'), findsOneWidget);
+      expect(find.text('DEMO — simulated ring data'), findsNothing);
+    });
   });
 }
