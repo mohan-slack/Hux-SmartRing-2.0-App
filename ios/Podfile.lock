@@ -4,6 +4,9 @@ PODS:
   - Flutter (1.0.0)
   - health (13.3.1):
     - Flutter
+  - path_provider_foundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - sqflite_darwin (0.0.4):
     - Flutter
     - FlutterMacOS
@@ -12,6 +15,7 @@ DEPENDENCIES:
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - Flutter (from `Flutter`)
   - health (from `.symlinks/plugins/health/ios`)
+  - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
 
 EXTERNAL SOURCES:
@@ -21,6 +25,8 @@ EXTERNAL SOURCES:
     :path: Flutter
   health:
     :path: ".symlinks/plugins/health/ios"
+  path_provider_foundation:
+    :path: ".symlinks/plugins/path_provider_foundation/darwin"
   sqflite_darwin:
     :path: ".symlinks/plugins/sqflite_darwin/darwin"
 
@@ -28,6 +34,7 @@ SPEC CHECKSUMS:
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   health: 4decf5d74e8f54c58a8c07a385fc72f629a831d9
+  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
 
 PODFILE CHECKSUM: fa8d89834ca2c56d75189a9df78bd6ed834f24ba

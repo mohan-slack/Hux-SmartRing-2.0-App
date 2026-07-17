@@ -13,6 +13,7 @@ import '../core/modes/mode_service.dart';
 import '../core/ring/data_source.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+import '../theme/hux_tokens.dart';
 import 'modes_screen.dart';
 import 'story_screen.dart';
 import 'today_screen.dart';
@@ -119,12 +120,15 @@ class _SourceBanner extends StatelessWidget {
   const _SourceBanner({required this.source});
 
   Color get _background => switch (source) {
-        RingDataSource.mock => Colors.amber,
-        RingDataSource.health => Colors.blueGrey,
+        RingDataSource.mock => HuxColors.demoAmber,
+        RingDataSource.health => HuxColors.devBlueGrey,
       };
 
+  // Amber is light — near-black text keeps ~13:1 contrast. Blue-grey is
+  // dark enough (see hux_tokens.dart) that white text clears the 4.5:1
+  // floor at ~7.2:1.
   Color get _foreground => switch (source) {
-        RingDataSource.mock => Colors.black,
+        RingDataSource.mock => HuxColors.ink,
         RingDataSource.health => Colors.white,
       };
 
@@ -133,7 +137,8 @@ class _SourceBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       color: _background,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      padding: const EdgeInsets.symmetric(
+          vertical: HuxSpacing.sm, horizontal: HuxSpacing.lg),
       child: Text(
         source.bannerText,
         textAlign: TextAlign.center,

@@ -11,6 +11,7 @@ import 'core/ring/data_source.dart';
 import 'core/storage/health_store.dart';
 import 'core/sync/sync_service.dart';
 import 'screens/app_shell.dart';
+import 'theme/hux_theme.dart';
 
 class HuxApp extends StatelessWidget {
   final HealthStore store;
@@ -35,7 +36,7 @@ class HuxApp extends StatelessWidget {
     return MaterialApp(
       title: 'HUX',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
+      theme: buildHuxTheme(),
       home: AppShell(
         store: store,
         syncService: syncService,

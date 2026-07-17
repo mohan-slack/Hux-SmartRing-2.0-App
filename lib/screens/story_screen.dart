@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/meaning/weekly_story.dart';
+import '../theme/hux_tokens.dart';
 
 class StoryScreen extends StatefulWidget {
   final WeeklyStoryService storyService;
@@ -56,8 +57,8 @@ class _MessageView extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(message),
+          const SizedBox(height: HuxSpacing.lg),
+          Text(message, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
@@ -72,12 +73,12 @@ class _StoryBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(HuxSpacing.lg),
       children: [
         Text(story.title, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 16),
+        const SizedBox(height: HuxSpacing.lg),
         _Observations(observations: story.observations),
-        const Divider(height: 32),
+        const SizedBox(height: HuxSpacing.lg),
         _Suggestion(suggestion: story.suggestion),
       ],
     );
@@ -91,24 +92,30 @@ class _Observations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bodyStyle = Theme.of(context).textTheme.bodyLarge;
     if (observations.isEmpty) {
-      return const Text("Nothing to compare yet — check back once you've "
-          'logged a bit more.');
+      return Text(
+        "Nothing to compare yet — check back once you've logged a bit "
+        'more.',
+        style: bodyStyle,
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final observation in observations)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(observation,
-                style: Theme.of(context).textTheme.bodyLarge),
+            padding: const EdgeInsets.only(bottom: HuxSpacing.md),
+            child: Text(observation, style: bodyStyle),
           ),
       ],
     );
   }
 }
 
+/// "For next week" — a distinct card, not just another paragraph:
+/// this is the one concrete thing to act on, so it should look like
+/// it, set apart from the observations above it.
 class _Suggestion extends StatelessWidget {
   final String suggestion;
 
@@ -116,13 +123,22 @@ class _Suggestion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('For next week', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        Text(suggestion),
-      ],
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      color: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
+      child: Padding(
+        padding: const EdgeInsets.all(HuxSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('For next week',
+                style: textTheme.labelLarge
+                    ?.copyWith(color: HuxModeAccent.foreground)),
+            const SizedBox(height: HuxSpacing.sm),
+            Text(suggestion, style: textTheme.bodyMedium),
+          ],
+        ),
+      ),
     );
   }
 }

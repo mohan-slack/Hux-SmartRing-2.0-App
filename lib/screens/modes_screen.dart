@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
+import '../theme/hux_tokens.dart';
 
 String modeName(ModeId id) => switch (id) {
       ModeId.bigDay => 'Big Day',
@@ -238,11 +239,11 @@ class _ModesScreenState extends State<ModesScreen> {
         final now = DateTime.now();
 
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(HuxSpacing.lg),
           children: [
             if (active != null) ...[
               _ActiveModeCard(config: active, onEnd: _endMode),
-              const SizedBox(height: 24),
+              const SizedBox(height: HuxSpacing.xl),
             ],
             if (data.nightShift != null || data.fasting != null) ...[
               Wrap(
@@ -261,31 +262,31 @@ class _ModesScreenState extends State<ModesScreen> {
                     ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: HuxSpacing.xl),
             ],
             Text('Modes', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
+            const SizedBox(height: HuxSpacing.xs),
             Text(
               'Aim HUX at a life moment — a target date with coaching '
               'that builds toward it.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: HuxSpacing.lg),
             for (final id in ModeId.values)
               _ModeListTile(
                 modeId: id,
                 isActive: active?.id == id,
                 onTap: () => _onTapMode(id),
               ),
-            const SizedBox(height: 24),
+            const SizedBox(height: HuxSpacing.xl),
             Text('Lifestyle', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 4),
+            const SizedBox(height: HuxSpacing.xs),
             Text(
               'How you live day to day — changes the app\'s voice and '
               'advice while active, no target date to count down to.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: HuxSpacing.lg),
             _LifestyleTile(
               icon: Icons.bedtime,
               title: 'Night Shift',
@@ -327,24 +328,58 @@ class _ActiveModeCard extends StatelessWidget {
             : 'Wrapping up';
 
     return Card(
-      color: Theme.of(context).colorScheme.primaryContainer,
+      color: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        padding: const EdgeInsets.all(HuxSpacing.lg),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Active: ${modeName(config.id)}'
-              '${config.label != null ? ' — ${config.label}' : ''}',
-              style: Theme.of(context).textTheme.titleMedium,
+            _AccentIconChip(icon: _modeIcon(config.id)),
+            const SizedBox(width: HuxSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Active: ${modeName(config.id)}'
+                    '${config.label != null ? ' — ${config.label}' : ''}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: HuxSpacing.xs),
+                  Text(countdown,
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: HuxSpacing.md),
+                  OutlinedButton(
+                      onPressed: onEnd, child: const Text('End mode')),
+                ],
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(countdown, style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: onEnd, child: const Text('End mode')),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The shared accent treatment for a mode/lifestyle icon — one
+/// consistent brand accent (mint backdrop, deep-teal glyph), not a
+/// different invented color per mode. See [HuxModeAccent].
+class _AccentIconChip extends StatelessWidget {
+  final IconData icon;
+
+  const _AccentIconChip({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: huxMinTapTarget,
+      height: huxMinTapTarget,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: HuxModeAccent.background.withValues(alpha: HuxOpacity.iconChip),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: HuxModeAccent.foreground),
     );
   }
 }
@@ -363,13 +398,16 @@ class _ModeListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: isActive
+          ? HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash)
+          : null,
       child: ListTile(
-        leading: Icon(_modeIcon(modeId)),
+        leading: _AccentIconChip(icon: _modeIcon(modeId)),
         title: Text(modeName(modeId)),
         subtitle: Text(_modeDescription(modeId)),
         trailing: isActive
-            ? const Icon(Icons.check_circle, color: Colors.teal)
-            : const Icon(Icons.chevron_right),
+            ? const Icon(Icons.check_circle, color: HuxColors.accentDeepTeal)
+            : const Icon(Icons.chevron_right, color: HuxColors.mutedText),
         onTap: onTap,
       ),
     );
@@ -394,13 +432,16 @@ class _LifestyleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: isActive
+          ? HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash)
+          : null,
       child: ListTile(
-        leading: Icon(icon),
+        leading: _AccentIconChip(icon: icon),
         title: Text(title),
         subtitle: Text(description),
         trailing: isActive
-            ? const Icon(Icons.check_circle, color: Colors.teal)
-            : const Icon(Icons.chevron_right),
+            ? const Icon(Icons.check_circle, color: HuxColors.accentDeepTeal)
+            : const Icon(Icons.chevron_right, color: HuxColors.mutedText),
         onTap: onTap,
       ),
     );
@@ -447,10 +488,10 @@ class _NightShiftSetupSheetState extends State<_NightShiftSetupSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        left: HuxSpacing.lg,
+        right: HuxSpacing.lg,
+        top: HuxSpacing.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + HuxSpacing.lg,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -458,14 +499,14 @@ class _NightShiftSetupSheetState extends State<_NightShiftSetupSheet> {
         children: [
           Text('Set up Night Shift',
               style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
+          const SizedBox(height: HuxSpacing.sm),
           Text(
             'Your main sleep happens in the daytime — HUX will say '
             '"last sleep" instead of "last night" throughout the app '
             'while this is on.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: HuxSpacing.lg),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(_startHour == null
@@ -482,7 +523,7 @@ class _NightShiftSetupSheetState extends State<_NightShiftSetupSheet> {
             trailing: const Icon(Icons.access_time),
             onTap: _pickEnd,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: HuxSpacing.lg),
           FilledButton(
             onPressed: (_startHour == null || _endHour == null)
                 ? null
@@ -586,10 +627,10 @@ class _FastingSetupSheetState extends State<_FastingSetupSheet> {
 
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        left: HuxSpacing.lg,
+        right: HuxSpacing.lg,
+        top: HuxSpacing.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + HuxSpacing.lg,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -598,7 +639,7 @@ class _FastingSetupSheetState extends State<_FastingSetupSheet> {
           children: [
             Text('Set up Fasting Companion',
                 style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
+            const SizedBox(height: HuxSpacing.lg),
             DropdownButtonFormField<FastType>(
               value: _type,
               decoration: const InputDecoration(labelText: 'Which fast'),
@@ -611,7 +652,7 @@ class _FastingSetupSheetState extends State<_FastingSetupSheet> {
                 if (value != null) setState(() => _type = value);
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: HuxSpacing.lg),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(_start == null ? 'Start date' : _formatDate(_start!)),
@@ -624,7 +665,7 @@ class _FastingSetupSheetState extends State<_FastingSetupSheet> {
               trailing: const Icon(Icons.calendar_today),
               onTap: _pickEnd,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: HuxSpacing.sm),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Set an eating window (optional)'),
@@ -649,7 +690,7 @@ class _FastingSetupSheetState extends State<_FastingSetupSheet> {
                 onTap: _pickWindowEnd,
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: HuxSpacing.lg),
             FilledButton(
               onPressed: !canStart
                   ? null
@@ -718,10 +759,10 @@ class _SetupSheetState extends State<_SetupSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        left: HuxSpacing.lg,
+        right: HuxSpacing.lg,
+        top: HuxSpacing.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + HuxSpacing.lg,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -729,19 +770,19 @@ class _SetupSheetState extends State<_SetupSheet> {
         children: [
           Text('Set up ${modeName(widget.modeId)}',
               style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
+          const SizedBox(height: HuxSpacing.lg),
           TextField(
             controller: _labelController,
             decoration: const InputDecoration(labelText: 'Label (optional)'),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: HuxSpacing.lg),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(_date == null ? 'Choose a date' : _formatDate(_date!)),
             trailing: const Icon(Icons.calendar_today),
             onTap: _pickDate,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: HuxSpacing.lg),
           FilledButton(
             onPressed: _date == null
                 ? null

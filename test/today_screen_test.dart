@@ -267,4 +267,65 @@ void main() {
     expect(find.text('Last sleep'), findsOneWidget);
     expect(find.text('Last night'), findsNothing);
   });
+
+  testWidgets(
+      'remains usable at 1.3x text scale — no overflow, headline and '
+      'actions still render (design-pass accessibility check)',
+      (tester) async {
+    late SqliteHealthStore store;
+    late MockRingAdapter ring;
+    late SyncService syncService;
+    late ReadoutService readoutService;
+    late DailyReadout expectedReadout;
+
+    await tester.runAsync(() async {
+      store = await openStore();
+      ring = MockRingAdapter(seed: 41);
+      syncService = SyncService(
+        ring,
+        store,
+        firstSyncWindow: const Duration(days: 10),
+        maxAttempts: 5,
+        baseBackoff: const Duration(milliseconds: 10),
+      );
+      readoutService = ReadoutService(store);
+
+      final outcome = await syncService.syncNow();
+      expect(outcome.success, isTrue, reason: outcome.error ?? '');
+      expectedReadout = await readoutService.today();
+    });
+    addTearDown(() async {
+      await syncService.dispose();
+      await ring.dispose();
+      await store.close();
+    });
+
+    // The MediaQuery override sits INSIDE MaterialApp (via Builder),
+    // not wrapped around it — MaterialApp constructs its own MediaQuery
+    // from the view, which would otherwise clobber an outer override.
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: Scaffold(
+            body: TodayScreen(
+              store: store,
+              syncService: syncService,
+              readoutService: readoutService,
+              modeService: ModeService(store),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await settle(tester);
+
+    expect(find.text(expectedReadout.headline), findsOneWidget);
+    for (final action in expectedReadout.actions) {
+      expect(find.text(action), findsOneWidget);
+    }
+    // No RenderFlex overflow or other layout exception at 1.3x scale.
+    expect(tester.takeException(), isNull);
+  });
 }

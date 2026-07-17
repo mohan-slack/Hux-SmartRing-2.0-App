@@ -12,6 +12,28 @@ import 'package:flutter/material.dart';
 import '../core/meaning/baseline.dart';
 import '../core/storage/health_store.dart';
 import '../core/trends/night_row.dart';
+import '../theme/hux_tokens.dart';
+
+/// Single-letter weekday labels, [DateTime.weekday]-indexed (1 = Mon).
+const _weekdayInitials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+String _weekdayInitial(DateTime day) => _weekdayInitials[day.weekday - 1];
+
+/// Roughly one label every 7 nights regardless of range, so a 30-day
+/// chart doesn't cram 30 overlapping single-letter labels together.
+int _weekdayLabelInterval(int rowCount) =>
+    rowCount <= 0 ? 1 : (rowCount / 7).ceil().clamp(1, rowCount);
+
+/// "low–high unit", or null when there's nothing to summarize — the
+/// small muted hint next to a line chart's title.
+String? _minMaxHint(
+    List<NightRow> rows, double? Function(NightRow) valueOf, String unit) {
+  final values = rows.map(valueOf).whereType<double>().toList();
+  if (values.isEmpty) return null;
+  final lo = values.reduce((a, b) => a < b ? a : b).round();
+  final hi = values.reduce((a, b) => a > b ? a : b).round();
+  return '$lo–$hi $unit';
+}
 
 enum _Range { sevenDays, thirtyDays }
 
@@ -80,12 +102,12 @@ class _TrendsScreenState extends State<TrendsScreen> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(HuxSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _RangeToggle(range: _range, onChanged: _onRangeChanged),
-              const SizedBox(height: 16),
+              const SizedBox(height: HuxSpacing.lg),
               Expanded(
                 child: FutureBuilder<_TrendsData>(
                   future: _future,
@@ -139,14 +161,15 @@ class _EmptyPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(HuxSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.show_chart, size: 40, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text('Not enough data to show trends yet'),
-            const SizedBox(height: 4),
+            const Icon(Icons.show_chart, size: 40, color: HuxColors.mutedText),
+            const SizedBox(height: HuxSpacing.md),
+            Text('Not enough data to show trends yet',
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: HuxSpacing.xs),
             Text(
               'Keep wearing your ring — charts fill in as nights sync.',
               textAlign: TextAlign.center,
@@ -173,14 +196,16 @@ class _TrendsCharts extends StatelessWidget {
           title: 'Sleep duration',
           child: _SleepBarChart(rows: rows, baseline: baseline),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: HuxSpacing.xl),
         _ChartCard(
           title: 'Avg HRV',
+          hint: _minMaxHint(rows, (r) => r.avgHrvMs, 'ms'),
           child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgHrvMs),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: HuxSpacing.xl),
         _ChartCard(
           title: 'Avg resting heart rate',
+          hint: _minMaxHint(rows, (r) => r.avgHeartRateBpm, 'bpm'),
           child: _MetricLineChart(
               rows: rows, valueOf: (r) => r.avgHeartRateBpm),
         ),
@@ -191,17 +216,27 @@ class _TrendsCharts extends StatelessWidget {
 
 class _ChartCard extends StatelessWidget {
   final String title;
+  final String? hint;
   final Widget child;
 
-  const _ChartCard({required this.title, required this.child});
+  const _ChartCard({required this.title, this.hint, required this.child});
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
+        Row(
+          children: [
+            Text(title, style: textTheme.labelLarge),
+            if (hint != null) ...[
+              const Spacer(),
+              Text(hint!, style: textTheme.bodySmall),
+            ],
+          ],
+        ),
+        const SizedBox(height: HuxSpacing.sm),
         SizedBox(height: 160, child: child),
       ],
     );
@@ -220,8 +255,10 @@ class _SleepBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final band = SleepTargetBand.fromBaseline(baseline);
-    final barColor = Theme.of(context).colorScheme.primary;
+    const barColor = HuxColors.accentDeepTeal;
     final barWidth = rows.length > 14 ? 4.0 : 10.0;
+    final labelStyle = Theme.of(context).textTheme.labelSmall;
+    final interval = _weekdayLabelInterval(rows.length);
 
     return BarChart(BarChartData(
       barGroups: [
@@ -240,14 +277,38 @@ class _SleepBarChart extends StatelessWidget {
       ],
       gridData: const FlGridData(show: false),
       borderData: FlBorderData(show: false),
-      titlesData: const FlTitlesData(show: false),
+      titlesData: FlTitlesData(
+        show: true,
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles:
+            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 18,
+            getTitlesWidget: (value, meta) {
+              final i = value.round();
+              if (i < 0 || i >= rows.length || i % interval != 0) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: HuxSpacing.xs),
+                child:
+                    Text(_weekdayInitial(rows[i].night), style: labelStyle),
+              );
+            },
+          ),
+        ),
+      ),
       rangeAnnotations: band == null
           ? const RangeAnnotations()
           : RangeAnnotations(horizontalRangeAnnotations: [
               HorizontalRangeAnnotation(
                 y1: band.low.inMinutes / 60.0,
                 y2: band.high.inMinutes / 60.0,
-                color: barColor.withValues(alpha: 0.12),
+                color:
+                    HuxColors.accentMint.withValues(alpha: HuxOpacity.targetBand),
               ),
             ]),
     ));
@@ -270,7 +331,7 @@ class _MetricLineChart extends StatelessWidget {
       return const Center(child: Text('No data in this range yet'));
     }
 
-    final lineColor = Theme.of(context).colorScheme.primary;
+    const lineColor = HuxColors.accentDeepTeal;
     return LineChart(LineChartData(
       minX: 0,
       maxX: (rows.length - 1).clamp(0, double.infinity).toDouble(),

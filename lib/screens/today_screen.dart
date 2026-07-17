@@ -17,6 +17,7 @@ import '../core/modes/mode_service.dart';
 import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+import '../theme/hux_tokens.dart';
 
 /// One line combining whichever lifestyle modes are active, or null if
 /// none are. Deliberately just concatenation, not a wall of chips —
@@ -189,8 +190,8 @@ class _MessageView extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(message),
+          const SizedBox(height: HuxSpacing.lg),
+          Text(message, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
@@ -218,20 +219,22 @@ class _ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(HuxSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.watch_outlined, size: 40, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text("Couldn't sync with your ring"),
-            const SizedBox(height: 4),
+            const Icon(Icons.watch_outlined,
+                size: 40, color: HuxColors.mutedText),
+            const SizedBox(height: HuxSpacing.md),
+            Text("Couldn't sync with your ring",
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: HuxSpacing.xs),
             Text(
               _friendly(message),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: HuxSpacing.lg),
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
@@ -257,32 +260,24 @@ class _ReadoutBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final chipText = _lifestyleChipText(activeContext);
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(HuxSpacing.lg),
       children: [
-        _RecoveryHeader(state: readout.state, headline: readout.headline),
-        if (chipText != null) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Chip(
-              label: Text(chipText),
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        Text(readout.meaning),
-        const SizedBox(height: 16),
-        _ActionsList(actions: readout.actions),
-        const SizedBox(height: 12),
+        _TodayHeaderCard(
+          state: readout.state,
+          headline: readout.headline,
+          meaning: readout.meaning,
+          chipText: chipText,
+        ),
+        const SizedBox(height: HuxSpacing.lg),
+        _ActionsList(actions: readout.actions, state: readout.state),
+        const SizedBox(height: HuxSpacing.md),
         _DataQualityCaption(quality: readout.dataQuality),
         if (modeStrip != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: HuxSpacing.lg),
           _ModeStripCard(strip: modeStrip!),
         ],
         if (lastNight != null) ...[
-          const Divider(height: 32),
+          const Divider(height: HuxSpacing.xxl),
           _LastNightStats(
             session: lastNight!,
             sectionLabel:
@@ -295,19 +290,66 @@ class _ReadoutBody extends StatelessWidget {
   }
 }
 
+/// The hero block: headline, a soft state-tinted wash behind it, the
+/// "why" sentence, and the lifestyle-mode chip if one's active — all
+/// one visually contained unit so the readout reads as the centerpiece
+/// of the screen, not a stack of independent rows.
+class _TodayHeaderCard extends StatelessWidget {
+  final RecoveryState state;
+  final String headline;
+  final String meaning;
+  final String? chipText;
+
+  const _TodayHeaderCard({
+    required this.state,
+    required this.headline,
+    required this.meaning,
+    required this.chipText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(HuxSpacing.lg),
+      decoration: BoxDecoration(
+        color: state.huxColor.withValues(alpha: HuxOpacity.headerWash),
+        borderRadius: BorderRadius.circular(HuxRadii.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _RecoveryHeader(state: state, headline: headline),
+          if (chipText != null) ...[
+            const SizedBox(height: HuxSpacing.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                label: Text(chipText!),
+                backgroundColor:
+                    HuxModeAccent.background.withValues(alpha: 0.35),
+                labelStyle: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(color: HuxModeAccent.foreground),
+                side: BorderSide.none,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+          const SizedBox(height: HuxSpacing.md),
+          Text(meaning, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecoveryHeader extends StatelessWidget {
   final RecoveryState state;
   final String headline;
 
   const _RecoveryHeader({required this.state, required this.headline});
-
-  Color get _dotColor => switch (state) {
-        RecoveryState.recharged => Colors.green,
-        RecoveryState.steady => Colors.teal,
-        RecoveryState.stretched => Colors.amber,
-        RecoveryState.rundown => Colors.red,
-        RecoveryState.learning => Colors.grey,
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -315,16 +357,17 @@ class _RecoveryHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(top: HuxSpacing.sm),
           child: Container(
             width: 12,
             height: 12,
-            decoration: BoxDecoration(color: _dotColor, shape: BoxShape.circle),
+            decoration:
+                BoxDecoration(color: state.huxColor, shape: BoxShape.circle),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: HuxSpacing.sm),
         Expanded(
-          child: Text(headline, style: Theme.of(context).textTheme.headlineSmall),
+          child: Text(headline, style: Theme.of(context).textTheme.displaySmall),
         ),
       ],
     );
@@ -333,8 +376,9 @@ class _RecoveryHeader extends StatelessWidget {
 
 class _ActionsList extends StatelessWidget {
   final List<String> actions;
+  final RecoveryState state;
 
-  const _ActionsList({required this.actions});
+  const _ActionsList({required this.actions, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -344,13 +388,19 @@ class _ActionsList extends StatelessWidget {
       children: [
         for (final action in actions)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: HuxSpacing.sm),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.circle, size: 6),
-                const SizedBox(width: 8),
-                Expanded(child: Text(action)),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Icon(Icons.circle, size: 6, color: state.huxColor),
+                ),
+                const SizedBox(width: HuxSpacing.sm),
+                Expanded(
+                  child: Text(action,
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ),
               ],
             ),
           ),
@@ -372,13 +422,9 @@ class _DataQualityCaption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      _label,
-      style: Theme.of(context)
-          .textTheme
-          .bodySmall
-          ?.copyWith(color: Colors.grey.shade600),
-    );
+    // bodySmall is already muted-colored (see hux_theme.dart) — no
+    // per-widget color override needed.
+    return Text(_label, style: Theme.of(context).textTheme.bodySmall);
   }
 }
 
@@ -394,28 +440,32 @@ class _ModeStripCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDayZero = strip.phase == ModePhase.theDay;
+    final labelStyle = Theme.of(context)
+        .textTheme
+        .labelLarge
+        ?.copyWith(color: HuxModeAccent.foreground);
 
     return Card(
       color: isDayZero ? scheme.tertiaryContainer : scheme.secondaryContainer,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(HuxSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(strip.phaseLabel,
-                    style: Theme.of(context).textTheme.labelLarge),
+                Text(strip.phaseLabel, style: labelStyle),
                 if (!strip.isWrapUp)
                   Text(
                     strip.daysToGo == 0 ? 'Today' : '${strip.daysToGo}d to go',
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: labelStyle,
                   ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(strip.themedAction),
+            const SizedBox(height: HuxSpacing.xs),
+            Text(strip.themedAction,
+                style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
       ),
@@ -437,36 +487,53 @@ class _LastNightStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = <MapEntry<String, String>>[
-      MapEntry('Sleep', _formatDuration(session.totalSleep)),
+    final rows = <_StatRow>[
+      _StatRow('Sleep', _formatDuration(session.totalSleep), 'hrs'),
       if (session.avgHrvMs != null)
-        MapEntry('Avg HRV', '${session.avgHrvMs} ms'),
+        _StatRow('Avg HRV', '${session.avgHrvMs}', 'ms'),
       if (session.avgHeartRateBpm != null)
-        MapEntry('Avg heart rate', '${session.avgHeartRateBpm} bpm'),
+        _StatRow('Avg heart rate', '${session.avgHeartRateBpm}', 'bpm'),
       if (session.minSpo2Percent != null)
-        MapEntry('Min SpO2', '${session.minSpo2Percent}%'),
+        _StatRow('Min SpO2', '${session.minSpo2Percent}', '%'),
     ];
+    final textTheme = Theme.of(context).textTheme;
+    final numeralStyle =
+        textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(sectionLabel, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
+        Text(sectionLabel, style: textTheme.labelLarge),
+        const SizedBox(height: HuxSpacing.sm),
         for (final row in rows)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: HuxSpacing.xs),
             child: Row(
               children: [
                 // Expanded, not spaceBetween: a long label (a bigger
                 // accessibility font, a longer localized string down
                 // the line) shrinks/wraps instead of overflowing the
                 // row — the value on the right always stays intact.
-                Expanded(child: Text(row.key)),
-                Text(row.value),
+                Expanded(child: Text(row.label, style: textTheme.bodyMedium)),
+                Text.rich(TextSpan(children: [
+                  TextSpan(text: row.numeral, style: numeralStyle),
+                  TextSpan(text: ' ${row.unit}', style: textTheme.bodySmall),
+                ])),
               ],
             ),
           ),
       ],
     );
   }
+}
+
+/// One Last-sleep stat: a big numeral (Space Grotesk, bold) with a
+/// small muted unit label alongside — never one plain string, so the
+/// number a user actually cares about reads at a glance.
+class _StatRow {
+  final String label;
+  final String numeral;
+  final String unit;
+
+  const _StatRow(this.label, this.numeral, this.unit);
 }
