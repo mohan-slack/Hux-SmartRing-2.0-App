@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/meaning/weekly_story.dart';
+import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 
 class StoryScreen extends StatefulWidget {
@@ -30,6 +31,9 @@ class _StoryScreenState extends State<StoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Transparent: this screen lives inside AppShell's IndexedStack,
+      // over the ONE shared HuxBackground — it must not paint its own.
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: FutureBuilder<WeeklyStory>(
           future: _future,
@@ -73,7 +77,9 @@ class _StoryBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(HuxSpacing.lg),
+      // Bottom clearance: content scrolls behind the glass nav bar.
+      padding: const EdgeInsets.fromLTRB(
+          HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
         Text(story.title, style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: HuxSpacing.lg),
@@ -113,9 +119,9 @@ class _Observations extends StatelessWidget {
   }
 }
 
-/// "For next week" — a distinct card, not just another paragraph:
-/// this is the one concrete thing to act on, so it should look like
-/// it, set apart from the observations above it.
+/// "For next week" — a distinct glowing glass card, not just another
+/// paragraph: this is the one concrete thing to act on, so it reads
+/// as the lit-up takeaway at the end of the story.
 class _Suggestion extends StatelessWidget {
   final String suggestion;
 
@@ -124,20 +130,18 @@ class _Suggestion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Card(
-      color: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
-      child: Padding(
-        padding: const EdgeInsets.all(HuxSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('For next week',
-                style: textTheme.labelLarge
-                    ?.copyWith(color: HuxModeAccent.foreground)),
-            const SizedBox(height: HuxSpacing.sm),
-            Text(suggestion, style: textTheme.bodyMedium),
-          ],
-        ),
+    return GlassPanel(
+      tint: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
+      glow: HuxColors.accentMint,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('For next week',
+              style: textTheme.labelLarge
+                  ?.copyWith(color: HuxModeAccent.background)),
+          const SizedBox(height: HuxSpacing.sm),
+          Text(suggestion, style: textTheme.bodyMedium),
+        ],
       ),
     );
   }

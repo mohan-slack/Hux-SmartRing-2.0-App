@@ -1,18 +1,20 @@
-/// HUX Design Tokens
-/// -------------------
-/// The ONLY place a hex code or a spacing/radius magic number is
+/// HUX Design Tokens — dark "liquid glass" edition
+/// -------------------------------------------------
+/// The ONLY place a hex code or a spacing/radius/blur magic number is
 /// allowed to live. Screens import this file and reference its
 /// constants/helpers — never `Color(0x...)`, never a bare `16.0` for
-/// padding. `hux_theme.dart` is the only other file that reads these
-/// directly to build a `ThemeData`; everything else should be able to
-/// get what it needs from `Theme.of(context)` plus the handful of
-/// per-domain helpers below (`RecoveryStateColor`, `HuxModeAccent`).
+/// padding. `hux_theme.dart` and `hux_glass.dart` are the only other
+/// files that read these directly; everything else should get what it
+/// needs from `Theme.of(context)` plus the per-domain helpers below.
 ///
-/// LIGHT MODE ONLY this phase. Deliberately structured as plain static
-/// constants (not yet a `ColorScheme.dark()`-style pair) so a dark
-/// variant can be added later without every screen changing — the
-/// day it's needed, `HuxColors` becomes a small light/dark pair and
-/// `hux_theme.dart` picks one based on `Brightness`.
+/// DARK-FIRST since the liquid-glass pass: a deep green-black base
+/// with soft mint/teal radial glows behind everything, translucent
+/// "glass" surfaces on top (see hux_glass.dart for why most glass here
+/// is translucency + stroke + highlight rather than a real
+/// BackdropFilter blur), and the brand mint doing the glowing. The
+/// original light palette lives on only in the two places light
+/// matters: text ON a bright accent (buttons, the amber banner) keeps
+/// a near-black ink of its own.
 
 import 'package:flutter/material.dart';
 
@@ -21,31 +23,79 @@ import '../core/meaning/daily_readout.dart';
 class HuxColors {
   const HuxColors._();
 
-  // ---- neutrals ----------------------------------------------------
-  static const ink = Color(0xFF16211E);
-  static const paper = Color(0xFFF4F8F6);
-  static const card = Color(0xFFFFFFFF);
-  static const hairline = Color(0xFFE2E8E6);
-  static const mutedText = Color(0xFF5C6B67);
+  // ---- the dark stage -------------------------------------------------
+  /// App background — deep green-black, the darkest thing on screen.
+  static const bg = Color(0xFF0B1210);
 
-  // ---- brand accents -------------------------------------------------
+  /// Elevated OPAQUE surface: dialogs, sheets, pickers, snackbars —
+  /// places where see-through would hurt readability.
+  static const card = Color(0xFF121B18);
+
+  /// A step above [card] for the snackbar, so it reads as floating.
+  static const cardElevated = Color(0xFF1C2723);
+
+  // ---- text -----------------------------------------------------------
+  /// Primary text — near-white with the brand's green cast.
+  /// ~16:1 on [bg], comfortably >4.5:1 on every glass surface.
+  static const ink = Color(0xFFEDF5F1);
+
+  /// Secondary text — ~7:1 on [bg].
+  static const mutedText = Color(0xFF93A69F);
+
+  /// Text ON a bright accent fill (mint buttons, the amber banner):
+  /// the old light-theme ink, kept for exactly this job. ~12:1 on
+  /// mint, ~10:1 on the demo amber.
+  static const inkOnAccent = Color(0xFF10201B);
+
+  // ---- brand accents ---------------------------------------------------
+  /// The hero accent — glows on dark. Readable AS text on [bg] (~11:1).
   static const accentMint = Color(0xFF9AE6C8);
+
+  /// Bright teal for glyphs/labels/lines on dark surfaces (~8.6:1 on
+  /// [bg]) — [accentDeepTeal] is too dim to read on dark and is kept
+  /// for fills and gradient ends only.
+  static const accentTeal = Color(0xFF2DD4BF);
+
+  /// Depth end of the brand gradient; fills, never text on dark.
   static const accentDeepTeal = Color(0xFF0F766E);
 
-  // ---- recovery states (dot, header wash, chart accents) -------------
-  static const recharged = Color(0xFF2F9E62);
-  static const steady = Color(0xFF0F766E);
-  static const stretched = Color(0xFFD97706);
-  static const rundown = Color(0xFFC2554A);
+  // ---- glass ------------------------------------------------------------
+  /// Translucent white layers that make a surface read as glass over
+  /// the dark stage. Pre-baked alphas (not `withValues` at call sites)
+  /// so "how glassy" stays a single tunable per role.
+  static const glassFillTop = Color(0x17FFFFFF); // white 9% — panel top
+  static const glassFillBottom = Color(0x0AFFFFFF); // white 4% — panel base
+  static const glassStroke = Color(0x24FFFFFF); // white 14% — 1px border
+  static const glassHighlight = Color(0x40FFFFFF); // white 25% — top rim
+
+  /// Hairline for dividers/tracks on dark — white 10%.
+  static const hairline = Color(0x1AFFFFFF);
+
+  /// Faint full-height slot track behind chart bars — white 5%.
+  static const chartTrack = Color(0x0DFFFFFF);
+
+  // ---- background glows --------------------------------------------------
+  /// The two soft radial glows painted once behind the whole app
+  /// (see HuxBackground) — mint top-left, teal bottom-right.
+  static const bgGlowMint = Color(0x1A9AE6C8); // mint 10%
+  static const bgGlowTeal = Color(0x260F766E); // deep teal 15%
+
+  // ---- recovery states (dot, header glow, chart accents) -----------------
+  /// Brightened from the light-theme set so they carry on dark. Used
+  /// for dots, washes, and glows — never body text.
+  static const recharged = Color(0xFF3FBF78);
+  static const steady = Color(0xFF2DD4BF);
+  static const stretched = Color(0xFFF5A524);
+  static const rundown = Color(0xFFF0705F);
   static const learning = Color(0xFF8A9490);
 
-  // ---- source banners (meaning unchanged from prior phases) ----------
-  /// DEMO — simulated ring data. Black text on this is >=4.5:1 (~13:1).
+  // ---- source banners (meaning unchanged — these stay SOLID) -------------
+  /// DEMO — simulated ring data. [inkOnAccent] text on this is ~10:1.
+  /// Deliberately NOT glass: the banner is a safety feature and must
+  /// never blend into the design.
   static const demoAmber = Color(0xFFFFC107);
 
-  /// DEV — health app data. Darker than Material's stock blueGrey so
-  /// white text clears 4.5:1 (~7.2:1) — the stock swatch only manages
-  /// ~4.0:1 and would fail the contrast bar.
+  /// DEV — health app data. White text on this is ~7.2:1.
   static const devBlueGrey = Color(0xFF455A64);
 }
 
@@ -56,9 +106,9 @@ class HuxRadii {
   static const chip = 999.0;
 }
 
-/// The 4/8/12/16/24/32 spacing scale. Name them by feel (xs..xxl), not
-/// by number, so a screen reads "space it like a section gap" rather
-/// than a bare `24.0` whose intent isn't obvious at the call site.
+/// The 4/8/12/16/24/32 spacing scale. Named by feel (xs..xxl), not by
+/// number, so a screen reads "space it like a section gap" rather than
+/// a bare `24.0` whose intent isn't obvious at the call site.
 class HuxSpacing {
   const HuxSpacing._();
 
@@ -76,24 +126,78 @@ class HuxSpacing {
 class HuxOpacity {
   const HuxOpacity._();
 
-  /// The soft state-tinted wash behind Today's header block.
+  /// The soft state-tinted wash across Today's header glass.
   static const headerWash = 0.10;
 
+  /// The state-colored radial glow inside Today's header panel.
+  static const headerGlow = 0.30;
+
   /// The personal sleep-duration target band on the Trends bar chart.
-  static const targetBand = 0.25;
+  static const targetBand = 0.22;
 
   /// The circular backdrop behind a mode/lifestyle accent icon.
-  static const iconChip = 0.20;
+  static const iconChip = 0.18;
 
-  /// The active-mode-card mint wash on the Modes screen.
-  static const activeCardWash = 0.16;
+  /// The active-mode mint wash on cards/strips.
+  static const activeCardWash = 0.14;
+
+  /// Outer glow (BoxShadow) behind an accented glass panel.
+  static const panelGlow = 0.25;
+
+  /// Neon glow behind a chart line (fl_chart line shadow).
+  static const chartLineGlow = 0.45;
+
+  /// Area fill under a chart line, fading to transparent.
+  static const chartAreaFill = 0.28;
+
+  /// Halo ring around a chart's endpoint dot.
+  static const chartDotHalo = 0.30;
+
+  /// The glass nav bar's fill over the blurred content behind it.
+  static const navGlass = 0.72;
+}
+
+/// Type-scale numbers that live OUTSIDE the ThemeData text theme:
+/// the big stat/chart numerals. The brand rule is "numbers are Space
+/// Grotesk", but every display/headline theme slot is Fraunces — so
+/// numeral styles are built at the call site from a Space Grotesk
+/// slot (titleLarge) plus these token sizes.
+class HuxType {
+  const HuxType._();
+
+  /// Stat-tile numerals (Today's Last-sleep grid).
+  static const numeral = 28.0;
+
+  /// Chart hero numerals (the big value on each Trends card).
+  static const numeralLarge = 34.0;
+}
+
+/// Structural numbers for the glass treatment itself.
+class HuxGlass {
+  const HuxGlass._();
+
+  /// Blur sigma for the ONE real BackdropFilter (the nav bar) — kept
+  /// moderate per Flutter/Impeller guidance; blur is expensive.
+  static const navBlurSigma = 18.0;
+
+  /// Outer-glow geometry for accented panels.
+  static const glowBlurRadius = 28.0;
+  static const glowSpread = -6.0;
+
+  /// Neon-glow blur behind a Trends chart line.
+  static const chartGlowBlur = 12.0;
+
+  /// Bottom clearance scrollables add so their last card can scroll
+  /// clear of the floating glass nav bar (nav height + home indicator
+  /// + breathing room; the body extends behind the bar).
+  static const navClearance = 120.0;
 }
 
 /// Minimum touch target side length (Material/HIG accessibility floor).
 const huxMinTapTarget = 44.0;
 
 /// Maps a [RecoveryState] to its token color — the ONE place that
-/// mapping lives. Used for the Today recovery dot, the header wash,
+/// mapping lives. Used for the Today recovery dot, the header glow,
 /// and small chart accents. Never a full-screen color flood.
 extension RecoveryStateColor on RecoveryState {
   Color get huxColor => switch (this) {
@@ -107,11 +211,11 @@ extension RecoveryStateColor on RecoveryState {
 
 /// The shared visual treatment for a mode/lifestyle accent icon chip
 /// (flag/heart/grad-cap/bedtime/twilight) — one consistent brand
-/// accent (mint backdrop, deep-teal glyph) rather than a different
-/// invented color per mode.
+/// accent (mint backdrop glow, bright-teal glyph) rather than a
+/// different invented color per mode.
 class HuxModeAccent {
   const HuxModeAccent._();
 
   static const background = HuxColors.accentMint;
-  static const foreground = HuxColors.accentDeepTeal;
+  static const foreground = HuxColors.accentTeal;
 }

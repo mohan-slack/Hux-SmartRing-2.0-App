@@ -4,6 +4,14 @@
 /// could drift out of sync. Each tab keeps its own state when you
 /// switch away and back (IndexedStack builds every tab once and keeps
 /// them alive, rather than disposing and rebuilding on every switch).
+///
+/// Liquid-glass notes: the dark stage ([HuxBackground]) is painted
+/// ONCE here behind everything; screens never paint their own. The nav
+/// bar is the app's ONE real BackdropFilter — `extendBody: true` lets
+/// tab content scroll behind it, so the blur has something genuine to
+/// refract (see hux_glass.dart for why panels elsewhere fake it).
+
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -13,6 +21,7 @@ import '../core/modes/mode_service.dart';
 import '../core/ring/data_source.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 import 'modes_screen.dart';
 import 'story_screen.dart';
@@ -70,40 +79,60 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _SourceBanner(source: widget.dataSource),
-            Expanded(
-              child: IndexedStack(
-                index: _index,
-                children: [
-                  TodayScreen(
-                    store: widget.store,
-                    syncService: widget.syncService,
-                    readoutService: widget.readoutService,
-                    modeService: widget.modeService,
-                    refreshSignal: _todayRefresh,
+      // Content scrolls behind the glass nav bar; each tab's scrollable
+      // adds HuxGlass.navClearance of bottom padding so its last card
+      // can still scroll fully clear of the bar.
+      extendBody: true,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const HuxBackground(),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _SourceBanner(source: widget.dataSource),
+                Expanded(
+                  child: IndexedStack(
+                    index: _index,
+                    children: [
+                      TodayScreen(
+                        store: widget.store,
+                        syncService: widget.syncService,
+                        readoutService: widget.readoutService,
+                        modeService: widget.modeService,
+                        refreshSignal: _todayRefresh,
+                      ),
+                      TrendsScreen(store: widget.store),
+                      StoryScreen(storyService: widget.storyService),
+                      ModesScreen(modeService: widget.modeService),
+                    ],
                   ),
-                  TrendsScreen(store: widget.store),
-                  StoryScreen(storyService: widget.storyService),
-                  ModesScreen(modeService: widget.modeService),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _onDestinationSelected,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
-          NavigationDestination(
-              icon: Icon(Icons.show_chart), label: 'Trends'),
-          NavigationDestination(icon: Icon(Icons.menu_book), label: 'Story'),
-          NavigationDestination(icon: Icon(Icons.flag), label: 'Modes'),
+          ),
         ],
+      ),
+      bottomNavigationBar: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: HuxGlass.navBlurSigma,
+            sigmaY: HuxGlass.navBlurSigma,
+          ),
+          child: NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: _onDestinationSelected,
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
+              NavigationDestination(
+                  icon: Icon(Icons.show_chart), label: 'Trends'),
+              NavigationDestination(
+                  icon: Icon(Icons.menu_book), label: 'Story'),
+              NavigationDestination(icon: Icon(Icons.flag), label: 'Modes'),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -124,11 +153,12 @@ class _SourceBanner extends StatelessWidget {
         RingDataSource.health => HuxColors.devBlueGrey,
       };
 
-  // Amber is light — near-black text keeps ~13:1 contrast. Blue-grey is
-  // dark enough (see hux_tokens.dart) that white text clears the 4.5:1
-  // floor at ~7.2:1.
+  // Amber is light — the dedicated on-accent ink keeps ~10:1 contrast
+  // (the app's regular ink is near-white now and would vanish on it).
+  // Blue-grey is dark enough (see hux_tokens.dart) that white text
+  // clears the 4.5:1 floor at ~7.2:1.
   Color get _foreground => switch (source) {
-        RingDataSource.mock => HuxColors.ink,
+        RingDataSource.mock => HuxColors.inkOnAccent,
         RingDataSource.health => Colors.white,
       };
 

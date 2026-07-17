@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
+import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 
 String modeName(ModeId id) => switch (id) {
@@ -239,7 +240,9 @@ class _ModesScreenState extends State<ModesScreen> {
         final now = DateTime.now();
 
         return ListView(
-          padding: const EdgeInsets.all(HuxSpacing.lg),
+          // Bottom clearance: content scrolls behind the glass nav bar.
+          padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.lg,
+              HuxSpacing.lg, HuxGlass.navClearance),
           children: [
             if (active != null) ...[
               _ActiveModeCard(config: active, onEnd: _endMode),
@@ -247,8 +250,8 @@ class _ModesScreenState extends State<ModesScreen> {
             ],
             if (data.nightShift != null || data.fasting != null) ...[
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: HuxSpacing.sm,
+                runSpacing: HuxSpacing.sm,
                 children: [
                   if (data.nightShift != null)
                     InputChip(
@@ -327,43 +330,43 @@ class _ActiveModeCard extends StatelessWidget {
             ? "It's today"
             : 'Wrapping up';
 
-    return Card(
-      color: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
-      child: Padding(
-        padding: const EdgeInsets.all(HuxSpacing.lg),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _AccentIconChip(icon: _modeIcon(config.id)),
-            const SizedBox(width: HuxSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Active: ${modeName(config.id)}'
-                    '${config.label != null ? ' — ${config.label}' : ''}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: HuxSpacing.xs),
-                  Text(countdown,
-                      style: Theme.of(context).textTheme.bodyMedium),
-                  const SizedBox(height: HuxSpacing.md),
-                  OutlinedButton(
-                      onPressed: onEnd, child: const Text('End mode')),
-                ],
-              ),
+    // The active mode is the page's lit-up hero: mint-tinted glass
+    // with the mint outer glow.
+    return GlassPanel(
+      tint: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
+      glow: HuxColors.accentMint,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AccentIconChip(icon: _modeIcon(config.id)),
+          const SizedBox(width: HuxSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Active: ${modeName(config.id)}'
+                  '${config.label != null ? ' — ${config.label}' : ''}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: HuxSpacing.xs),
+                Text(countdown,
+                    style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: HuxSpacing.md),
+                OutlinedButton(
+                    onPressed: onEnd, child: const Text('End mode')),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 /// The shared accent treatment for a mode/lifestyle icon — one
-/// consistent brand accent (mint backdrop, deep-teal glyph), not a
-/// different invented color per mode. See [HuxModeAccent].
+/// consistent brand accent (glowing mint backdrop, bright-teal glyph),
+/// not a different invented color per mode. See [HuxModeAccent].
 class _AccentIconChip extends StatelessWidget {
   final IconData icon;
 
@@ -378,6 +381,13 @@ class _AccentIconChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: HuxModeAccent.background.withValues(alpha: HuxOpacity.iconChip),
         shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: HuxModeAccent.background
+                .withValues(alpha: HuxOpacity.iconChip),
+            blurRadius: HuxSpacing.lg,
+          ),
+        ],
       ),
       child: Icon(icon, color: HuxModeAccent.foreground),
     );
@@ -406,7 +416,7 @@ class _ModeListTile extends StatelessWidget {
         title: Text(modeName(modeId)),
         subtitle: Text(_modeDescription(modeId)),
         trailing: isActive
-            ? const Icon(Icons.check_circle, color: HuxColors.accentDeepTeal)
+            ? const Icon(Icons.check_circle, color: HuxColors.accentMint)
             : const Icon(Icons.chevron_right, color: HuxColors.mutedText),
         onTap: onTap,
       ),
@@ -440,7 +450,7 @@ class _LifestyleTile extends StatelessWidget {
         title: Text(title),
         subtitle: Text(description),
         trailing: isActive
-            ? const Icon(Icons.check_circle, color: HuxColors.accentDeepTeal)
+            ? const Icon(Icons.check_circle, color: HuxColors.accentMint)
             : const Icon(Icons.chevron_right, color: HuxColors.mutedText),
         onTap: onTap,
       ),

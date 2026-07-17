@@ -17,6 +17,7 @@ import '../core/modes/mode_service.dart';
 import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 
 /// One line combining whichever lifestyle modes are active, or null if
@@ -260,7 +261,11 @@ class _ReadoutBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final chipText = _lifestyleChipText(activeContext);
     return ListView(
-      padding: const EdgeInsets.all(HuxSpacing.lg),
+      // Bottom clearance: the body extends behind the glass nav bar
+      // (AppShell extendBody), so the last card needs room to scroll
+      // fully clear of it.
+      padding: const EdgeInsets.fromLTRB(
+          HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
         _TodayHeaderCard(
           state: readout.state,
@@ -290,10 +295,11 @@ class _ReadoutBody extends StatelessWidget {
   }
 }
 
-/// The hero block: headline, a soft state-tinted wash behind it, the
-/// "why" sentence, and the lifestyle-mode chip if one's active — all
-/// one visually contained unit so the readout reads as the centerpiece
-/// of the screen, not a stack of independent rows.
+/// The hero block: headline, a soft state-tinted glass panel with a
+/// matching outer glow, the "why" sentence, and the lifestyle-mode
+/// chip if one's active — all one visually contained unit so the
+/// readout reads as the centerpiece of the screen, lit from within by
+/// today's recovery state.
 class _TodayHeaderCard extends StatelessWidget {
   final RecoveryState state;
   final String headline;
@@ -309,12 +315,9 @@ class _TodayHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(HuxSpacing.lg),
-      decoration: BoxDecoration(
-        color: state.huxColor.withValues(alpha: HuxOpacity.headerWash),
-        borderRadius: BorderRadius.circular(HuxRadii.card),
-      ),
+    return GlassPanel(
+      tint: state.huxColor.withValues(alpha: HuxOpacity.headerWash),
+      glow: state.huxColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -325,13 +328,13 @@ class _TodayHeaderCard extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Chip(
                 label: Text(chipText!),
-                backgroundColor:
-                    HuxModeAccent.background.withValues(alpha: 0.35),
+                backgroundColor: HuxModeAccent.background
+                    .withValues(alpha: HuxOpacity.iconChip),
                 labelStyle: Theme.of(context)
                     .textTheme
                     .labelLarge
-                    ?.copyWith(color: HuxModeAccent.foreground),
-                side: BorderSide.none,
+                    ?.copyWith(color: HuxModeAccent.background),
+                side: const BorderSide(color: HuxColors.glassStroke),
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -361,8 +364,20 @@ class _RecoveryHeader extends StatelessWidget {
           child: Container(
             width: 12,
             height: 12,
-            decoration:
-                BoxDecoration(color: state.huxColor, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: state.huxColor,
+              shape: BoxShape.circle,
+              // A small halo so the dot reads as the light source of
+              // the header's glow, not a flat sticker.
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      state.huxColor.withValues(alpha: HuxOpacity.headerGlow),
+                  blurRadius: HuxSpacing.md,
+                  spreadRadius: HuxSpacing.xs / 2,
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(width: HuxSpacing.sm),
@@ -438,36 +453,37 @@ class _ModeStripCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final isDayZero = strip.phase == ModePhase.theDay;
     final labelStyle = Theme.of(context)
         .textTheme
         .labelLarge
-        ?.copyWith(color: HuxModeAccent.foreground);
+        ?.copyWith(color: HuxModeAccent.background);
 
-    return Card(
-      color: isDayZero ? scheme.tertiaryContainer : scheme.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(HuxSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(strip.phaseLabel, style: labelStyle),
-                if (!strip.isWrapUp)
-                  Text(
-                    strip.daysToGo == 0 ? 'Today' : '${strip.daysToGo}d to go',
-                    style: labelStyle,
-                  ),
-              ],
-            ),
-            const SizedBox(height: HuxSpacing.xs),
-            Text(strip.themedAction,
-                style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
+    // Day zero is the payoff moment — it gets the full mint glow; the
+    // countdown phases stay a quieter mint-tinted glass.
+    return GlassPanel(
+      padding: const EdgeInsets.all(HuxSpacing.md),
+      tint: HuxModeAccent.background
+          .withValues(alpha: HuxOpacity.activeCardWash),
+      glow: isDayZero ? HuxModeAccent.background : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(strip.phaseLabel, style: labelStyle),
+              if (!strip.isWrapUp)
+                Text(
+                  strip.daysToGo == 0 ? 'Today' : '${strip.daysToGo}d to go',
+                  style: labelStyle,
+                ),
+            ],
+          ),
+          const SizedBox(height: HuxSpacing.xs),
+          Text(strip.themedAction,
+              style: Theme.of(context).textTheme.bodyMedium),
+        ],
       ),
     );
   }
@@ -497,32 +513,67 @@ class _LastNightStats extends StatelessWidget {
         _StatRow('Min SpO2', '${session.minSpo2Percent}', '%'),
     ];
     final textTheme = Theme.of(context).textTheme;
-    final numeralStyle =
-        textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700);
 
+    // A two-column grid of glass stat tiles (widget-board style), not
+    // a label:value list — the numbers are what the user came for, so
+    // they get the big Space Grotesk treatment. Wrap + LayoutBuilder
+    // (intrinsic tile height) instead of a fixed-extent grid, so large
+    // accessibility text grows the tiles rather than overflowing them.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(sectionLabel, style: textTheme.labelLarge),
-        const SizedBox(height: HuxSpacing.sm),
-        for (final row in rows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: HuxSpacing.xs),
-            child: Row(
+        const SizedBox(height: HuxSpacing.md),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final tileWidth =
+                (constraints.maxWidth - HuxSpacing.sm) / 2;
+            return Wrap(
+              spacing: HuxSpacing.sm,
+              runSpacing: HuxSpacing.sm,
               children: [
-                // Expanded, not spaceBetween: a long label (a bigger
-                // accessibility font, a longer localized string down
-                // the line) shrinks/wraps instead of overflowing the
-                // row — the value on the right always stays intact.
-                Expanded(child: Text(row.label, style: textTheme.bodyMedium)),
-                Text.rich(TextSpan(children: [
-                  TextSpan(text: row.numeral, style: numeralStyle),
-                  TextSpan(text: ' ${row.unit}', style: textTheme.bodySmall),
-                ])),
+                for (final row in rows)
+                  SizedBox(
+                    width: tileWidth,
+                    child: _StatTile(row: row),
+                  ),
               ],
-            ),
-          ),
+            );
+          },
+        ),
       ],
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final _StatRow row;
+
+  const _StatTile({required this.row});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    // titleLarge is a Space Grotesk slot — sized up via the token
+    // scale, per the brand's "numbers are Space Grotesk" rule.
+    final numeralStyle = textTheme.titleLarge?.copyWith(
+      fontSize: HuxType.numeral,
+      fontWeight: FontWeight.w700,
+    );
+
+    return GlassPanel(
+      padding: const EdgeInsets.all(HuxSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(row.label, style: textTheme.bodySmall),
+          const SizedBox(height: HuxSpacing.xs),
+          Text.rich(TextSpan(children: [
+            TextSpan(text: row.numeral, style: numeralStyle),
+            TextSpan(text: ' ${row.unit}', style: textTheme.bodySmall),
+          ])),
+        ],
+      ),
     );
   }
 }

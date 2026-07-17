@@ -1,15 +1,16 @@
-/// HUX Theme
-/// -----------
+/// HUX Theme — dark liquid-glass edition
+/// ---------------------------------------
 /// Builds the ONE `ThemeData` every screen renders under. Reads
 /// `hux_tokens.dart` exclusively — no color/radius/spacing literal
 /// lives in this file either, beyond assembling tokens into Flutter's
 /// theming types.
 ///
-/// Typography: Fraunces (serif, warm, editorial) for display/headline
-/// slots — Today's hero readout, Story's title, section headers.
-/// Space Grotesk for everything else — body copy, numerals, labels,
-/// UI chrome. `GoogleFonts` fetches+caches these at runtime; see the
-/// README for why no bundled font assets are needed this phase.
+/// Typography is unchanged from the first design pass: Fraunces
+/// (serif, warm, editorial) for display/headline slots, Space Grotesk
+/// for body/numerals/UI chrome. What changed is the stage: dark-first,
+/// glass surfaces, mint doing the glowing. Buttons flip to bright mint
+/// fills with near-black text — accents READ as light sources on the
+/// dark stage instead of dark stamps on paper.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,26 +20,28 @@ import 'hux_tokens.dart';
 ThemeData buildHuxTheme() {
   final colorScheme = ColorScheme.fromSeed(
     seedColor: HuxColors.accentDeepTeal,
-    brightness: Brightness.light,
+    brightness: Brightness.dark,
   ).copyWith(
-    primary: HuxColors.accentDeepTeal,
-    onPrimary: Colors.white,
-    primaryContainer: _tint(HuxColors.accentDeepTeal, HuxOpacity.iconChip),
+    primary: HuxColors.accentMint,
+    onPrimary: HuxColors.inkOnAccent,
+    primaryContainer: _overCard(HuxColors.accentMint, HuxOpacity.iconChip),
     onPrimaryContainer: HuxColors.ink,
-    secondary: HuxColors.accentMint,
-    onSecondary: HuxColors.ink,
-    secondaryContainer: _tint(HuxColors.accentMint, HuxOpacity.activeCardWash),
+    secondary: HuxColors.accentTeal,
+    onSecondary: HuxColors.inkOnAccent,
+    secondaryContainer:
+        _overCard(HuxColors.accentMint, HuxOpacity.activeCardWash),
     onSecondaryContainer: HuxColors.ink,
-    tertiary: HuxColors.accentDeepTeal,
-    onTertiary: Colors.white,
-    tertiaryContainer: _tint(HuxColors.accentDeepTeal, HuxOpacity.activeCardWash),
+    tertiary: HuxColors.accentTeal,
+    onTertiary: HuxColors.inkOnAccent,
+    tertiaryContainer:
+        _overCard(HuxColors.accentTeal, HuxOpacity.activeCardWash),
     onTertiaryContainer: HuxColors.ink,
     error: HuxColors.rundown,
-    onError: Colors.white,
+    onError: HuxColors.inkOnAccent,
     surface: HuxColors.card,
     onSurface: HuxColors.ink,
     onSurfaceVariant: HuxColors.mutedText,
-    outline: HuxColors.hairline,
+    outline: HuxColors.glassStroke,
     outlineVariant: HuxColors.hairline,
   );
 
@@ -46,7 +49,8 @@ ThemeData buildHuxTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    scaffoldBackgroundColor: HuxColors.paper,
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: HuxColors.bg,
     colorScheme: colorScheme,
     textTheme: textTheme,
     dividerColor: HuxColors.hairline,
@@ -55,41 +59,48 @@ ThemeData buildHuxTheme() {
       thickness: 1,
       space: HuxSpacing.xxl,
     ),
+    // Material Cards read as simple glass out of the box: translucent
+    // fill + glass stroke over the dark stage. Hero panels that want
+    // the highlight/glow treatment use GlassPanel instead.
     cardTheme: CardThemeData(
-      color: HuxColors.card,
+      color: HuxColors.glassFillBottom,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HuxRadii.card),
-        side: const BorderSide(color: HuxColors.hairline),
+        side: const BorderSide(color: HuxColors.glassStroke),
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: HuxColors.paper,
-      selectedColor: _tint(HuxColors.accentMint, HuxOpacity.activeCardWash),
-      side: const BorderSide(color: HuxColors.hairline),
+      backgroundColor: HuxColors.glassFillTop,
+      selectedColor: _overCard(HuxColors.accentMint, HuxOpacity.activeCardWash),
+      side: const BorderSide(color: HuxColors.glassStroke),
       labelStyle: textTheme.labelLarge?.copyWith(color: HuxColors.ink),
+      deleteIconColor: HuxColors.mutedText,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HuxRadii.chip),
       ),
       padding: const EdgeInsets.symmetric(
           horizontal: HuxSpacing.md, vertical: HuxSpacing.xs),
     ),
+    // The nav bar itself is translucent; the REAL glass (BackdropFilter
+    // over scrolling content) is applied where it's mounted — see
+    // app_shell.dart.
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: HuxColors.card,
-      indicatorColor: _tint(HuxColors.accentMint, HuxOpacity.activeCardWash),
+      backgroundColor: HuxColors.card.withValues(alpha: HuxOpacity.navGlass),
+      indicatorColor: _overCard(HuxColors.accentMint, HuxOpacity.iconChip),
       surfaceTintColor: Colors.transparent,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return textTheme.labelMedium?.copyWith(
-          color: selected ? HuxColors.accentDeepTeal : HuxColors.mutedText,
+          color: selected ? HuxColors.accentMint : HuxColors.mutedText,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
         );
       }),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return IconThemeData(
-          color: selected ? HuxColors.accentDeepTeal : HuxColors.mutedText,
+          color: selected ? HuxColors.accentMint : HuxColors.mutedText,
         );
       }),
     ),
@@ -97,24 +108,23 @@ ThemeData buildHuxTheme() {
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) {
           return states.contains(WidgetState.selected)
-              ? HuxColors.accentDeepTeal
-              : HuxColors.card;
+              ? HuxColors.accentMint
+              : HuxColors.glassFillTop;
         }),
         foregroundColor: WidgetStateProperty.resolveWith((states) {
           return states.contains(WidgetState.selected)
-              ? Colors.white
+              ? HuxColors.inkOnAccent
               : HuxColors.ink;
         }),
         side: const WidgetStatePropertyAll(
-            BorderSide(color: HuxColors.hairline)),
+            BorderSide(color: HuxColors.glassStroke)),
         minimumSize: const WidgetStatePropertyAll(Size(0, huxMinTapTarget)),
         textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: HuxColors.ink,
-      contentTextStyle:
-          textTheme.bodyMedium?.copyWith(color: HuxColors.paper),
+      backgroundColor: HuxColors.cardElevated,
+      contentTextStyle: textTheme.bodyMedium?.copyWith(color: HuxColors.ink),
       actionTextColor: HuxColors.accentMint,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
@@ -122,7 +132,7 @@ ThemeData buildHuxTheme() {
       ),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: HuxColors.accentDeepTeal,
+      color: HuxColors.accentMint,
       circularTrackColor: HuxColors.hairline,
     ),
     dialogTheme: DialogThemeData(
@@ -133,6 +143,13 @@ ThemeData buildHuxTheme() {
       titleTextStyle: textTheme.titleLarge,
       contentTextStyle: textTheme.bodyMedium,
     ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: HuxColors.card,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(HuxRadii.card)),
+      ),
+    ),
     listTileTheme: const ListTileThemeData(
       textColor: HuxColors.ink,
       iconColor: HuxColors.mutedText,
@@ -140,38 +157,48 @@ ThemeData buildHuxTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: HuxColors.paper,
+      fillColor: HuxColors.glassFillBottom,
       labelStyle: textTheme.bodyMedium?.copyWith(color: HuxColors.mutedText),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(HuxSpacing.sm),
-        borderSide: const BorderSide(color: HuxColors.hairline),
+        borderSide: const BorderSide(color: HuxColors.glassStroke),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(HuxSpacing.sm),
+        borderSide: const BorderSide(color: HuxColors.glassStroke),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(HuxSpacing.sm),
+        borderSide: const BorderSide(color: HuxColors.accentMint),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: HuxColors.accentDeepTeal,
-        foregroundColor: Colors.white,
+        backgroundColor: HuxColors.accentMint,
+        foregroundColor: HuxColors.inkOnAccent,
+        disabledBackgroundColor: HuxColors.glassFillTop,
+        disabledForegroundColor: HuxColors.mutedText,
         minimumSize: const Size(0, huxMinTapTarget),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(HuxSpacing.sm),
+          borderRadius: BorderRadius.circular(HuxRadii.chip),
         ),
         textStyle: textTheme.labelLarge,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: HuxColors.accentDeepTeal,
-        side: const BorderSide(color: HuxColors.accentDeepTeal),
+        foregroundColor: HuxColors.accentMint,
+        side: const BorderSide(color: HuxColors.accentMint),
         minimumSize: const Size(0, huxMinTapTarget),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(HuxSpacing.sm),
+          borderRadius: BorderRadius.circular(HuxRadii.chip),
         ),
         textStyle: textTheme.labelLarge,
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: HuxColors.accentDeepTeal,
+        foregroundColor: HuxColors.accentMint,
         minimumSize: const Size(0, huxMinTapTarget),
         textStyle: textTheme.labelLarge,
       ),
@@ -179,14 +206,12 @@ ThemeData buildHuxTheme() {
   );
 }
 
-/// A flat tint of [color] over the paper background at [opacity] —
-/// used for washes/containers so they read as "a hint of the accent",
-/// never a saturated color flood. A plain `withValues(alpha:)` would
-/// work too, but pre-blending against paper keeps text drawn on top
-/// (always `HuxColors.ink`) at a predictable, pre-verified contrast
-/// ratio regardless of what's layered underneath.
-Color _tint(Color color, double opacity) =>
-    Color.alphaBlend(color.withValues(alpha: opacity), HuxColors.paper);
+/// An accent blended flat over the opaque [HuxColors.card] surface at
+/// [opacity] — used for container/indicator colors so washes stay
+/// predictable, opaque colors (text contrast on top is verifiable)
+/// rather than stacking translucency on translucency.
+Color _overCard(Color color, double opacity) =>
+    Color.alphaBlend(color.withValues(alpha: opacity), HuxColors.card);
 
 TextTheme _huxTextTheme() {
   final base = GoogleFonts.spaceGroteskTextTheme().apply(

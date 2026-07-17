@@ -337,101 +337,103 @@ again on iOS (a documented HealthKit privacy limitation, not a bug
 here) — the app will just harmlessly re-sync nothing new and keep
 showing whatever was last cached.
 
-## Design system
+## Design system — dark liquid glass
 
-This phase changed how the app LOOKS, not what it does — every screen
-keeps the exact widget types, literal text, and behavior earlier
-phases' tests already lock in; only typography, color, and spacing
-changed. `lib/theme/` is the whole design system, in two files:
+Two design passes live in this section's history: the first
+established tokens + Fraunces/Space Grotesk on a light palette; the
+second (at the product owner's direction, with iOS-26-style "Liquid
+Glass" reference shots) pivoted the whole app dark — a deep green-
+black stage with soft mint/teal glows, translucent glass panels, and
+glowing accents. Both passes changed only how the app LOOKS: every
+screen keeps the exact literal text and behavior earlier phases' tests
+lock in. `lib/theme/` is the whole design system, in three files:
 
-- `hux_tokens.dart` — the ONLY place a hex code or a spacing/radius
-  number is allowed to exist. `HuxColors` (ink, paper, card, hairline,
-  mutedText, the mint/deep-teal brand accents, the five recovery-state
-  colors, and the two source-banner colors), `HuxRadii` (card 20, chip
-  999), `HuxSpacing` (the 4/8/12/16/24/32 scale, named `xs`..`xxl`
-  rather than left as bare numbers so a screen reads "space it like a
-  section gap," not a mystery `24.0`), and `HuxOpacity` (named tint
-  strengths — header wash, target band, icon-chip backdrop, active-
-  card wash — so "how strong is a wash" is one tunable, not a dozen
-  scattered `withValues(alpha:)` calls drifting apart). Two small
-  helpers live here too: `RecoveryStateColor` (the one place
-  `RecoveryState` maps to a color) and `HuxModeAccent` (the one mint/
-  deep-teal accent every mode's icon chip shares, rather than a
-  different invented color per mode). Component DIMENSIONS that aren't
-  spacing per se — an icon's pixel size, a chart's fixed height — are
-  deliberately left as plain numbers; the tokenized scale is for
-  layout spacing and brand color, not every numeral in the file.
-- `hux_theme.dart` — builds the one `ThemeData` (`buildHuxTheme()`)
-  every screen renders under via `HuxApp`. Display/headline text-theme
-  slots are Fraunces (serif, warm, editorial) — Today's hero headline
-  sits in `displaySmall` at 36, the top of the brand's 32-36 range;
-  Story's title and Modes'/Trends' section headers use `headlineSmall`
-  at 24. Everything else (body copy, numerals, UI labels/chrome) is
-  Space Grotesk, including `bodyLarge` at 1.6 line height specifically
-  for Story's paragraphs. `ColorScheme.fromSeed` (seeded on the deep-
-  teal accent, not Flutter's purple-ish default) is then `.copyWith()`-
-  pinned on every slot the app actually reads (primary/secondary/
-  tertiary + their containers, error, surface) so there is no default
-  Material purple anywhere, in the theme or in its algorithmic
-  derivations. Card/chip/nav-bar/segmented-button/snackbar/progress-
-  indicator/dialog/list-tile/input/button themes are all set here too
-  — `RefreshIndicator` needs no explicit theme entry since it already
-  derives its spinner color from `colorScheme.primary` by default.
+- `hux_tokens.dart` — the ONLY place a hex code or a spacing/radius/
+  blur number is allowed to exist. `HuxColors` (the dark stage `bg`,
+  opaque `card`/`cardElevated` surfaces, near-white `ink`, `mutedText`,
+  `inkOnAccent` for text ON bright fills, mint/bright-teal/deep-teal
+  accents, glass fill/stroke/highlight layers, background glow colors,
+  the five recovery-state colors brightened for dark, and the two
+  source-banner colors), `HuxRadii`, `HuxSpacing` (4/8/12/16/24/32,
+  named `xs`..`xxl`), `HuxOpacity` (named tint/glow strengths),
+  `HuxType` (the big Space Grotesk numeral sizes), and `HuxGlass`
+  (blur sigma, glow geometry, and the nav-clearance scrollables use).
+  Helpers: `RecoveryStateColor` (the one `RecoveryState`→color map)
+  and `HuxModeAccent` (glowing mint backdrop + bright-teal glyph every
+  mode icon shares).
+- `hux_glass.dart` — the two reusable glass pieces. `HuxBackground` is
+  the dark stage painted ONCE in AppShell (base + two radial glows);
+  screens never paint their own (nested Scaffolds are transparent).
+  `GlassPanel` is the translucent panel every hero surface is made of:
+  white-gradient fill, 1px glass stroke, a specular top-rim highlight,
+  and optional inner tint + outer glow for accented panels.
+  **Deliberately NO BackdropFilter here** — real backdrop blur is one
+  of the most expensive raster ops, and a ListView of blurred cards is
+  the canonical way to blow the frame budget. Panels sit on a flat
+  dark gradient, so translucency + stroke + highlight reads identically
+  at near-zero GPU cost. The app's ONE real `BackdropFilter` is the
+  bottom nav bar (`app_shell.dart`, sigma 18), where `extendBody:
+  true` scrolls genuine content behind the glass — that's also why
+  every tab's scrollable pads its bottom by `HuxGlass.navClearance`.
+- `hux_theme.dart` — builds the one dark `ThemeData`. Typography is
+  unchanged from the first pass: Fraunces for display/headline slots
+  (Today's hero at 36, section titles at 24), Space Grotesk for
+  body/numerals/labels (Story paragraphs at 1.6 line height).
+  `ColorScheme.fromSeed(dark)` is `.copyWith()`-pinned on every slot
+  the app reads, so no default Material purple exists anywhere —
+  including the date/time pickers, which inherit the dark scheme.
+  Buttons flipped polarity with the stage: bright mint fills with
+  `inkOnAccent` text, so accents read as light sources.
 
-Fonts come from the `google_fonts` package (the one new dependency this
-phase allowed) — it fetches each weight/style over the network on
-first use and caches it on-device afterward; no font files are bundled
-as assets. This sandbox/CI environment has network access to
-`fonts.gstatic.com`, confirmed empirically before committing to this
-approach, and the same is true of a real device/simulator. If a future
-environment can't reach it, `GoogleFonts.config.allowRuntimeFetching`
-can be set to `false` and/or the fonts bundled as assets per the
-package's own README — deliberately not done this phase since it isn't
-needed here.
+Fonts come from the `google_fonts` package — runtime-fetched from
+`fonts.gstatic.com` on first use and cached on-device (confirmed
+working in this sandbox and on the simulator); if a future environment
+can't reach it, bundle the fonts as assets per the package README.
 
 Per-screen highlights:
-- **Today** — the readout is the hero: a soft `RecoveryState`-tinted
-  wash sits behind the whole header block (headline + "why" sentence +
-  lifestyle chip), the recovery dot and each action's leading dot both
-  use the same state color, and Last-sleep's numbers are big Space
-  Grotesk numerals with a small muted unit alongside (`62 ms`, not one
-  plain string) rather than one same-size string.
-- **Trends** — bars and lines use the deep-teal brand accent (not
-  `colorScheme.primary`, deliberately, so the charts look the same
-  regardless of what wraps the screen); the personal sleep-duration
-  band is mint at low opacity. Two additions: single-letter weekday
-  initials under the sleep bars (thinned to roughly one label per 7
-  nights on the 30-day view, so they don't crowd into an unreadable
-  smear), and a small muted "low–high unit" hint next to the HRV/HR
-  chart titles. Gaps are still gaps — a missing night was never a
-  visible zero before this phase and still isn't.
-- **Story** — "For next week" is now its own mint-tinted card, visually
-  distinct from the observations above it, which read at 1.6 line
-  height for comfortable long-form reading.
-- **Modes** — every mode and lifestyle tile gets the same circular
-  mint-backdrop/deep-teal-glyph icon chip (a consistent brand accent,
-  not a different invented color per mode); the active mode's card and
-  list tile both pick up the mint wash, and the "End mode" button is
-  themed via the app-wide `OutlinedButtonThemeData`.
-- **The DEMO/DEV banners** keep their exact meaning and text from
-  before, moved into tokens (`HuxColors.demoAmber`/`devBlueGrey`) —
-  `devBlueGrey` (`#455A64`) is deliberately darker than Material's
-  stock `Colors.blueGrey` swatch (`#607D8B`), which only clears about
-  4.0:1 contrast against white text; `#455A64` clears ~7.2:1.
+- **Today** — the readout is the hero, lit from within: a `GlassPanel`
+  tinted AND outer-glowed in the day's recovery-state color, a glowing
+  recovery dot, state-colored action dots, and the Last-sleep numbers
+  as a two-column grid of glass stat tiles (widget-board style) with
+  big Space Grotesk numerals (`HuxType.numeral`) and small muted units.
+  The grid uses `Wrap` + `LayoutBuilder` with intrinsic tile heights,
+  so large accessibility text grows tiles instead of overflowing them.
+- **Trends** — each chart is a glass card in the reference style: a
+  muted title, a big hero numeral for the most recent reading, then
+  the chart. Sleep bars are mint→deep-teal gradient pills drawn over
+  faint full-height slot tracks (`chartTrack`) — a missing night keeps
+  its slot but draws no pill, so gaps still read as gaps, never zeros
+  — under the mint personal-target band with weekday initials below.
+  HRV/HR lines are smooth curves (`isCurved` +
+  `preventCurveOverShooting`) with a mint→teal gradient stroke, a soft
+  neon glow (`LineChartBarData.shadow`), a fading area fill beneath,
+  and a glowing halo dot on the latest reading only. Contiguous runs
+  still render separately — no line ever bridges a missing night.
+- **Story** — editorial dark: 1.6 line-height paragraphs, and "For
+  next week" as a mint-tinted, mint-glowing glass card — the lit-up
+  takeaway.
+- **Modes** — glass tiles with glowing mint icon chips; the active
+  mode's card is mint-tinted glass with the mint outer glow; active
+  check icons are mint (the deep teal of the light pass is too dim to
+  read on dark).
+- **The DEMO/DEV banners** keep their exact meaning, text, and SOLID
+  colors — deliberately not glass; a safety banner must never blend
+  into the design. Amber keeps `inkOnAccent` text (~10.4:1); the DEV
+  blue-grey keeps white (~7.2:1).
 
-Accessibility checked this phase: every token text/background pairing
-actually used for text is >=4.5:1 (ink-on-paper ~15:1, mutedText-on-
-paper ~5.2:1, the two banners as above); every themed button has a
-44px minimum tap target (`huxMinTapTarget`); and Today is covered by a
-widget test that renders at `TextScaler.linear(1.3)` and asserts no
-layout exception — verified again by hand on a real simulator at
-iOS's own Larger-Text setting.
+Accessibility, verified computationally this pass (WCAG relative
+luminance, all >=4.5:1): ink-on-bg 17.1:1, mutedText-on-bg 7.4:1,
+mint-on-bg 13.1:1, bright-teal-on-bg 10.2:1, inkOnAccent-on-mint
+11.7:1, inkOnAccent-on-amber 10.4:1, white-on-devBlueGrey 7.2:1.
+Every themed button keeps the 44px minimum tap target
+(`huxMinTapTarget`), and Today's `TextScaler.linear(1.3)` widget test
+still passes (re-verified by hand on the simulator).
 
-No dark mode this phase, on purpose — `HuxColors` is deliberately flat
-static constants (not yet a light/dark pair) so a dark variant is a
-contained addition later, not a rewrite: the day it's needed, the
-class becomes a small pair and `hux_theme.dart` picks one based on
-`Brightness`.
+Dark is now the app's one theme. A LIGHT variant is the "addable
+later" case: `HuxColors` stays flat static constants, so the day it's
+needed the class becomes a light/dark pair and `hux_theme.dart` picks
+one based on `Brightness` — same containment argument as before, with
+the polarity reversed.
 
 ## What comes next (in order)
 

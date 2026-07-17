@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../core/meaning/baseline.dart';
 import '../core/storage/health_store.dart';
 import '../core/trends/night_row.dart';
+import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 
 /// Single-letter weekday labels, [DateTime.weekday]-indexed (1 = Mon).
@@ -33,6 +34,23 @@ String? _minMaxHint(
   final lo = values.reduce((a, b) => a < b ? a : b).round();
   final hi = values.reduce((a, b) => a > b ? a : b).round();
   return '$lo–$hi $unit';
+}
+
+/// The most recent night with a reading for this metric — the hero
+/// numeral on each chart card. Null when the range has no data.
+double? _latestOf(List<NightRow> rows, double? Function(NightRow) valueOf) {
+  for (final row in rows.reversed) {
+    final value = valueOf(row);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+/// "7:10"-style formatting for the sleep card's hero numeral.
+String _formatHours(Duration d) {
+  final hours = d.inHours;
+  final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  return '$hours:$minutes';
 }
 
 enum _Range { sevenDays, thirtyDays }
@@ -100,6 +118,9 @@ class _TrendsScreenState extends State<TrendsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Transparent: this screen lives inside AppShell's IndexedStack,
+      // over the ONE shared HuxBackground — it must not paint its own.
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(HuxSpacing.lg),
@@ -190,21 +211,36 @@ class _TrendsCharts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final latestSleep = _latestOf(
+        rows, (r) => r.sleepDuration?.inMinutes.toDouble());
+    final latestHrv = _latestOf(rows, (r) => r.avgHrvMs);
+    final latestHr = _latestOf(rows, (r) => r.avgHeartRateBpm);
+
     return ListView(
+      // Clearance so the last chart scrolls clear of the glass nav bar.
+      padding: const EdgeInsets.only(bottom: HuxGlass.navClearance),
       children: [
         _ChartCard(
           title: 'Sleep duration',
+          value: latestSleep == null
+              ? null
+              : _formatHours(Duration(minutes: latestSleep.round())),
+          unit: 'hrs',
           child: _SleepBarChart(rows: rows, baseline: baseline),
         ),
-        const SizedBox(height: HuxSpacing.xl),
+        const SizedBox(height: HuxSpacing.lg),
         _ChartCard(
           title: 'Avg HRV',
+          value: latestHrv?.round().toString(),
+          unit: 'ms',
           hint: _minMaxHint(rows, (r) => r.avgHrvMs, 'ms'),
           child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgHrvMs),
         ),
-        const SizedBox(height: HuxSpacing.xl),
+        const SizedBox(height: HuxSpacing.lg),
         _ChartCard(
           title: 'Avg resting heart rate',
+          value: latestHr?.round().toString(),
+          unit: 'bpm',
           hint: _minMaxHint(rows, (r) => r.avgHeartRateBpm, 'bpm'),
           child: _MetricLineChart(
               rows: rows, valueOf: (r) => r.avgHeartRateBpm),
@@ -214,38 +250,63 @@ class _TrendsCharts extends StatelessWidget {
   }
 }
 
+/// One glass chart panel, reference-card style: muted title (with an
+/// optional min–max hint), a big Space Grotesk hero numeral for the
+/// most recent reading, then the chart itself.
 class _ChartCard extends StatelessWidget {
   final String title;
+  final String? value;
+  final String unit;
   final String? hint;
   final Widget child;
 
-  const _ChartCard({required this.title, this.hint, required this.child});
+  const _ChartCard({
+    required this.title,
+    required this.value,
+    required this.unit,
+    this.hint,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(title, style: textTheme.labelLarge),
-            if (hint != null) ...[
-              const Spacer(),
-              Text(hint!, style: textTheme.bodySmall),
+    final numeralStyle = textTheme.titleLarge?.copyWith(
+      fontSize: HuxType.numeralLarge,
+      fontWeight: FontWeight.w700,
+    );
+
+    return GlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(title, style: textTheme.bodySmall),
+              if (hint != null) ...[
+                const Spacer(),
+                Text(hint!, style: textTheme.bodySmall),
+              ],
             ],
+          ),
+          if (value != null) ...[
+            const SizedBox(height: HuxSpacing.xs),
+            Text.rich(TextSpan(children: [
+              TextSpan(text: value, style: numeralStyle),
+              TextSpan(text: ' $unit', style: textTheme.bodySmall),
+            ])),
           ],
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        SizedBox(height: 160, child: child),
-      ],
+          const SizedBox(height: HuxSpacing.md),
+          SizedBox(height: 160, child: child),
+        ],
+      ),
     );
   }
 }
 
-/// Bars per night. A missing night still occupies its slot (an
-/// invisible, zero-color rod) so the timeline doesn't silently
-/// compress — it just shows nothing there, never a visible zero.
+/// Bars per night, drawn as gradient pills over a faint full-height
+/// slot track. A missing night keeps its slot but draws NO pill — the
+/// empty track reads as "a night with no data", never as a zero.
 class _SleepBarChart extends StatelessWidget {
   final List<NightRow> rows;
   final PersonalBaseline baseline;
@@ -255,12 +316,22 @@ class _SleepBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final band = SleepTargetBand.fromBaseline(baseline);
-    const barColor = HuxColors.accentDeepTeal;
     final barWidth = rows.length > 14 ? 4.0 : 10.0;
     final labelStyle = Theme.of(context).textTheme.labelSmall;
     final interval = _weekdayLabelInterval(rows.length);
 
+    final hours = [
+      for (final r in rows)
+        if (r.sleepDuration != null) r.sleepDuration!.inMinutes / 60.0,
+    ];
+    final dataMax =
+        hours.isEmpty ? 0.0 : hours.reduce((a, b) => a > b ? a : b);
+    // Headroom above the tallest bar; floor of 8h so a short-sleep week
+    // doesn't make its bars tower misleadingly.
+    final maxY = (dataMax + 1).clamp(8.0, double.infinity);
+
     return BarChart(BarChartData(
+      maxY: maxY,
       barGroups: [
         for (var i = 0; i < rows.length; i++)
           BarChartGroupData(x: i, barRods: [
@@ -268,10 +339,25 @@ class _SleepBarChart extends StatelessWidget {
               toY: rows[i].sleepDuration == null
                   ? 0
                   : rows[i].sleepDuration!.inMinutes / 60.0,
-              color: rows[i].sleepDuration == null
-                  ? Colors.transparent
-                  : barColor,
+              gradient: rows[i].sleepDuration == null
+                  ? null
+                  : const LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        HuxColors.accentDeepTeal,
+                        HuxColors.accentMint,
+                      ],
+                    ),
+              color:
+                  rows[i].sleepDuration == null ? Colors.transparent : null,
               width: barWidth,
+              borderRadius: BorderRadius.circular(barWidth / 2),
+              backDrawRodData: BackgroundBarChartRodData(
+                show: true,
+                toY: maxY,
+                color: HuxColors.chartTrack,
+              ),
             ),
           ]),
       ],
@@ -307,8 +393,8 @@ class _SleepBarChart extends StatelessWidget {
               HorizontalRangeAnnotation(
                 y1: band.low.inMinutes / 60.0,
                 y2: band.high.inMinutes / 60.0,
-                color:
-                    HuxColors.accentMint.withValues(alpha: HuxOpacity.targetBand),
+                color: HuxColors.accentMint
+                    .withValues(alpha: HuxOpacity.targetBand),
               ),
             ]),
     ));
@@ -318,6 +404,10 @@ class _SleepBarChart extends StatelessWidget {
 /// A line per contiguous run of nights with data — the gap between two
 /// runs is genuinely empty space, never a line bridging over (which
 /// would silently invent a reading for a night HUX never saw).
+///
+/// Reference-card treatment: a smooth curved line with a mint→teal
+/// gradient stroke and a soft neon glow, a fading area fill beneath,
+/// and a glowing halo dot on the most recent reading only.
 class _MetricLineChart extends StatelessWidget {
   final List<NightRow> rows;
   final double? Function(NightRow) valueOf;
@@ -331,7 +421,6 @@ class _MetricLineChart extends StatelessWidget {
       return const Center(child: Text('No data in this range yet'));
     }
 
-    const lineColor = HuxColors.accentDeepTeal;
     return LineChart(LineChartData(
       minX: 0,
       maxX: (rows.length - 1).clamp(0, double.infinity).toDouble(),
@@ -342,9 +431,44 @@ class _MetricLineChart extends StatelessWidget {
         for (final run in runs)
           LineChartBarData(
             spots: [for (final e in run) FlSpot(e.key.toDouble(), e.value)],
-            color: lineColor,
-            barWidth: 2,
-            dotData: const FlDotData(),
+            isCurved: true,
+            preventCurveOverShooting: true,
+            gradient: const LinearGradient(
+              colors: [HuxColors.accentMint, HuxColors.accentTeal],
+            ),
+            barWidth: 3,
+            shadow: Shadow(
+              color: HuxColors.accentMint
+                  .withValues(alpha: HuxOpacity.chartLineGlow),
+              blurRadius: HuxGlass.chartGlowBlur,
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  HuxColors.accentMint
+                      .withValues(alpha: HuxOpacity.chartAreaFill),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            // Only the latest reading of the latest run gets a dot —
+            // a glowing "you are here" marker, not a dot per night.
+            dotData: FlDotData(
+              show: identical(run, runs.last),
+              checkToShowDot: (spot, barData) =>
+                  spot == barData.spots.last,
+              getDotPainter: (spot, percent, barData, index) =>
+                  FlDotCirclePainter(
+                radius: HuxSpacing.xs,
+                color: HuxColors.accentMint,
+                strokeWidth: HuxSpacing.sm,
+                strokeColor: HuxColors.accentMint
+                    .withValues(alpha: HuxOpacity.chartDotHalo),
+              ),
+            ),
           ),
       ],
     ));

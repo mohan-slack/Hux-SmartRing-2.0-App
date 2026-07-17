@@ -72,6 +72,11 @@ void main() {
     expect(find.text('Not enough data to show trends yet'), findsNothing);
     expect(find.text('Sleep duration'), findsOneWidget);
     expect(find.text('Avg HRV'), findsOneWidget);
+    // The glass chart cards are taller (hero numeral above each chart),
+    // so the third card sits below the fold on the default test surface
+    // — scroll it into view rather than assuming it's built.
+    await tester.scrollUntilVisible(find.text('Avg resting heart rate'), 200);
+    await tester.pump();
     expect(find.text('Avg resting heart rate'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -79,6 +84,11 @@ void main() {
     await tester.tap(find.text('30 days'));
     await settle(tester);
 
+    // The list kept its scroll offset from the scroll above, so the
+    // first card is now ABOVE the viewport — scroll back up (negative
+    // delta) before asserting on it.
+    await tester.scrollUntilVisible(find.text('Sleep duration'), -200);
+    await tester.pump();
     expect(find.text('Sleep duration'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
