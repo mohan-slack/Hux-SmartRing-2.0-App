@@ -18,6 +18,7 @@ import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
 import '../theme/hux_glass.dart';
+import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
 
 /// One line combining whichever lifestyle modes are active, or null if
@@ -267,27 +268,38 @@ class _ReadoutBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
           HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
-        _TodayHeaderCard(
-          state: readout.state,
-          headline: readout.headline,
-          meaning: readout.meaning,
-          chipText: chipText,
+        HuxEntrance(
+          child: _TodayHeaderCard(
+            state: readout.state,
+            headline: readout.headline,
+            meaning: readout.meaning,
+            chipText: chipText,
+          ),
         ),
         const SizedBox(height: HuxSpacing.lg),
-        _ActionsList(actions: readout.actions, state: readout.state),
+        HuxEntrance(
+          index: 1,
+          child: _ActionsList(actions: readout.actions, state: readout.state),
+        ),
         const SizedBox(height: HuxSpacing.md),
-        _DataQualityCaption(quality: readout.dataQuality),
+        HuxEntrance(
+          index: 2,
+          child: _DataQualityCaption(quality: readout.dataQuality),
+        ),
         if (modeStrip != null) ...[
           const SizedBox(height: HuxSpacing.lg),
-          _ModeStripCard(strip: modeStrip!),
+          HuxEntrance(index: 3, child: _ModeStripCard(strip: modeStrip!)),
         ],
         if (lastNight != null) ...[
           const Divider(height: HuxSpacing.xxl),
-          _LastNightStats(
-            session: lastNight!,
-            sectionLabel:
-                SleepWording(nightShiftActive: activeContext.nightShiftActive)
-                    .sectionLabel,
+          HuxEntrance(
+            index: 4,
+            child: _LastNightStats(
+              session: lastNight!,
+              sectionLabel:
+                  SleepWording(nightShiftActive: activeContext.nightShiftActive)
+                      .sectionLabel,
+            ),
           ),
         ],
       ],
@@ -316,6 +328,7 @@ class _TodayHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassPanel(
+      frosted: true,
       tint: state.huxColor.withValues(alpha: HuxOpacity.headerWash),
       glow: state.huxColor,
       child: Column(
@@ -361,28 +374,14 @@ class _RecoveryHeader extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: HuxSpacing.sm),
-          child: Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: state.huxColor,
-              shape: BoxShape.circle,
-              // A small halo so the dot reads as the light source of
-              // the header's glow, not a flat sticker.
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      state.huxColor.withValues(alpha: HuxOpacity.headerGlow),
-                  blurRadius: HuxSpacing.md,
-                  spreadRadius: HuxSpacing.xs / 2,
-                ),
-              ],
-            ),
-          ),
+          // Breathes twice on arrival, then settles — the light source
+          // of the header's glow (finite, so pumpAndSettle stays happy).
+          child: HuxPulseDot(color: state.huxColor),
         ),
         const SizedBox(width: HuxSpacing.sm),
         Expanded(
-          child: Text(headline, style: Theme.of(context).textTheme.displaySmall),
+          child:
+              Text(headline, style: Theme.of(context).textTheme.displaySmall),
         ),
       ],
     );
@@ -462,9 +461,10 @@ class _ModeStripCard extends StatelessWidget {
     // Day zero is the payoff moment — it gets the full mint glow; the
     // countdown phases stay a quieter mint-tinted glass.
     return GlassPanel(
+      frosted: true,
       padding: const EdgeInsets.all(HuxSpacing.md),
-      tint: HuxModeAccent.background
-          .withValues(alpha: HuxOpacity.activeCardWash),
+      tint:
+          HuxModeAccent.background.withValues(alpha: HuxOpacity.activeCardWash),
       glow: isDayZero ? HuxModeAccent.background : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,22 +495,28 @@ class _LastNightStats extends StatelessWidget {
 
   const _LastNightStats({required this.session, required this.sectionLabel});
 
-  String _formatDuration(Duration d) {
+  static String _formatMinutes(double minutes) {
+    final d = Duration(minutes: minutes.round());
     final hours = d.inHours;
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    return '$hours:$minutes';
+    final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    return '$hours:$mins';
   }
+
+  static String _formatInt(double v) => v.round().toString();
 
   @override
   Widget build(BuildContext context) {
     final rows = <_StatRow>[
-      _StatRow('Sleep', _formatDuration(session.totalSleep), 'hrs'),
+      _StatRow('Sleep', session.totalSleep.inMinutes.toDouble(), _formatMinutes,
+          'hrs'),
       if (session.avgHrvMs != null)
-        _StatRow('Avg HRV', '${session.avgHrvMs}', 'ms'),
+        _StatRow('Avg HRV', session.avgHrvMs!.toDouble(), _formatInt, 'ms'),
       if (session.avgHeartRateBpm != null)
-        _StatRow('Avg heart rate', '${session.avgHeartRateBpm}', 'bpm'),
+        _StatRow('Avg heart rate', session.avgHeartRateBpm!.toDouble(),
+            _formatInt, 'bpm'),
       if (session.minSpo2Percent != null)
-        _StatRow('Min SpO2', '${session.minSpo2Percent}', '%'),
+        _StatRow(
+            'Min SpO2', session.minSpo2Percent!.toDouble(), _formatInt, '%'),
     ];
     final textTheme = Theme.of(context).textTheme;
 
@@ -526,8 +532,7 @@ class _LastNightStats extends StatelessWidget {
         const SizedBox(height: HuxSpacing.md),
         LayoutBuilder(
           builder: (context, constraints) {
-            final tileWidth =
-                (constraints.maxWidth - HuxSpacing.sm) / 2;
+            final tileWidth = (constraints.maxWidth - HuxSpacing.sm) / 2;
             return Wrap(
               spacing: HuxSpacing.sm,
               runSpacing: HuxSpacing.sm,
@@ -568,23 +573,37 @@ class _StatTile extends StatelessWidget {
         children: [
           Text(row.label, style: textTheme.bodySmall),
           const SizedBox(height: HuxSpacing.xs),
-          Text.rich(TextSpan(children: [
-            TextSpan(text: row.numeral, style: numeralStyle),
-            TextSpan(text: ' ${row.unit}', style: textTheme.bodySmall),
-          ])),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              HuxCountUp(
+                value: row.value,
+                format: row.format,
+                style: numeralStyle,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(
+                    left: HuxSpacing.xs, bottom: HuxSpacing.xs / 2),
+                child: Text(row.unit, style: textTheme.bodySmall),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// One Last-sleep stat: a big numeral (Space Grotesk, bold) with a
-/// small muted unit label alongside — never one plain string, so the
-/// number a user actually cares about reads at a glance.
+/// One Last-sleep stat: a big counting numeral (Space Grotesk, bold)
+/// with a small muted unit label alongside — never one plain string,
+/// so the number a user actually cares about reads at a glance. The
+/// raw [value] + [format] pair (rather than a pre-formatted string)
+/// is what lets the numeral count up on entrance.
 class _StatRow {
   final String label;
-  final String numeral;
+  final double value;
+  final String Function(double) format;
   final String unit;
 
-  const _StatRow(this.label, this.numeral, this.unit);
+  const _StatRow(this.label, this.value, this.format, this.unit);
 }

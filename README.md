@@ -339,42 +339,59 @@ showing whatever was last cached.
 
 ## Design system — dark liquid glass
 
-Two design passes live in this section's history: the first
+Three design passes live in this section's history: the first
 established tokens + Fraunces/Space Grotesk on a light palette; the
 second (at the product owner's direction, with iOS-26-style "Liquid
-Glass" reference shots) pivoted the whole app dark — a deep green-
-black stage with soft mint/teal glows, translucent glass panels, and
-glowing accents. Both passes changed only how the app LOOKS: every
-screen keeps the exact literal text and behavior earlier phases' tests
-lock in. `lib/theme/` is the whole design system, in three files:
+Glass" reference shots) pivoted the whole app dark; the third — a
+review round — lightened the stage from near-black to charcoal GREY,
+made the glassmorphism visible (real frosted blur on hero panels),
+rebuilt the sleep chart to an analytics-card reference, and added a
+motion layer so pages feel alive. Every pass changed only how the app
+LOOKS: every screen keeps the exact literal text and behavior earlier
+phases' tests lock in. `lib/theme/` is the whole design system, in
+four files:
 
 - `hux_tokens.dart` — the ONLY place a hex code or a spacing/radius/
-  blur number is allowed to exist. `HuxColors` (the dark stage `bg`,
-  opaque `card`/`cardElevated` surfaces, near-white `ink`, `mutedText`,
-  `inkOnAccent` for text ON bright fills, mint/bright-teal/deep-teal
-  accents, glass fill/stroke/highlight layers, background glow colors,
-  the five recovery-state colors brightened for dark, and the two
-  source-banner colors), `HuxRadii`, `HuxSpacing` (4/8/12/16/24/32,
-  named `xs`..`xxl`), `HuxOpacity` (named tint/glow strengths),
-  `HuxType` (the big Space Grotesk numeral sizes), and `HuxGlass`
-  (blur sigma, glow geometry, and the nav-clearance scrollables use).
-  Helpers: `RecoveryStateColor` (the one `RecoveryState`→color map)
-  and `HuxModeAccent` (glowing mint backdrop + bright-teal glyph every
-  mode icon shares).
+  blur/duration number is allowed to exist. `HuxColors` (the charcoal-
+  grey stage `bg` — grey, not black, per review — opaque `card`/
+  `cardElevated` surfaces, near-white `ink`, `mutedText`, `inkOnAccent`
+  for text ON bright fills, mint/bright-teal/deep-teal accents, glass
+  fill/stroke/highlight layers, the misty grey chart-bar gradient
+  stops, background glow colors, the five recovery-state colors
+  brightened for dark, and the two source-banner colors), `HuxRadii`,
+  `HuxSpacing` (4/8/12/16/24/32, named `xs`..`xxl`), `HuxOpacity`
+  (named tint/glow strengths), `HuxType` (the big Space Grotesk
+  numeral sizes), `HuxGlass` (blur sigmas, glow geometry, the target-
+  line dash pattern, nav clearance), and `HuxMotion` (every duration/
+  curve/distance the motion layer uses). Helpers: `RecoveryStateColor`
+  and `HuxModeAccent`.
 - `hux_glass.dart` — the two reusable glass pieces. `HuxBackground` is
-  the dark stage painted ONCE in AppShell (base + two radial glows);
-  screens never paint their own (nested Scaffolds are transparent).
-  `GlassPanel` is the translucent panel every hero surface is made of:
-  white-gradient fill, 1px glass stroke, a specular top-rim highlight,
-  and optional inner tint + outer glow for accented panels.
-  **Deliberately NO BackdropFilter here** — real backdrop blur is one
-  of the most expensive raster ops, and a ListView of blurred cards is
-  the canonical way to blow the frame budget. Panels sit on a flat
-  dark gradient, so translucency + stroke + highlight reads identically
-  at near-zero GPU cost. The app's ONE real `BackdropFilter` is the
-  bottom nav bar (`app_shell.dart`, sigma 18), where `extendBody:
-  true` scrolls genuine content behind the glass — that's also why
-  every tab's scrollable pads its bottom by `HuxGlass.navClearance`.
+  the grey stage painted ONCE in AppShell (base + two radial glows,
+  strong enough for blur to visibly refract); screens never paint
+  their own (nested Scaffolds are transparent). `GlassPanel` is the
+  translucent panel every surface is made of: white-gradient fill, 1px
+  glass stroke, a specular top-rim highlight, optional inner tint +
+  outer glow — and a `frosted: true` variant that adds a REAL
+  BackdropFilter blur (sigma 14). Blur is BUDGETED, not scattered:
+  hero panels only (Today's header + mode strip, each chart card, the
+  active-mode card, Story's takeaway — one to three per screen), while
+  the many small surfaces (stat tiles, list tiles) stay faux, which
+  over a flat gradient reads nearly the same at near-zero GPU cost.
+  The nav bar keeps its own BackdropFilter (sigma 18) in
+  app_shell.dart, blurring genuinely scrolling content (`extendBody:
+  true` — which is also why every tab's scrollable pads its bottom by
+  `HuxGlass.navClearance`).
+- `hux_motion.dart` — the motion primitives that make pages feel
+  alive: `HuxEntrance` (staggered one-shot fade/slide-up for cascading
+  card entrances), `HuxCountUp` (numerals count from zero once),
+  `HuxTapScale` (tiles dip on press, via a raw `Listener` so taps
+  still land), `HuxPulseDot` (the recovery dot breathes twice on
+  arrival — two damped sine pulses — then settles), and
+  `HuxChartGrowIn` (bars rise / lines fade-drift in once; later range
+  swaps animate via fl_chart's own implicit lerp). HARD RULE, test-
+  driven: every animation COMPLETES — no `repeat()` anywhere, because
+  several widget tests rely on `pumpAndSettle`, which hangs until the
+  tree goes quiet.
 - `hux_theme.dart` — builds the one dark `ThemeData`. Typography is
   unchanged from the first pass: Fraunces for display/headline slots
   (Today's hero at 36, section titles at 24), Space Grotesk for
@@ -398,17 +415,24 @@ Per-screen highlights:
   big Space Grotesk numerals (`HuxType.numeral`) and small muted units.
   The grid uses `Wrap` + `LayoutBuilder` with intrinsic tile heights,
   so large accessibility text grows tiles instead of overflowing them.
-- **Trends** — each chart is a glass card in the reference style: a
-  muted title, a big hero numeral for the most recent reading, then
-  the chart. Sleep bars are mint→deep-teal gradient pills drawn over
-  faint full-height slot tracks (`chartTrack`) — a missing night keeps
-  its slot but draws no pill, so gaps still read as gaps, never zeros
-  — under the mint personal-target band with weekday initials below.
-  HRV/HR lines are smooth curves (`isCurved` +
-  `preventCurveOverShooting`) with a mint→teal gradient stroke, a soft
-  neon glow (`LineChartBarData.shadow`), a fading area fill beneath,
-  and a glowing halo dot on the latest reading only. Contiguous runs
-  still render separately — no line ever bridges a missing night.
+- **Trends** — each chart is a frosted glass card: muted title, a big
+  hero numeral that counts up to the most recent reading, then the
+  chart. The sleep card follows the analytics-card reference: misty
+  GREY pill bars (`chartBarGreyTop/Bottom`) over faint full-height
+  slot tracks, with ONLY the latest night highlighted in the
+  mint→deep-teal gradient (its weekday initial bold mint too, like the
+  reference's "Tue"); a dashed mint "Target h:mm" line sits at the
+  user's own baseline median (label via `HorizontalLineLabel`, dash
+  pattern from `HuxGlass.dashArray`) over the now-fainter ±10% band;
+  and an "↑/↓ x% vs usual" delta chip rides beside the hero numeral —
+  latest night vs the user's own median, wellness register, never a
+  population number. A missing night keeps its slot but draws no pill
+  — gaps still read as gaps, never zeros. HRV/HR lines are smooth
+  curves with a mint→teal gradient stroke, a soft neon glow, a fading
+  area fill, and a glowing halo dot on the latest reading only;
+  contiguous runs still render separately — no line ever bridges a
+  missing night. Bars/lines grow in once on load and animate on the
+  7↔30-day toggle.
 - **Story** — editorial dark: 1.6 line-height paragraphs, and "For
   next week" as a mint-tinted, mint-glowing glass card — the lit-up
   takeaway.
@@ -421,13 +445,13 @@ Per-screen highlights:
   into the design. Amber keeps `inkOnAccent` text (~10.4:1); the DEV
   blue-grey keeps white (~7.2:1).
 
-Accessibility, verified computationally this pass (WCAG relative
-luminance, all >=4.5:1): ink-on-bg 17.1:1, mutedText-on-bg 7.4:1,
-mint-on-bg 13.1:1, bright-teal-on-bg 10.2:1, inkOnAccent-on-mint
-11.7:1, inkOnAccent-on-amber 10.4:1, white-on-devBlueGrey 7.2:1.
-Every themed button keeps the 44px minimum tap target
-(`huxMinTapTarget`), and Today's `TextScaler.linear(1.3)` widget test
-still passes (re-verified by hand on the simulator).
+Accessibility, re-verified computationally on the grey stage (WCAG
+relative luminance, all >=4.5:1): ink-on-bg 15.1:1, mutedText-on-bg
+6.5:1, mutedText-on-card 5.7:1, mint-on-bg 11.6:1, bright-teal-on-bg
+9.0:1, inkOnAccent-on-mint 11.7:1, inkOnAccent-on-amber 10.4:1,
+white-on-devBlueGrey 7.2:1. Every themed button keeps the 44px
+minimum tap target (`huxMinTapTarget`), and Today's
+`TextScaler.linear(1.3)` widget test still passes.
 
 Dark is now the app's one theme. A LIGHT variant is the "addable
 later" case: `HuxColors` stays flat static constants, so the day it's

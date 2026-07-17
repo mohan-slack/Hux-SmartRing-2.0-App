@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../core/meaning/weekly_story.dart';
 import '../theme/hux_glass.dart';
+import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
 
 class StoryScreen extends StatefulWidget {
@@ -81,11 +82,20 @@ class _StoryBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
           HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
-        Text(story.title, style: Theme.of(context).textTheme.headlineSmall),
+        HuxEntrance(
+          child: Text(story.title,
+              style: Theme.of(context).textTheme.headlineSmall),
+        ),
         const SizedBox(height: HuxSpacing.lg),
-        _Observations(observations: story.observations),
+        HuxEntrance(
+          index: 1,
+          child: _Observations(observations: story.observations),
+        ),
         const SizedBox(height: HuxSpacing.lg),
-        _Suggestion(suggestion: story.suggestion),
+        HuxEntrance(
+          index: 2,
+          child: _Suggestion(suggestion: story.suggestion),
+        ),
       ],
     );
   }
@@ -131,6 +141,7 @@ class _Suggestion extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return GlassPanel(
+      frosted: true,
       tint: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
       glow: HuxColors.accentMint,
       child: Column(

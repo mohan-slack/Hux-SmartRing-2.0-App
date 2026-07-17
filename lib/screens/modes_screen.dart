@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
 import '../theme/hux_glass.dart';
+import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
 
 String modeName(ModeId id) => switch (id) {
@@ -21,9 +22,8 @@ String _modeDescription(ModeId id) => switch (id) {
       ModeId.bigDay =>
         'A presentation, interview, or match — countdown coaching '
             'for any big day.',
-      ModeId.shaadi =>
-        'Wedding countdown — pace yourself through the season, '
-            'function by function.',
+      ModeId.shaadi => 'Wedding countdown — pace yourself through the season, '
+          'function by function.',
       ModeId.examSeason =>
         'Exam countdown — steady study blocks, honest about sleep '
             'versus cramming.',
@@ -154,9 +154,9 @@ class _ModesScreenState extends State<ModesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Replace active mode?'),
-        content: Text(
-            'You already have ${modeName(currentId)} running. Starting '
-            'a new mode will end it.'),
+        content:
+            Text('You already have ${modeName(currentId)} running. Starting '
+                'a new mode will end it.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -245,7 +245,8 @@ class _ModesScreenState extends State<ModesScreen> {
               HuxSpacing.lg, HuxGlass.navClearance),
           children: [
             if (active != null) ...[
-              _ActiveModeCard(config: active, onEnd: _endMode),
+              HuxEntrance(
+                  child: _ActiveModeCard(config: active, onEnd: _endMode)),
               const SizedBox(height: HuxSpacing.xl),
             ],
             if (data.nightShift != null || data.fasting != null) ...[
@@ -275,11 +276,16 @@ class _ModesScreenState extends State<ModesScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: HuxSpacing.lg),
-            for (final id in ModeId.values)
-              _ModeListTile(
-                modeId: id,
-                isActive: active?.id == id,
-                onTap: () => _onTapMode(id),
+            for (final (i, id) in ModeId.values.indexed)
+              HuxEntrance(
+                index: 1 + i,
+                child: HuxTapScale(
+                  child: _ModeListTile(
+                    modeId: id,
+                    isActive: active?.id == id,
+                    onTap: () => _onTapMode(id),
+                  ),
+                ),
               ),
             const SizedBox(height: HuxSpacing.xl),
             Text('Lifestyle', style: Theme.of(context).textTheme.headlineSmall),
@@ -290,23 +296,33 @@ class _ModesScreenState extends State<ModesScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: HuxSpacing.lg),
-            _LifestyleTile(
-              icon: Icons.bedtime,
-              title: 'Night Shift',
-              description: 'Main sleep happens in the daytime — swaps '
-                  '"last night" wording for "last sleep" throughout '
-                  'the app.',
-              isActive: data.nightShift != null,
-              onTap: () => _onTapNightShift(data.nightShift),
+            HuxEntrance(
+              index: 4,
+              child: HuxTapScale(
+                child: _LifestyleTile(
+                  icon: Icons.bedtime,
+                  title: 'Night Shift',
+                  description: 'Main sleep happens in the daytime — swaps '
+                      '"last night" wording for "last sleep" throughout '
+                      'the app.',
+                  isActive: data.nightShift != null,
+                  onTap: () => _onTapNightShift(data.nightShift),
+                ),
+              ),
             ),
-            _LifestyleTile(
-              icon: Icons.wb_twilight,
-              title: 'Fasting Companion',
-              description: 'A dated observance — Roza, Navratri, '
-                  'Ekadashi, Karwa Chauth, or your own — adapts food-'
-                  'timing advice while it runs.',
-              isActive: data.fasting != null,
-              onTap: () => _onTapFasting(data.fasting),
+            HuxEntrance(
+              index: 5,
+              child: HuxTapScale(
+                child: _LifestyleTile(
+                  icon: Icons.wb_twilight,
+                  title: 'Fasting Companion',
+                  description: 'A dated observance — Roza, Navratri, '
+                      'Ekadashi, Karwa Chauth, or your own — adapts food-'
+                      'timing advice while it runs.',
+                  isActive: data.fasting != null,
+                  onTap: () => _onTapFasting(data.fasting),
+                ),
+              ),
             ),
           ],
         );
@@ -333,6 +349,7 @@ class _ActiveModeCard extends StatelessWidget {
     // The active mode is the page's lit-up hero: mint-tinted glass
     // with the mint outer glow.
     return GlassPanel(
+      frosted: true,
       tint: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
       glow: HuxColors.accentMint,
       child: Row(
@@ -350,11 +367,9 @@ class _ActiveModeCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: HuxSpacing.xs),
-                Text(countdown,
-                    style: Theme.of(context).textTheme.bodyMedium),
+                Text(countdown, style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: HuxSpacing.md),
-                OutlinedButton(
-                    onPressed: onEnd, child: const Text('End mode')),
+                OutlinedButton(onPressed: onEnd, child: const Text('End mode')),
               ],
             ),
           ),
@@ -383,8 +398,8 @@ class _AccentIconChip extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: HuxModeAccent.background
-                .withValues(alpha: HuxOpacity.iconChip),
+            color:
+                HuxModeAccent.background.withValues(alpha: HuxOpacity.iconChip),
             blurRadius: HuxSpacing.lg,
           ),
         ],

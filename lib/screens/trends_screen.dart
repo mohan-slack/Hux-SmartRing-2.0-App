@@ -13,6 +13,7 @@ import '../core/meaning/baseline.dart';
 import '../core/storage/health_store.dart';
 import '../core/trends/night_row.dart';
 import '../theme/hux_glass.dart';
+import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
 
 /// Single-letter weekday labels, [DateTime.weekday]-indexed (1 = Mon).
@@ -103,7 +104,8 @@ class _TrendsScreenState extends State<TrendsScreen> {
       for (final s in sessions)
         if (!s.bedtime.toUtc().isBefore(baselineStart)) s,
     ]);
-    final rows = buildNightRows(from: displayStart, to: now, sessions: sessions);
+    final rows =
+        buildNightRows(from: displayStart, to: now, sessions: sessions);
 
     return _TrendsData(rows: rows, baseline: baseline);
   }
@@ -134,8 +136,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
                   future: _future,
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
-                      return const Center(
-                          child: CircularProgressIndicator());
+                      return const Center(child: CircularProgressIndicator());
                     }
                     final data = snapshot.data!;
                     final hasAnyNight =
@@ -211,60 +212,114 @@ class _TrendsCharts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final latestSleep = _latestOf(
-        rows, (r) => r.sleepDuration?.inMinutes.toDouble());
+    final latestSleep =
+        _latestOf(rows, (r) => r.sleepDuration?.inMinutes.toDouble());
     final latestHrv = _latestOf(rows, (r) => r.avgHrvMs);
     final latestHr = _latestOf(rows, (r) => r.avgHeartRateBpm);
+
+    // The sleep delta chip, reference-style: latest night vs the
+    // user's own baseline median — never a population number.
+    final medianMinutes = baseline.medianTotalSleep?.inMinutes.toDouble();
+    int? sleepDeltaPct;
+    if (latestSleep != null && medianMinutes != null && medianMinutes > 0) {
+      sleepDeltaPct =
+          (((latestSleep - medianMinutes) / medianMinutes) * 100).round();
+    }
 
     return ListView(
       // Clearance so the last chart scrolls clear of the glass nav bar.
       padding: const EdgeInsets.only(bottom: HuxGlass.navClearance),
       children: [
-        _ChartCard(
-          title: 'Sleep duration',
-          value: latestSleep == null
-              ? null
-              : _formatHours(Duration(minutes: latestSleep.round())),
-          unit: 'hrs',
-          child: _SleepBarChart(rows: rows, baseline: baseline),
+        HuxEntrance(
+          child: _ChartCard(
+            title: 'Sleep duration',
+            numeralValue: latestSleep,
+            numeralFormat: (v) => _formatHours(Duration(minutes: v.round())),
+            unit: 'hrs',
+            delta: sleepDeltaPct == null
+                ? null
+                : _DeltaChip(percent: sleepDeltaPct),
+            child: _SleepBarChart(rows: rows, baseline: baseline),
+          ),
         ),
         const SizedBox(height: HuxSpacing.lg),
-        _ChartCard(
-          title: 'Avg HRV',
-          value: latestHrv?.round().toString(),
-          unit: 'ms',
-          hint: _minMaxHint(rows, (r) => r.avgHrvMs, 'ms'),
-          child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgHrvMs),
+        HuxEntrance(
+          index: 1,
+          child: _ChartCard(
+            title: 'Avg HRV',
+            numeralValue: latestHrv,
+            numeralFormat: (v) => v.round().toString(),
+            unit: 'ms',
+            hint: _minMaxHint(rows, (r) => r.avgHrvMs, 'ms'),
+            child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgHrvMs),
+          ),
         ),
         const SizedBox(height: HuxSpacing.lg),
-        _ChartCard(
-          title: 'Avg resting heart rate',
-          value: latestHr?.round().toString(),
-          unit: 'bpm',
-          hint: _minMaxHint(rows, (r) => r.avgHeartRateBpm, 'bpm'),
-          child: _MetricLineChart(
-              rows: rows, valueOf: (r) => r.avgHeartRateBpm),
+        HuxEntrance(
+          index: 2,
+          child: _ChartCard(
+            title: 'Avg resting heart rate',
+            numeralValue: latestHr,
+            numeralFormat: (v) => v.round().toString(),
+            unit: 'bpm',
+            hint: _minMaxHint(rows, (r) => r.avgHeartRateBpm, 'bpm'),
+            child:
+                _MetricLineChart(rows: rows, valueOf: (r) => r.avgHeartRateBpm),
+          ),
         ),
       ],
     );
   }
 }
 
+/// The little "↑ 6% vs usual" pill beside the sleep hero numeral —
+/// mint when at/above the user's own median, amber below. Wellness
+/// register: it compares to "your usual", it never judges.
+class _DeltaChip extends StatelessWidget {
+  final int percent;
+
+  const _DeltaChip({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final up = percent >= 0;
+    final color = up ? HuxColors.accentMint : HuxColors.stretched;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: HuxSpacing.sm, vertical: HuxSpacing.xs / 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: HuxOpacity.iconChip),
+        borderRadius: BorderRadius.circular(HuxRadii.chip),
+      ),
+      child: Text(
+        '${up ? '↑' : '↓'} ${percent.abs()}% vs usual',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+      ),
+    );
+  }
+}
+
 /// One glass chart panel, reference-card style: muted title (with an
-/// optional min–max hint), a big Space Grotesk hero numeral for the
-/// most recent reading, then the chart itself.
+/// optional min–max hint), a big Space Grotesk hero numeral that
+/// counts up to the most recent reading (plus an optional delta chip
+/// beside it), then the chart itself. Chart cards are this screen's
+/// hero panels, so they carry the real frosted backdrop blur.
 class _ChartCard extends StatelessWidget {
   final String title;
-  final String? value;
+  final double? numeralValue;
+  final String Function(double) numeralFormat;
   final String unit;
   final String? hint;
+  final Widget? delta;
   final Widget child;
 
   const _ChartCard({
     required this.title,
-    required this.value,
+    required this.numeralValue,
+    required this.numeralFormat,
     required this.unit,
     this.hint,
+    this.delta,
     required this.child,
   });
 
@@ -277,6 +332,7 @@ class _ChartCard extends StatelessWidget {
     );
 
     return GlassPanel(
+      frosted: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -289,12 +345,30 @@ class _ChartCard extends StatelessWidget {
               ],
             ],
           ),
-          if (value != null) ...[
+          if (numeralValue != null) ...[
             const SizedBox(height: HuxSpacing.xs),
-            Text.rich(TextSpan(children: [
-              TextSpan(text: value, style: numeralStyle),
-              TextSpan(text: ' $unit', style: textTheme.bodySmall),
-            ])),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                HuxCountUp(
+                  value: numeralValue!,
+                  format: numeralFormat,
+                  style: numeralStyle,
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(
+                      left: HuxSpacing.xs, bottom: HuxSpacing.xs),
+                  child: Text(unit, style: textTheme.bodySmall),
+                ),
+                if (delta != null) ...[
+                  const SizedBox(width: HuxSpacing.sm),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: HuxSpacing.xs),
+                    child: delta!,
+                  ),
+                ],
+              ],
+            ),
           ],
           const SizedBox(height: HuxSpacing.md),
           SizedBox(height: 160, child: child),
@@ -313,91 +387,154 @@ class _SleepBarChart extends StatelessWidget {
 
   const _SleepBarChart({required this.rows, required this.baseline});
 
+  /// Index of the most recent night WITH data — the one bar that gets
+  /// the mint highlight (every other night is a misty grey pill, per
+  /// the analytics-card reference).
+  int? get _latestIndex {
+    for (var i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].sleepDuration != null) return i;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final band = SleepTargetBand.fromBaseline(baseline);
     final barWidth = rows.length > 14 ? 4.0 : 10.0;
     final labelStyle = Theme.of(context).textTheme.labelSmall;
+    final highlightLabelStyle = Theme.of(context)
+        .textTheme
+        .labelSmall
+        ?.copyWith(color: HuxColors.accentMint, fontWeight: FontWeight.w700);
+    final targetStyle = Theme.of(context)
+        .textTheme
+        .labelSmall
+        ?.copyWith(color: HuxColors.accentMint);
     final interval = _weekdayLabelInterval(rows.length);
+    final latestIndex = _latestIndex;
+    final median = baseline.medianTotalSleep;
 
     final hours = [
       for (final r in rows)
         if (r.sleepDuration != null) r.sleepDuration!.inMinutes / 60.0,
     ];
-    final dataMax =
-        hours.isEmpty ? 0.0 : hours.reduce((a, b) => a > b ? a : b);
+    final dataMax = hours.isEmpty ? 0.0 : hours.reduce((a, b) => a > b ? a : b);
     // Headroom above the tallest bar; floor of 8h so a short-sleep week
     // doesn't make its bars tower misleadingly.
     final maxY = (dataMax + 1).clamp(8.0, double.infinity);
 
-    return BarChart(BarChartData(
-      maxY: maxY,
-      barGroups: [
-        for (var i = 0; i < rows.length; i++)
-          BarChartGroupData(x: i, barRods: [
-            BarChartRodData(
-              toY: rows[i].sleepDuration == null
-                  ? 0
-                  : rows[i].sleepDuration!.inMinutes / 60.0,
-              gradient: rows[i].sleepDuration == null
-                  ? null
-                  : const LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        HuxColors.accentDeepTeal,
-                        HuxColors.accentMint,
-                      ],
+    const greyBar = LinearGradient(
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+      colors: [HuxColors.chartBarGreyBottom, HuxColors.chartBarGreyTop],
+    );
+    const mintBar = LinearGradient(
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+      colors: [HuxColors.accentDeepTeal, HuxColors.accentMint],
+    );
+
+    // Grow-in: tracks + target line appear immediately; the pills rise
+    // from the baseline once (fl_chart's own lerp animates later range
+    // swaps).
+    return HuxChartGrowIn(
+      builder: (context, t) => BarChart(
+        swapAnimationDuration: HuxMotion.base,
+        swapAnimationCurve: HuxMotion.easeSwap,
+        BarChartData(
+          maxY: maxY,
+          barGroups: [
+            for (var i = 0; i < rows.length; i++)
+              BarChartGroupData(x: i, barRods: [
+                BarChartRodData(
+                  toY: rows[i].sleepDuration == null
+                      ? 0
+                      : rows[i].sleepDuration!.inMinutes / 60.0 * t,
+                  gradient: rows[i].sleepDuration == null
+                      ? null
+                      : (i == latestIndex ? mintBar : greyBar),
+                  color:
+                      rows[i].sleepDuration == null ? Colors.transparent : null,
+                  width: barWidth,
+                  borderRadius: BorderRadius.circular(barWidth / 2),
+                  backDrawRodData: BackgroundBarChartRodData(
+                    show: true,
+                    toY: maxY,
+                    color: HuxColors.chartTrack,
+                  ),
+                ),
+              ]),
+          ],
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            show: true,
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 18,
+                getTitlesWidget: (value, meta) {
+                  final i = value.round();
+                  if (i < 0 || i >= rows.length) {
+                    return const SizedBox.shrink();
+                  }
+                  // The highlighted night always keeps its label (mint,
+                  // like the reference's bold "Tue"); other slots thin
+                  // out on the 30-day view.
+                  final isLatest = i == latestIndex;
+                  if (!isLatest && i % interval != 0) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: HuxSpacing.xs),
+                    child: Text(
+                      _weekdayInitial(rows[i].night),
+                      style: isLatest ? highlightLabelStyle : labelStyle,
                     ),
-              color:
-                  rows[i].sleepDuration == null ? Colors.transparent : null,
-              width: barWidth,
-              borderRadius: BorderRadius.circular(barWidth / 2),
-              backDrawRodData: BackgroundBarChartRodData(
-                show: true,
-                toY: maxY,
-                color: HuxColors.chartTrack,
+                  );
+                },
               ),
             ),
-          ]),
-      ],
-      gridData: const FlGridData(show: false),
-      borderData: FlBorderData(show: false),
-      titlesData: FlTitlesData(
-        show: true,
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles:
-            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 18,
-            getTitlesWidget: (value, meta) {
-              final i = value.round();
-              if (i < 0 || i >= rows.length || i % interval != 0) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(top: HuxSpacing.xs),
-                child:
-                    Text(_weekdayInitial(rows[i].night), style: labelStyle),
-              );
-            },
           ),
+          // The personal target, reference-style: a dashed mint line at
+          // the user's own median with a small "Target" label, over the
+          // (now fainter) ±10% band.
+          extraLinesData: median == null
+              ? const ExtraLinesData()
+              : ExtraLinesData(horizontalLines: [
+                  HorizontalLine(
+                    y: median.inMinutes / 60.0,
+                    color: HuxColors.accentMint
+                        .withValues(alpha: HuxOpacity.targetLine),
+                    strokeWidth: 1,
+                    dashArray: HuxGlass.dashArray,
+                    label: HorizontalLineLabel(
+                      show: true,
+                      alignment: Alignment.topRight,
+                      style: targetStyle,
+                      labelResolver: (_) => 'Target ${_formatHours(median)}',
+                    ),
+                  ),
+                ]),
+          rangeAnnotations: band == null
+              ? const RangeAnnotations()
+              : RangeAnnotations(horizontalRangeAnnotations: [
+                  HorizontalRangeAnnotation(
+                    y1: band.low.inMinutes / 60.0,
+                    y2: band.high.inMinutes / 60.0,
+                    color: HuxColors.accentMint
+                        .withValues(alpha: HuxOpacity.targetBand),
+                  ),
+                ]),
         ),
       ),
-      rangeAnnotations: band == null
-          ? const RangeAnnotations()
-          : RangeAnnotations(horizontalRangeAnnotations: [
-              HorizontalRangeAnnotation(
-                y1: band.low.inMinutes / 60.0,
-                y2: band.high.inMinutes / 60.0,
-                color: HuxColors.accentMint
-                    .withValues(alpha: HuxOpacity.targetBand),
-              ),
-            ]),
-    ));
+    );
   }
 }
 
@@ -421,56 +558,73 @@ class _MetricLineChart extends StatelessWidget {
       return const Center(child: Text('No data in this range yet'));
     }
 
-    return LineChart(LineChartData(
-      minX: 0,
-      maxX: (rows.length - 1).clamp(0, double.infinity).toDouble(),
-      gridData: const FlGridData(show: false),
-      borderData: FlBorderData(show: false),
-      titlesData: const FlTitlesData(show: false),
-      lineBarsData: [
-        for (final run in runs)
-          LineChartBarData(
-            spots: [for (final e in run) FlSpot(e.key.toDouble(), e.value)],
-            isCurved: true,
-            preventCurveOverShooting: true,
-            gradient: const LinearGradient(
-              colors: [HuxColors.accentMint, HuxColors.accentTeal],
-            ),
-            barWidth: 3,
-            shadow: Shadow(
-              color: HuxColors.accentMint
-                  .withValues(alpha: HuxOpacity.chartLineGlow),
-              blurRadius: HuxGlass.chartGlowBlur,
-            ),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  HuxColors.accentMint
-                      .withValues(alpha: HuxOpacity.chartAreaFill),
-                  Colors.transparent,
-                ],
+    // Grow-in: the line fades in while drifting up into place — data
+    // is never scaled (that would warp the auto Y-range mid-flight).
+    return HuxChartGrowIn(
+      builder: (context, t) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, HuxMotion.slideDistance * (1 - t)),
+          child: _chart(),
+        ),
+      ),
+    );
+  }
+
+  Widget _chart() {
+    final runs = contiguousRuns(rows.map(valueOf).toList());
+    return LineChart(
+        duration: HuxMotion.base,
+        curve: HuxMotion.easeSwap,
+        LineChartData(
+          minX: 0,
+          maxX: (rows.length - 1).clamp(0, double.infinity).toDouble(),
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: const FlTitlesData(show: false),
+          lineBarsData: [
+            for (final run in runs)
+              LineChartBarData(
+                spots: [for (final e in run) FlSpot(e.key.toDouble(), e.value)],
+                isCurved: true,
+                preventCurveOverShooting: true,
+                gradient: const LinearGradient(
+                  colors: [HuxColors.accentMint, HuxColors.accentTeal],
+                ),
+                barWidth: 3,
+                shadow: Shadow(
+                  color: HuxColors.accentMint
+                      .withValues(alpha: HuxOpacity.chartLineGlow),
+                  blurRadius: HuxGlass.chartGlowBlur,
+                ),
+                belowBarData: BarAreaData(
+                  show: true,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      HuxColors.accentMint
+                          .withValues(alpha: HuxOpacity.chartAreaFill),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                // Only the latest reading of the latest run gets a dot —
+                // a glowing "you are here" marker, not a dot per night.
+                dotData: FlDotData(
+                  show: identical(run, runs.last),
+                  checkToShowDot: (spot, barData) => spot == barData.spots.last,
+                  getDotPainter: (spot, percent, barData, index) =>
+                      FlDotCirclePainter(
+                    radius: HuxSpacing.xs,
+                    color: HuxColors.accentMint,
+                    strokeWidth: HuxSpacing.sm,
+                    strokeColor: HuxColors.accentMint
+                        .withValues(alpha: HuxOpacity.chartDotHalo),
+                  ),
+                ),
               ),
-            ),
-            // Only the latest reading of the latest run gets a dot —
-            // a glowing "you are here" marker, not a dot per night.
-            dotData: FlDotData(
-              show: identical(run, runs.last),
-              checkToShowDot: (spot, barData) =>
-                  spot == barData.spots.last,
-              getDotPainter: (spot, percent, barData, index) =>
-                  FlDotCirclePainter(
-                radius: HuxSpacing.xs,
-                color: HuxColors.accentMint,
-                strokeWidth: HuxSpacing.sm,
-                strokeColor: HuxColors.accentMint
-                    .withValues(alpha: HuxOpacity.chartDotHalo),
-              ),
-            ),
-          ),
-      ],
-    ));
+          ],
+        ));
   }
 }

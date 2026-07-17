@@ -24,15 +24,17 @@ class HuxColors {
   const HuxColors._();
 
   // ---- the dark stage -------------------------------------------------
-  /// App background — deep green-black, the darkest thing on screen.
-  static const bg = Color(0xFF0B1210);
+  /// App background — dark charcoal-grey (with a whisper of the brand
+  /// green), NOT pitch black: per design review, pages read as grey so
+  /// the glass panels and glows have somewhere to sit above them.
+  static const bg = Color(0xFF1A1F1D);
 
   /// Elevated OPAQUE surface: dialogs, sheets, pickers, snackbars —
   /// places where see-through would hurt readability.
-  static const card = Color(0xFF121B18);
+  static const card = Color(0xFF242A28);
 
   /// A step above [card] for the snackbar, so it reads as floating.
-  static const cardElevated = Color(0xFF1C2723);
+  static const cardElevated = Color(0xFF2D3431);
 
   // ---- text -----------------------------------------------------------
   /// Primary text — near-white with the brand's green cast.
@@ -62,23 +64,32 @@ class HuxColors {
   // ---- glass ------------------------------------------------------------
   /// Translucent white layers that make a surface read as glass over
   /// the dark stage. Pre-baked alphas (not `withValues` at call sites)
-  /// so "how glassy" stays a single tunable per role.
-  static const glassFillTop = Color(0x17FFFFFF); // white 9% — panel top
-  static const glassFillBottom = Color(0x0AFFFFFF); // white 4% — panel base
-  static const glassStroke = Color(0x24FFFFFF); // white 14% — 1px border
-  static const glassHighlight = Color(0x40FFFFFF); // white 25% — top rim
+  /// so "how glassy" stays a single tunable per role. Strengthened in
+  /// the review round — the first cut read as flat cards, not glass.
+  static const glassFillTop = Color(0x1FFFFFFF); // white 12% — panel top
+  static const glassFillBottom = Color(0x0DFFFFFF); // white 5% — panel base
+  static const glassStroke = Color(0x2EFFFFFF); // white 18% — 1px border
+  static const glassHighlight = Color(0x73FFFFFF); // white 45% — top rim
 
   /// Hairline for dividers/tracks on dark — white 10%.
   static const hairline = Color(0x1AFFFFFF);
 
-  /// Faint full-height slot track behind chart bars — white 5%.
-  static const chartTrack = Color(0x0DFFFFFF);
+  /// Faint full-height slot track behind chart bars — white 7%.
+  static const chartTrack = Color(0x12FFFFFF);
+
+  /// The "misty" grey bars on the sleep chart (every night EXCEPT the
+  /// highlighted latest one, per the analytics-card reference): lit at
+  /// the top, fading toward the base.
+  static const chartBarGreyTop = Color(0x61FFFFFF); // white 38%
+  static const chartBarGreyBottom = Color(0x24FFFFFF); // white 14%
 
   // ---- background glows --------------------------------------------------
   /// The two soft radial glows painted once behind the whole app
-  /// (see HuxBackground) — mint top-left, teal bottom-right.
-  static const bgGlowMint = Color(0x1A9AE6C8); // mint 10%
-  static const bgGlowTeal = Color(0x260F766E); // deep teal 15%
+  /// (see HuxBackground) — mint top-left, teal bottom-right. Strong
+  /// enough that frosted panels visibly blur them (that's what makes
+  /// the glassmorphism READ as glass).
+  static const bgGlowMint = Color(0x249AE6C8); // mint 14%
+  static const bgGlowTeal = Color(0x330F766E); // deep teal 20%
 
   // ---- recovery states (dot, header glow, chart accents) -----------------
   /// Brightened from the light-theme set so they carry on dark. Used
@@ -132,8 +143,12 @@ class HuxOpacity {
   /// The state-colored radial glow inside Today's header panel.
   static const headerGlow = 0.30;
 
-  /// The personal sleep-duration target band on the Trends bar chart.
-  static const targetBand = 0.22;
+  /// The personal sleep-duration target band on the Trends bar chart —
+  /// faint on purpose; the dashed target LINE is the star now.
+  static const targetBand = 0.12;
+
+  /// The dashed personal-target line on the sleep chart.
+  static const targetLine = 0.90;
 
   /// The circular backdrop behind a mode/lifestyle accent icon.
   static const iconChip = 0.18;
@@ -176,9 +191,12 @@ class HuxType {
 class HuxGlass {
   const HuxGlass._();
 
-  /// Blur sigma for the ONE real BackdropFilter (the nav bar) — kept
-  /// moderate per Flutter/Impeller guidance; blur is expensive.
+  /// Blur sigma for the nav bar's BackdropFilter.
   static const navBlurSigma = 18.0;
+
+  /// Blur sigma for frosted hero panels (GlassPanel(frosted: true)) —
+  /// lighter than the nav's, per guidance to keep sigmas moderate.
+  static const panelBlurSigma = 14.0;
 
   /// Outer-glow geometry for accented panels.
   static const glowBlurRadius = 28.0;
@@ -187,10 +205,46 @@ class HuxGlass {
   /// Neon-glow blur behind a Trends chart line.
   static const chartGlowBlur = 12.0;
 
+  /// Dash pattern for the personal-target line on the sleep chart.
+  static const dashArray = [6, 4];
+
   /// Bottom clearance scrollables add so their last card can scroll
   /// clear of the floating glass nav bar (nav height + home indicator
   /// + breathing room; the body extends behind the bar).
   static const navClearance = 120.0;
+}
+
+/// Motion tokens — every animation in the app is built from these.
+/// HARD RULE (test-driven, not taste-driven): every animation must
+/// COMPLETE — one-shot entrances, count-ups, grow-ins, finite pulses.
+/// Nothing repeats forever, because several widget tests rely on
+/// `pumpAndSettle`, which hangs until the tree goes quiet.
+class HuxMotion {
+  const HuxMotion._();
+
+  /// Tap feedback (press-scale on tiles).
+  static const quick = Duration(milliseconds: 140);
+
+  /// Standard transitions: entrance fade/slide, chart data swaps.
+  static const base = Duration(milliseconds: 380);
+
+  /// Hero moments: chart grow-in, numeral count-up.
+  static const slow = Duration(milliseconds: 700);
+
+  /// Per-item delay in a staggered list entrance.
+  static const stagger = Duration(milliseconds: 70);
+
+  /// One damped pulse cycle of the recovery dot's halo.
+  static const pulse = Duration(milliseconds: 1600);
+
+  /// How far an entering card slides up from, in logical px.
+  static const slideDistance = 14.0;
+
+  /// Pressed-state scale for tap feedback.
+  static const pressScale = 0.97;
+
+  static const easeOut = Curves.easeOutCubic;
+  static const easeSwap = Curves.easeInOutCubic;
 }
 
 /// Minimum touch target side length (Material/HIG accessibility floor).

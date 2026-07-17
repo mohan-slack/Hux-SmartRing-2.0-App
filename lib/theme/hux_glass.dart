@@ -4,15 +4,19 @@
 /// stage every screen sits on, and the translucent panel surface the
 /// hero blocks are made of.
 ///
-/// PERFORMANCE NOTE — why [GlassPanel] has no BackdropFilter: real
-/// backdrop blur is one of the most expensive single operations in the
-/// pipeline, and stacking several per screen (a ListView of cards)
-/// blows the frame budget on lower-end devices. Our panels sit on a
-/// mostly-flat dark gradient, so translucent fill + hairline stroke +
-/// top highlight reads identically to blurred glass at near-zero GPU
-/// cost. The ONE real BackdropFilter lives on the nav bar (see
-/// app_shell.dart), where content genuinely scrolls behind the glass
-/// and the blur earns its keep.
+/// PERFORMANCE NOTE — where real BackdropFilter blur is allowed: blur
+/// is one of the most expensive raster operations, so it's budgeted,
+/// not scattered. HERO panels (one or two per screen — Today's header,
+/// each chart card, the active-mode card, Story's takeaway) opt in
+/// with `frosted: true` and get a real backdrop blur over the stage's
+/// glows, which is what makes the glassmorphism visibly READ as glass.
+/// The MANY small surfaces (stat tiles, list tiles) stay faux —
+/// translucent fill + stroke + top highlight — which over a flat
+/// gradient reads nearly the same at near-zero GPU cost. The nav bar
+/// keeps its own BackdropFilter in app_shell.dart, blurring genuinely
+/// scrolling content.
+
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -58,7 +62,8 @@ class HuxBackground extends StatelessWidget {
 /// A liquid-glass panel: translucent white gradient fill, 1px glass
 /// stroke, a subtle top-rim highlight, and an optional colored outer
 /// glow + inner tint for accented panels (Today's state-tinted header,
-/// the active mode card).
+/// the active mode card). Pass [frosted] for hero panels that should
+/// carry a REAL backdrop blur — see the file-level performance note.
 class GlassPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -75,6 +80,9 @@ class GlassPanel extends StatelessWidget {
   /// glass stroke).
   final Color? strokeColor;
 
+  /// Real backdrop blur — budgeted for hero panels only.
+  final bool frosted;
+
   const GlassPanel({
     super.key,
     required this.child,
@@ -82,11 +90,70 @@ class GlassPanel extends StatelessWidget {
     this.tint,
     this.glow,
     this.strokeColor,
+    this.frosted = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(HuxRadii.card);
+
+    Widget body = Stack(
+      children: [
+        // Tint underlay first, glass gradient over it — a Container
+        // can't have both a color and a gradient at once.
+        if (tint != null) Positioned.fill(child: ColoredBox(color: tint!)),
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [HuxColors.glassFillTop, HuxColors.glassFillBottom],
+              ),
+            ),
+          ),
+        ),
+        // The top rim highlight — the specular edge that sells
+        // "glass" more than the fill does.
+        const Positioned(
+          top: 0,
+          left: HuxSpacing.lg,
+          right: HuxSpacing.lg,
+          child: SizedBox(
+            height: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    HuxColors.glassHighlight,
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border.all(color: strokeColor ?? HuxColors.glassStroke),
+          ),
+          padding: padding,
+          child: child,
+        ),
+      ],
+    );
+
+    if (frosted) {
+      body = BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: HuxGlass.panelBlurSigma,
+          sigmaY: HuxGlass.panelBlurSigma,
+        ),
+        child: body,
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -101,57 +168,7 @@ class GlassPanel extends StatelessWidget {
                 ),
               ],
       ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Stack(
-          children: [
-            // Tint underlay first, glass gradient over it — a Container
-            // can't have both a color and a gradient at once.
-            if (tint != null) Positioned.fill(child: ColoredBox(color: tint!)),
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [HuxColors.glassFillTop, HuxColors.glassFillBottom],
-                  ),
-                ),
-              ),
-            ),
-            // The top rim highlight — the specular edge that sells
-            // "glass" more than the fill does.
-            const Positioned(
-              top: 0,
-              left: HuxSpacing.lg,
-              right: HuxSpacing.lg,
-              child: SizedBox(
-                height: 1,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        HuxColors.glassHighlight,
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                border:
-                    Border.all(color: strokeColor ?? HuxColors.glassStroke),
-              ),
-              padding: padding,
-              child: child,
-            ),
-          ],
-        ),
-      ),
+      child: ClipRRect(borderRadius: radius, child: body),
     );
   }
 }
