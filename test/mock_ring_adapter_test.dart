@@ -137,6 +137,44 @@ void main() {
 
       await ring.dispose();
     });
+
+    test('respiratory rate, active calories, and stress are present and '
+        'in human ranges', () async {
+      final ring = freshRing();
+      await connectWithRetry(ring);
+
+      final result = await ring.syncSince(
+        DateTime.now().subtract(const Duration(hours: 24)),
+      );
+
+      expect(result.snapshots, isNotEmpty);
+      for (final s in result.snapshots) {
+        expect(s.respiratoryRateBrpm, isNotNull);
+        expect(s.respiratoryRateBrpm, inInclusiveRange(12, 20));
+        expect(s.activeEnergyKcal, isNotNull);
+        expect(s.activeEnergyKcal, greaterThanOrEqualTo(0));
+        expect(s.stressIndex, isNotNull);
+        expect(s.stressIndex, inInclusiveRange(0, 100));
+      }
+
+      await ring.dispose();
+    });
+
+    test('a night carries a plausible avgRespiratoryRateBrpm consistent '
+        'with the nocturnal dip', () async {
+      final ring = freshRing();
+      await connectWithRetry(ring);
+
+      final result = await ring.syncSince(
+        DateTime.now().subtract(const Duration(hours: 30)),
+      );
+      final night = result.sleepSessions.first;
+
+      expect(night.avgRespiratoryRateBrpm, isNotNull);
+      expect(night.avgRespiratoryRateBrpm, inInclusiveRange(12, 20));
+
+      await ring.dispose();
+    });
   });
 
   group('Serialization round-trip', () {
@@ -148,6 +186,9 @@ void main() {
         spo2Percent: 97,
         skinTempCelsius: 33.72,
         steps: 4200,
+        respiratoryRateBrpm: 15,
+        activeEnergyKcal: 320,
+        stressIndex: 42,
       );
       final restored = HealthSnapshot.fromMap(original.toMap());
 
@@ -157,6 +198,9 @@ void main() {
       expect(restored.spo2Percent, original.spo2Percent);
       expect(restored.skinTempCelsius, original.skinTempCelsius);
       expect(restored.steps, original.steps);
+      expect(restored.respiratoryRateBrpm, original.respiratoryRateBrpm);
+      expect(restored.activeEnergyKcal, original.activeEnergyKcal);
+      expect(restored.stressIndex, original.stressIndex);
     });
 
     test('null readings survive the round-trip too', () {
@@ -164,6 +208,9 @@ void main() {
       final restored = HealthSnapshot.fromMap(original.toMap());
       expect(restored.heartRateBpm, isNull);
       expect(restored.hrvMs, isNull);
+      expect(restored.respiratoryRateBrpm, isNull);
+      expect(restored.activeEnergyKcal, isNull);
+      expect(restored.stressIndex, isNull);
     });
   });
 }

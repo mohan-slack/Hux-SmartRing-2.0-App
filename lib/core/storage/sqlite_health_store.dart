@@ -30,13 +30,17 @@ class SqliteHealthStore implements HealthStore {
   /// Schema history:
   /// v1 — snapshots, sleep_sessions, sleep_segments, meta.
   /// v2 — added mode_state (event modes: Big Day, Shaadi, Exam Season).
+  /// v3 — added resp_rate/active_kcal/stress to snapshots and
+  ///      avg_resp_rate to sleep_sessions (respiratory rate, active
+  ///      calories, stress — see ring_models.dart). All new columns
+  ///      default to NULL for existing rows; nothing else changes.
   ///
   /// Lifestyle modes (Night Shift, Fasting) added later reuse this same
   /// v2 `mode_state` table — it's already `(mode_id TEXT PRIMARY KEY,
   /// json TEXT)`, so a lifestyle mode is just a row under its own
   /// [LifestyleModeId] key, disjoint from the [ModeId] keys event modes
   /// use. No new column, no new table, no version bump.
-  static const _schemaVersion = 2;
+  static const _schemaVersion = 3;
 
   /// Event-mode keys in the shared `mode_state` table — used to scope
   /// [saveModeState]/[loadModeState]/[clearModeState] so they only ever
@@ -72,7 +76,10 @@ class SqliteHealthStore implements HealthStore {
         hrv INTEGER,
         spo2 INTEGER,
         temp REAL,
-        steps INTEGER
+        steps INTEGER,
+        resp_rate INTEGER,
+        active_kcal INTEGER,
+        stress INTEGER
       )
     ''');
     await db.execute('''
@@ -83,7 +90,8 @@ class SqliteHealthStore implements HealthStore {
         avg_hr INTEGER,
         avg_hrv INTEGER,
         min_spo2 INTEGER,
-        avg_temp REAL
+        avg_temp REAL,
+        avg_resp_rate REAL
       )
     ''');
     await db.execute('''
@@ -119,10 +127,19 @@ class SqliteHealthStore implements HealthStore {
   /// very old database still walks every version in between. v1->v2
   /// only ADDS a table — existing snapshots/sessions/watermark are
   /// never touched, see sqlite_health_store_test.dart for the proof.
+  /// v2->v3 only ADDS columns, defaulting to NULL for every existing
+  /// row — same "nothing breaks" guarantee.
   static Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createModeStateTable(db);
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE snapshots ADD COLUMN resp_rate INTEGER');
+      await db.execute('ALTER TABLE snapshots ADD COLUMN active_kcal INTEGER');
+      await db.execute('ALTER TABLE snapshots ADD COLUMN stress INTEGER');
+      await db.execute(
+          'ALTER TABLE sleep_sessions ADD COLUMN avg_resp_rate REAL');
     }
   }
 
@@ -142,6 +159,9 @@ class SqliteHealthStore implements HealthStore {
           'spo2': s.spo2Percent,
           'temp': s.skinTempCelsius,
           'steps': s.steps,
+          'resp_rate': s.respiratoryRateBrpm,
+          'active_kcal': s.activeEnergyKcal,
+          'stress': s.stressIndex,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -158,6 +178,9 @@ class SqliteHealthStore implements HealthStore {
         spo2Percent: r['spo2'] as int?,
         skinTempCelsius: (r['temp'] as num?)?.toDouble(),
         steps: r['steps'] as int?,
+        respiratoryRateBrpm: r['resp_rate'] as int?,
+        activeEnergyKcal: r['active_kcal'] as int?,
+        stressIndex: r['stress'] as int?,
       );
 
   @override
@@ -203,6 +226,7 @@ class SqliteHealthStore implements HealthStore {
           'avg_hrv': session.avgHrvMs,
           'min_spo2': session.minSpo2Percent,
           'avg_temp': session.avgSkinTempCelsius,
+          'avg_resp_rate': session.avgRespiratoryRateBrpm,
         });
 
         final batch = txn.batch();
@@ -252,6 +276,7 @@ class SqliteHealthStore implements HealthStore {
         avgHrvMs: r['avg_hrv'] as int?,
         minSpo2Percent: r['min_spo2'] as int?,
         avgSkinTempCelsius: (r['avg_temp'] as num?)?.toDouble(),
+        avgRespiratoryRateBrpm: (r['avg_resp_rate'] as num?)?.toDouble(),
       ));
     }
     return sessions;

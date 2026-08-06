@@ -31,6 +31,23 @@ class HealthSnapshot {
   /// Cumulative steps since midnight, ring-local.
   final int? steps;
 
+  /// Breaths per minute. Null is normal — not every vendor/health source
+  /// computes this.
+  final int? respiratoryRateBrpm;
+
+  /// Cumulative active (i.e. exercise/movement, not resting) energy
+  /// burned since midnight, ring-local, in kilocalories. Null is normal.
+  final int? activeEnergyKcal;
+
+  /// A 0-100 stress figure, HIGHER = more stressed. Only set when a
+  /// vendor or health source actually computes one — see
+  /// health_store_ring_adapter.dart's file-level note for why this
+  /// adapter always leaves it null rather than faking a value. HUX's own
+  /// derived stress estimate (from HRV depression) lives on
+  /// [DailyReadout], not here — this field is strictly "did the SOURCE
+  /// give us a number".
+  final int? stressIndex;
+
   const HealthSnapshot({
     required this.timestamp,
     this.heartRateBpm,
@@ -38,6 +55,9 @@ class HealthSnapshot {
     this.spo2Percent,
     this.skinTempCelsius,
     this.steps,
+    this.respiratoryRateBrpm,
+    this.activeEnergyKcal,
+    this.stressIndex,
   });
 
   Map<String, dynamic> toMap() => {
@@ -47,6 +67,9 @@ class HealthSnapshot {
         'spo2Percent': spo2Percent,
         'skinTempCelsius': skinTempCelsius,
         'steps': steps,
+        'respiratoryRateBrpm': respiratoryRateBrpm,
+        'activeEnergyKcal': activeEnergyKcal,
+        'stressIndex': stressIndex,
       };
 
   factory HealthSnapshot.fromMap(Map<String, dynamic> m) => HealthSnapshot(
@@ -56,6 +79,9 @@ class HealthSnapshot {
         spo2Percent: m['spo2Percent'] as int?,
         skinTempCelsius: (m['skinTempCelsius'] as num?)?.toDouble(),
         steps: m['steps'] as int?,
+        respiratoryRateBrpm: m['respiratoryRateBrpm'] as int?,
+        activeEnergyKcal: m['activeEnergyKcal'] as int?,
+        stressIndex: m['stressIndex'] as int?,
       );
 }
 
@@ -90,6 +116,10 @@ class SleepSession {
   final int? minSpo2Percent;
   final double? avgSkinTempCelsius;
 
+  /// Average breaths per minute across the night, vendor-computed. Null
+  /// is normal — not every source computes this.
+  final double? avgRespiratoryRateBrpm;
+
   const SleepSession({
     required this.bedtime,
     required this.wakeTime,
@@ -98,6 +128,7 @@ class SleepSession {
     this.avgHrvMs,
     this.minSpo2Percent,
     this.avgSkinTempCelsius,
+    this.avgRespiratoryRateBrpm,
   });
 
   Duration get totalTimeInBed => wakeTime.difference(bedtime);

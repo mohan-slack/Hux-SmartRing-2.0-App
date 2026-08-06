@@ -100,12 +100,16 @@ class _TrendsScreenState extends State<TrendsScreen> {
         displayStart.isBefore(baselineStart) ? displayStart : baselineStart;
 
     final sessions = await widget.store.sleepSessionsBetween(queryStart, now);
+    // Stress/active-calories are daytime figures with no baseline
+    // window of their own (see meaning_engine.dart) — only the display
+    // range is fetched, not the wider baseline window sessions use.
+    final snapshots = await widget.store.snapshotsBetween(displayStart, now);
     final baseline = PersonalBaseline.fromSleepSessions([
       for (final s in sessions)
         if (!s.bedtime.toUtc().isBefore(baselineStart)) s,
     ]);
-    final rows =
-        buildNightRows(from: displayStart, to: now, sessions: sessions);
+    final rows = buildNightRows(
+        from: displayStart, to: now, sessions: sessions, snapshots: snapshots);
 
     return _TrendsData(rows: rows, baseline: baseline);
   }
@@ -216,6 +220,9 @@ class _TrendsCharts extends StatelessWidget {
         _latestOf(rows, (r) => r.sleepDuration?.inMinutes.toDouble());
     final latestHrv = _latestOf(rows, (r) => r.avgHrvMs);
     final latestHr = _latestOf(rows, (r) => r.avgHeartRateBpm);
+    final latestRespRate = _latestOf(rows, (r) => r.avgRespiratoryRateBrpm);
+    final latestStress = _latestOf(rows, (r) => r.avgStressIndex);
+    final latestActiveKcal = _latestOf(rows, (r) => r.activeEnergyKcal);
 
     // The sleep delta chip, reference-style: latest night vs the
     // user's own baseline median — never a population number.
@@ -265,6 +272,44 @@ class _TrendsCharts extends StatelessWidget {
             hint: _minMaxHint(rows, (r) => r.avgHeartRateBpm, 'bpm'),
             child:
                 _MetricLineChart(rows: rows, valueOf: (r) => r.avgHeartRateBpm),
+          ),
+        ),
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(
+          index: 3,
+          child: _ChartCard(
+            title: 'Avg respiratory rate',
+            numeralValue: latestRespRate,
+            numeralFormat: (v) => v.round().toString(),
+            unit: 'brpm',
+            hint: _minMaxHint(rows, (r) => r.avgRespiratoryRateBrpm, 'brpm'),
+            child: _MetricLineChart(
+                rows: rows, valueOf: (r) => r.avgRespiratoryRateBrpm),
+          ),
+        ),
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(
+          index: 4,
+          child: _ChartCard(
+            title: 'Stress',
+            numeralValue: latestStress,
+            numeralFormat: (v) => v.round().toString(),
+            unit: '/100',
+            hint: _minMaxHint(rows, (r) => r.avgStressIndex, '/100'),
+            child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgStressIndex),
+          ),
+        ),
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(
+          index: 5,
+          child: _ChartCard(
+            title: 'Active calories',
+            numeralValue: latestActiveKcal,
+            numeralFormat: (v) => v.round().toString(),
+            unit: 'kcal',
+            hint: _minMaxHint(rows, (r) => r.activeEnergyKcal, 'kcal'),
+            child:
+                _MetricLineChart(rows: rows, valueOf: (r) => r.activeEnergyKcal),
           ),
         ),
       ],

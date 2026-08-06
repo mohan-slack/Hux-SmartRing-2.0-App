@@ -64,6 +64,8 @@ class HealthStoreRingAdapter implements RingAdapter {
         hk.HealthDataType.BLOOD_OXYGEN,
         hk.HealthDataType.STEPS,
         hk.HealthDataType.BODY_TEMPERATURE,
+        hk.HealthDataType.RESPIRATORY_RATE,
+        hk.HealthDataType.ACTIVE_ENERGY_BURNED,
         hk.HealthDataType.SLEEP_ASLEEP,
         hk.HealthDataType.SLEEP_AWAKE,
         hk.HealthDataType.SLEEP_DEEP,
@@ -176,14 +178,24 @@ class HealthStoreRingAdapter implements RingAdapter {
     final spo2Points = byType(hk.HealthDataType.BLOOD_OXYGEN);
     final stepPoints = byType(hk.HealthDataType.STEPS);
     final tempPoints = byType(hk.HealthDataType.BODY_TEMPERATURE);
+    final respRatePoints = byType(hk.HealthDataType.RESPIRATORY_RATE);
+    final activeEnergyPoints = byType(hk.HealthDataType.ACTIVE_ENERGY_BURNED);
     final sleepPoints = points.where((p) => _sleepTypes.contains(p.type)).toList();
 
+    // NOTE: no mapStress call here, and HealthSnapshot.stressIndex is
+    // left at its default null for every mapped snapshot — neither
+    // Apple Health nor Health Connect gives this dev adapter an honest
+    // stress reading, and fabricating one would violate the DEMO/DEV
+    // banner's promise that this data is real. HUX's own derived stress
+    // (from HRV depression) is computed in MeaningEngine instead.
     final snapshots = mergeSnapshots([
       mapHrSamples(hrPoints),
       mapHrvSamples(hrvPoints),
       mapSpo2(spo2Points),
       mapSteps(stepPoints),
       mapBodyTemp(tempPoints),
+      mapRespiratoryRate(respRatePoints),
+      mapActiveEnergy(activeEnergyPoints),
     ]);
 
     final mappedSessions = mapSleepSessions(
@@ -192,6 +204,7 @@ class HealthStoreRingAdapter implements RingAdapter {
       hrvPoints: hrvPoints,
       spo2Points: spo2Points,
       tempPoints: tempPoints,
+      respRatePoints: respRatePoints,
     );
 
     for (final mapped in mappedSessions) {

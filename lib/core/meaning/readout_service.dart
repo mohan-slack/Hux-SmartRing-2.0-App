@@ -103,6 +103,8 @@ class ReadoutService {
       meaning: readout.meaning,
       actions: actions,
       dataQuality: readout.dataQuality,
+      stressIndex: readout.stressIndex,
+      activeEnergyKcal: readout.activeEnergyKcal,
     );
   }
 

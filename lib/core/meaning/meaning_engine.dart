@@ -57,11 +57,28 @@ class MeaningEngine {
   /// only — never treated as a medical reading.
   static const tempFlagDeltaC = 0.5;
 
+  // ---- Respiratory-rate signal: SECONDARY, DOWNWARD-ONLY -------------
+  /// Overnight breaths-per-minute more than this far ABOVE the user's
+  /// own baseline nudges the score down one step. Mirrors [_scoreTemp]:
+  /// a flag, not a primary driver — it can never raise the score (see
+  /// [_scoreRespRate]).
+  static const respRateFlagDeltaBrpm = 2.0;
+
   // ---- Signal weights (how much each moves the combined score) -------
   static const hrvWeight = 2;
   static const sleepWeight = 2;
   static const hrWeight = 1;
   static const tempWeight = 1;
+  static const respRateWeight = 1;
+
+  // ---- Derived stress (DISPLAY ONLY, never scored) --------------------
+  /// HRV depressed this fraction or more below the user's own baseline
+  /// reads as maximum (100) daytime stress; 0 fraction (HRV at or above
+  /// baseline) reads as 0. Linear in between. This number is NEVER
+  /// added to the recovery-score total — HRV already drives that via
+  /// [hrvWeight]; folding a stress figure computed FROM the same HRV
+  /// data back into the score would double-count one signal.
+  static const stressHrvDepressionCeilingPct = 0.40;
 
   // ---- Combined-score cutoffs for the overall RecoveryState -----------
   static const rechargedThreshold = 3;
@@ -91,17 +108,25 @@ class MeaningEngine {
       return DailyReadout.learning(date, daysOfData: baseline.daysOfData);
     }
 
+    // Display-only figures, computed regardless of whether last night's
+    // sleep signals below are usable — a night with no usable sleep
+    // data doesn't mean today's daytime snapshots are unusable too.
+    final stressIndex = _deriveStress(baseline, todaySnapshots);
+    final activeEnergyKcal = _todayActiveEnergyKcal(todaySnapshots);
+
     final hrvScore = _scoreHrv(baseline, lastNight);
     final sleepScore = _scoreSleep(baseline, lastNight);
     final hrScore = _scoreRestingHr(baseline, lastNight);
     final tempScore = _scoreTemp(baseline, lastNight);
+    final respRateScore = _scoreRespRate(baseline, lastNight);
 
     final considered = [hrvScore, sleepScore, hrScore, tempScore]
         .where((s) => s != null)
         .length;
 
     if (considered == 0) {
-      return DailyReadout.noSignal(date);
+      return DailyReadout.noSignal(date,
+          stressIndex: stressIndex, activeEnergyKcal: activeEnergyKcal);
     }
 
     var total = 0;
@@ -109,6 +134,14 @@ class MeaningEngine {
     if (sleepScore != null) total += sleepScore * sleepWeight;
     if (hrScore != null) total += hrScore * hrWeight;
     if (tempScore != null) total += tempScore * tempWeight;
+    // respRateScore is only ever 0 or -1 (see _scoreRespRate) — a
+    // downward nudge only, never a reason the total goes up. Left OUT
+    // of `considered`/dataQuality on purpose: that count feeds the
+    // "full" data-quality cutoff below, and respiratory data is newer/
+    // rarer than the other four signals — counting it would mean a
+    // night WITH respiratory data needs 5/5 for `full` instead of 4/4,
+    // so having MORE data would perversely read as LOWER quality.
+    if (respRateScore != null) total += respRateScore * respRateWeight;
 
     final state = _stateFromTotal(total);
     final quality = considered == 4
@@ -121,6 +154,7 @@ class MeaningEngine {
         sleepScore: sleepScore,
         hrScore: hrScore,
         tempScore: tempScore,
+        respRateScore: respRateScore,
         wording: SleepWording(nightShiftActive: nightShiftActive),
         excludeDaytimeFood: excludeDaytimeFood);
 
@@ -131,6 +165,8 @@ class MeaningEngine {
       meaning: composed.meaning,
       actions: composed.actions,
       dataQuality: quality,
+      stressIndex: stressIndex,
+      activeEnergyKcal: activeEnergyKcal,
     );
   }
 
@@ -196,6 +232,56 @@ class MeaningEngine {
     return delta > tempFlagDeltaC ? -1 : 0;
   }
 
+  /// SECONDARY, DOWNWARD-ONLY: only ever returns 0 or -1, never +1 — a
+  /// breathing rate well BELOW baseline is not a signal this engine
+  /// reads as "better than usual", so there is nothing to reward.
+  int? _scoreRespRate(PersonalBaseline baseline, SleepSession? lastNight) {
+    final base = baseline.medianRespiratoryRateBrpm;
+    final last = lastNight?.avgRespiratoryRateBrpm;
+    if (base == null || last == null) return null;
+    final delta = last - base; // positive = elevated
+    return delta > respRateFlagDeltaBrpm ? -1 : 0;
+  }
+
+  /// 0-100, HIGHER = more stressed, DISPLAY ONLY (see the class-level
+  /// comment on [stressHrvDepressionCeilingPct] for why this never
+  /// feeds the recovery score). Prefers a vendor/health-source-provided
+  /// [HealthSnapshot.stressIndex] when today has any; otherwise derives
+  /// one from how far today's average HRV sits below the user's own
+  /// baseline HRV. Null when neither is available.
+  int? _deriveStress(
+      PersonalBaseline baseline, List<HealthSnapshot> todaySnapshots) {
+    final vendorReadings =
+        todaySnapshots.map((s) => s.stressIndex).whereType<int>().toList();
+    if (vendorReadings.isNotEmpty) {
+      final avg = vendorReadings.reduce((a, b) => a + b) / vendorReadings.length;
+      return avg.round().clamp(0, 100);
+    }
+
+    final baseHrv = baseline.medianHrvMs;
+    if (baseHrv == null || baseHrv == 0) return null;
+    final todayHrv =
+        todaySnapshots.map((s) => s.hrvMs).whereType<int>().toList();
+    if (todayHrv.isEmpty) return null;
+
+    final avgHrv = todayHrv.reduce((a, b) => a + b) / todayHrv.length;
+    final depression = (baseHrv - avgHrv) / baseHrv; // positive = below baseline
+    final normalized =
+        (depression / stressHrvDepressionCeilingPct).clamp(0.0, 1.0);
+    return (normalized * 100).round();
+  }
+
+  /// Today's cumulative active-calorie total — the latest non-null
+  /// [HealthSnapshot.activeEnergyKcal] (cumulative-since-midnight, same
+  /// shape as `steps`), not a sum across snapshots. Null when today has
+  /// no active-energy readings yet.
+  int? _todayActiveEnergyKcal(List<HealthSnapshot> todaySnapshots) {
+    for (final s in todaySnapshots.reversed) {
+      if (s.activeEnergyKcal != null) return s.activeEnergyKcal;
+    }
+    return null;
+  }
+
   RecoveryState _stateFromTotal(int total) {
     if (total >= rechargedThreshold) return RecoveryState.recharged;
     if (total >= steadyThreshold) return RecoveryState.steady;
@@ -216,6 +302,7 @@ class MeaningEngine {
     required int? sleepScore,
     required int? hrScore,
     required int? tempScore,
+    required int? respRateScore,
     required SleepWording wording,
     required bool excludeDaytimeFood,
   }) {
@@ -280,6 +367,12 @@ class MeaningEngine {
           actions.add(tempAction);
         }
       }
+    }
+
+    if (respRateScore != null && respRateScore < 0) {
+      meaning += ' Your breathing rate ran higher than your usual '
+          '${wording.duringLastSleep} — your body is working a little '
+          'harder than usual.';
     }
 
     return _Composed(headline: headline, meaning: meaning, actions: actions);

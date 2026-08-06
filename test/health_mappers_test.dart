@@ -167,6 +167,72 @@ void main() {
     });
   });
 
+  group('mapRespiratoryRate', () {
+    test('buckets onto respiratoryRateBrpm, leaving other fields null', () {
+      final snapshots = mapRespiratoryRate([
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: DateTime(2026, 7, 16, 2, 0),
+            value: 14),
+      ]);
+
+      expect(snapshots.single.respiratoryRateBrpm, 14);
+      expect(snapshots.single.heartRateBpm, isNull);
+    });
+
+    test('multiple readings in the same bucket are averaged', () {
+      final snapshots = mapRespiratoryRate([
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: DateTime(2026, 7, 16, 2, 1),
+            value: 14),
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: DateTime(2026, 7, 16, 2, 5),
+            value: 16),
+      ]);
+
+      expect(snapshots.single.respiratoryRateBrpm, 15);
+    });
+  });
+
+  group('mapActiveEnergy', () {
+    test('accumulates cumulatively across a day\'s buckets, in order', () {
+      final day = DateTime(2026, 7, 16);
+      final snapshots = mapActiveEnergy([
+        point(
+            type: hk.HealthDataType.ACTIVE_ENERGY_BURNED,
+            from: day.add(const Duration(hours: 8)),
+            value: 50),
+        point(
+            type: hk.HealthDataType.ACTIVE_ENERGY_BURNED,
+            from: day.add(const Duration(hours: 9)),
+            value: 30),
+      ]);
+
+      expect(snapshots, hasLength(2));
+      expect(snapshots[0].activeEnergyKcal, 50);
+      expect(snapshots[1].activeEnergyKcal, 80); // 50 + 30
+    });
+
+    test('resets at each calendar-day boundary rather than carrying over',
+        () {
+      final day1 = DateTime(2026, 7, 16, 22);
+      final day2 = DateTime(2026, 7, 17, 1);
+      final snapshots = mapActiveEnergy([
+        point(
+            type: hk.HealthDataType.ACTIVE_ENERGY_BURNED, from: day1, value: 200),
+        point(
+            type: hk.HealthDataType.ACTIVE_ENERGY_BURNED, from: day2, value: 10),
+      ]);
+
+      expect(snapshots, hasLength(2));
+      expect(snapshots[0].activeEnergyKcal, 200);
+      expect(snapshots[1].activeEnergyKcal, 10,
+          reason: 'day 2 must not inherit day 1\'s total');
+    });
+  });
+
   group('mergeSnapshots', () {
     test('combines per-metric snapshots that share a bucket', () {
       final bucket = DateTime(2026, 7, 16, 8, 0);
@@ -198,6 +264,20 @@ void main() {
     test('empty input produces no snapshots', () {
       expect(mergeSnapshots([]), isEmpty);
       expect(mergeSnapshots([[], []]), isEmpty);
+    });
+
+    test('merges respiratory rate and active energy alongside the rest', () {
+      final bucket = DateTime(2026, 7, 16, 8, 0);
+      final resp = [HealthSnapshot(timestamp: bucket, respiratoryRateBrpm: 15)];
+      final kcal = [HealthSnapshot(timestamp: bucket, activeEnergyKcal: 120)];
+
+      final merged = mergeSnapshots([resp, kcal]);
+
+      expect(merged, hasLength(1));
+      expect(merged.single.respiratoryRateBrpm, 15);
+      expect(merged.single.activeEnergyKcal, 120);
+      expect(merged.single.stressIndex, isNull,
+          reason: 'no mapper ever produces stressIndex from health-store data');
     });
   });
 
@@ -468,6 +548,34 @@ void main() {
       expect(result.single.session.avgHrvMs, isNull);
       expect(result.single.session.minSpo2Percent, isNull);
       expect(result.single.session.avgSkinTempCelsius, isNull);
+      expect(result.single.session.avgRespiratoryRateBrpm, isNull);
+    });
+
+    test('avgRespiratoryRateBrpm averages only points inside the sleep '
+        'window, same rule as the other averages', () {
+      final bedtime = DateTime(2026, 7, 15, 23, 0);
+      final wakeTime = bedtime.add(const Duration(hours: 7));
+      final sleepPoints = [
+        point(type: hk.HealthDataType.SLEEP_LIGHT, from: bedtime, to: wakeTime),
+      ];
+      final respRatePoints = [
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: bedtime.add(const Duration(hours: 1)),
+            value: 12), // inside
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: bedtime.add(const Duration(hours: 2)),
+            value: 14), // inside
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: wakeTime.add(const Duration(hours: 1)),
+            value: 20), // after wake — must be excluded
+      ];
+
+      final result = mapSleepSessions(sleepPoints, respRatePoints: respRatePoints);
+
+      expect(result.single.session.avgRespiratoryRateBrpm, 13); // (12+14)/2
     });
   });
 }

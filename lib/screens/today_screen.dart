@@ -286,14 +286,23 @@ class _ReadoutBody extends StatelessWidget {
           index: 2,
           child: _DataQualityCaption(quality: readout.dataQuality),
         ),
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(
+          index: 3,
+          child: _TodayVitalsRow(
+            stressIndex: readout.stressIndex,
+            respiratoryRateBrpm: lastNight?.avgRespiratoryRateBrpm,
+            activeEnergyKcal: readout.activeEnergyKcal,
+          ),
+        ),
         if (modeStrip != null) ...[
           const SizedBox(height: HuxSpacing.lg),
-          HuxEntrance(index: 3, child: _ModeStripCard(strip: modeStrip!)),
+          HuxEntrance(index: 4, child: _ModeStripCard(strip: modeStrip!)),
         ],
         if (lastNight != null) ...[
           const Divider(height: HuxSpacing.xxl),
           HuxEntrance(
-            index: 4,
+            index: 5,
             child: _LastNightStats(
               session: lastNight!,
               sectionLabel:
@@ -303,6 +312,132 @@ class _ReadoutBody extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Today's three table-stakes daytime vitals — stress, overnight
+/// respiratory rate, and active calories — as small faux-glass tiles
+/// (never a new frosted hero panel, per the GPU budget). Always renders
+/// all three, with a graceful em-dash for whichever aren't available
+/// yet, rather than hiding a tile (which would read as "0").
+class _TodayVitalsRow extends StatelessWidget {
+  final int? stressIndex;
+  final double? respiratoryRateBrpm;
+  final int? activeEnergyKcal;
+
+  /// Stress at or below this reads as "Calm", above as "Elevated" — a
+  /// plain-language qualifier alongside the number, not a new score.
+  static const _stressElevatedThreshold = 50;
+
+  const _TodayVitalsRow({
+    required this.stressIndex,
+    required this.respiratoryRateBrpm,
+    required this.activeEnergyKcal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final stressQualifier = stressIndex == null
+        ? null
+        : (stressIndex! > _stressElevatedThreshold ? 'Elevated' : 'Calm');
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tileWidth = (constraints.maxWidth - HuxSpacing.sm * 2) / 3;
+        return Wrap(
+          spacing: HuxSpacing.sm,
+          runSpacing: HuxSpacing.sm,
+          children: [
+            SizedBox(
+              width: tileWidth,
+              child: _DisplayStatTile(
+                label: 'Stress',
+                value: stressIndex?.toDouble(),
+                format: (v) => v.round().toString(),
+                unit: '/100',
+                qualifier: stressQualifier,
+              ),
+            ),
+            SizedBox(
+              width: tileWidth,
+              child: _DisplayStatTile(
+                label: 'Resp. rate',
+                value: respiratoryRateBrpm,
+                format: (v) => v.round().toString(),
+                unit: 'brpm',
+              ),
+            ),
+            SizedBox(
+              width: tileWidth,
+              child: _DisplayStatTile(
+                label: 'Active cal',
+                value: activeEnergyKcal?.toDouble(),
+                format: (v) => v.round().toString(),
+                unit: 'kcal',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Like [_StatTile], but for values that may not exist yet: renders a
+/// plain em-dash instead of a counting numeral when [value] is null,
+/// so an unavailable metric reads as "no reading", never as "0".
+class _DisplayStatTile extends StatelessWidget {
+  final String label;
+  final double? value;
+  final String Function(double) format;
+  final String unit;
+  final String? qualifier;
+
+  const _DisplayStatTile({
+    required this.label,
+    required this.value,
+    required this.format,
+    required this.unit,
+    this.qualifier,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final numeralStyle = textTheme.titleLarge?.copyWith(
+      fontSize: HuxType.numeral,
+      fontWeight: FontWeight.w700,
+    );
+
+    return GlassPanel(
+      padding: const EdgeInsets.all(HuxSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: textTheme.bodySmall),
+          const SizedBox(height: HuxSpacing.xs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (value == null)
+                Text('—', style: numeralStyle)
+              else ...[
+                HuxCountUp(value: value!, format: format, style: numeralStyle),
+                Padding(
+                  padding: const EdgeInsets.only(
+                      left: HuxSpacing.xs, bottom: HuxSpacing.xs / 2),
+                  child: Text(unit, style: textTheme.bodySmall),
+                ),
+              ],
+            ],
+          ),
+          if (qualifier != null) ...[
+            const SizedBox(height: HuxSpacing.xs / 2),
+            Text(qualifier!, style: textTheme.bodySmall),
+          ],
+        ],
+      ),
     );
   }
 }

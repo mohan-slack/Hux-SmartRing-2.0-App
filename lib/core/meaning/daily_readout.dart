@@ -31,6 +31,16 @@ class DailyReadout {
 
   final DataQuality dataQuality;
 
+  /// A 0-100 daytime stress figure, HIGHER = more stressed, DISPLAY ONLY
+  /// — see meaning_engine.dart for why this never feeds the recovery
+  /// score. Null when there isn't enough today-data to derive it.
+  final int? stressIndex;
+
+  /// Today's cumulative active-calorie total, DISPLAY ONLY, same
+  /// display-not-scored treatment as [stressIndex]. Null when today has
+  /// no active-energy readings yet.
+  final int? activeEnergyKcal;
+
   const DailyReadout({
     required this.date,
     required this.state,
@@ -38,6 +48,8 @@ class DailyReadout {
     required this.meaning,
     required this.actions,
     required this.dataQuality,
+    this.stressIndex,
+    this.activeEnergyKcal,
   });
 
   /// The "still learning your body" readout shown while the baseline
@@ -61,7 +73,13 @@ class DailyReadout {
   /// usable (no session, or every reading in it was null) and there are
   /// no snapshots to fall back on. Distinct from [learning]: the body is
   /// known, last night just didn't come through.
-  factory DailyReadout.noSignal(DateTime date) => DailyReadout(
+  ///
+  /// [stressIndex]/[activeEnergyKcal] are still accepted here: a night
+  /// with no usable sleep data doesn't mean today's daytime snapshots
+  /// (which these are derived from) are unusable too.
+  factory DailyReadout.noSignal(DateTime date,
+          {int? stressIndex, int? activeEnergyKcal}) =>
+      DailyReadout(
         date: date,
         state: RecoveryState.learning,
         headline: 'No readings from last night',
@@ -73,5 +91,7 @@ class DailyReadout {
           'Open the app after your next sync to catch up',
         ],
         dataQuality: DataQuality.sparse,
+        stressIndex: stressIndex,
+        activeEnergyKcal: activeEnergyKcal,
       );
 }

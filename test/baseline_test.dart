@@ -10,6 +10,7 @@ SleepSession _session({
   int? avgHrv,
   int? avgHr,
   double? avgTemp,
+  double? avgRespRate,
 }) {
   final wake = bedtime.add(totalSleep);
   return SleepSession(
@@ -21,6 +22,7 @@ SleepSession _session({
     avgHeartRateBpm: avgHr,
     avgHrvMs: avgHrv,
     avgSkinTempCelsius: avgTemp,
+    avgRespiratoryRateBrpm: avgRespRate,
   );
 }
 
@@ -36,6 +38,7 @@ void main() {
           avgHrv: n, // 1..14
           avgHr: 100 - n, // 99..86
           avgTemp: 36.0 + n * 0.1, // 36.1..37.4
+          avgRespRate: 10.0 + n, // 11..24
         );
       });
 
@@ -47,6 +50,7 @@ void main() {
       expect(baseline.medianRestingHeartRateBpm, 92.5);
       expect(baseline.medianTotalSleep, const Duration(minutes: 375));
       expect(baseline.medianSkinTempCelsius, closeTo(36.75, 0.0001));
+      expect(baseline.medianRespiratoryRateBrpm, 17.5);
     });
 
     test('fewer than 3 days is insufficient', () {
@@ -93,6 +97,38 @@ void main() {
       expect(baseline.insufficient, isTrue);
       expect(baseline.medianHrvMs, isNull);
       expect(baseline.medianTotalSleep, isNull);
+      expect(baseline.medianRespiratoryRateBrpm, isNull);
+    });
+
+    test('a null avgRespiratoryRateBrpm in some nights does not spoil '
+        'other medians, and is itself null-tolerant', () {
+      final base = DateTime.utc(2026, 7, 1, 23);
+      final sessions = [
+        _session(
+            bedtime: base,
+            totalSleep: const Duration(hours: 7),
+            avgHrv: 50,
+            avgHr: 60,
+            avgRespRate: null), // ring failed to compute this night
+        _session(
+            bedtime: base.add(const Duration(days: 1)),
+            totalSleep: const Duration(hours: 7),
+            avgHrv: 50,
+            avgHr: 60,
+            avgRespRate: 14),
+        _session(
+            bedtime: base.add(const Duration(days: 2)),
+            totalSleep: const Duration(hours: 7),
+            avgHrv: 50,
+            avgHr: 60,
+            avgRespRate: 16),
+      ];
+
+      final baseline = PersonalBaseline.fromSleepSessions(sessions);
+
+      expect(baseline.daysOfData, 3);
+      expect(baseline.medianRespiratoryRateBrpm, 15); // only the two non-null nights
+      expect(baseline.medianHrvMs, 50, reason: 'unrelated median must not be spoiled');
     });
 
     test('a null vendor field in some nights does not spoil other medians',

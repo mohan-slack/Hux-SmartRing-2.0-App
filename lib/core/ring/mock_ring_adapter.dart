@@ -158,6 +158,23 @@ class MockRingAdapter implements RingAdapter {
     );
   }
 
+  /// Typical resting breathing rate while awake — the reference point
+  /// [_snapshotAt] dips down from overnight and [_generateNight] builds
+  /// its average around.
+  static const _baselineRespRateBrpm = 15;
+
+  /// Kilocalories of ACTIVE energy per step — a rough, plausible
+  /// conversion (not a clinical constant) so [activeEnergyKcal] rises
+  /// and falls in lockstep with the existing [steps] model rather than
+  /// being generated independently.
+  static const _kcalPerStep = 0.045;
+
+  /// How many stress points a 1ms swing in HRV away from this wearer's
+  /// baseline is worth — stress runs the OPPOSITE way from HRV (higher
+  /// stress when HRV is depressed below baseline), centered on 50 when
+  /// HRV sits exactly at baseline.
+  static const _stressPointsPerHrvMs = 1.5;
+
   /// Heart rate follows a daily rhythm: lowest ~4am, peaks in the
   /// afternoon, small random walk on top.
   HealthSnapshot _snapshotAt(DateTime t) {
@@ -183,11 +200,21 @@ class MockRingAdapter implements RingAdapter {
         circadian * 0.15 +
         (_rng.nextDouble() - 0.5) * 0.2;
 
+    // Breathing slows a little during sleep, same shape as the HR dip.
+    final respRate =
+        _baselineRespRateBrpm + (asleep ? -2 : 1) + _rng.nextInt(3) - 1;
+
     // Steps accumulate through waking hours only.
     final dayProgress = ((hourFrac - 7) / 15).clamp(0.0, 1.0);
     final steps = asleep && hourFrac < 7
         ? 0
         : (8500 * dayProgress * (0.85 + _rng.nextDouble() * 0.3)).round();
+    final activeEnergyKcal = (steps * _kcalPerStep).round();
+
+    // Stress runs opposite to HRV — depressed HRV (below this wearer's
+    // baseline) reads as more stressed, centered on 50 at baseline.
+    final stress =
+        (50 - (hrv - baselineHrvMs) * _stressPointsPerHrvMs).round();
 
     return HealthSnapshot(
       timestamp: t,
@@ -196,6 +223,9 @@ class MockRingAdapter implements RingAdapter {
       spo2Percent: asleep ? 94 + _rng.nextInt(5) : 96 + _rng.nextInt(4),
       skinTempCelsius: double.parse(temp.toStringAsFixed(2)),
       steps: steps,
+      respiratoryRateBrpm: respRate.clamp(12, 20),
+      activeEnergyKcal: activeEnergyKcal,
+      stressIndex: stress.clamp(0, 100),
     );
   }
 
@@ -248,6 +278,10 @@ class MockRingAdapter implements RingAdapter {
       minSpo2Percent: 92 + _rng.nextInt(4),
       avgSkinTempCelsius:
           double.parse((baselineTempC + 0.4).toStringAsFixed(2)),
+      // Same nocturnal dip _snapshotAt applies while asleep, consistent
+      // with the night's own segments rather than an independent draw.
+      avgRespiratoryRateBrpm: (_baselineRespRateBrpm - 2 + _rng.nextInt(3))
+          .toDouble(),
     );
   }
 

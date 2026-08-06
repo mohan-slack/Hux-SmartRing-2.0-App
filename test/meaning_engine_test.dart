@@ -44,11 +44,23 @@ void main() {
     daysOfData: 14,
   );
 
+  // Same as [baseline] but with a respiratory-rate median too, for the
+  // tests that exercise that signal specifically.
+  const baselineWithRespRate = PersonalBaseline(
+    medianHrvMs: 50,
+    medianRestingHeartRateBpm: 60,
+    medianTotalSleep: Duration(minutes: 420),
+    medianSkinTempCelsius: 33.6,
+    medianRespiratoryRateBrpm: 15,
+    daysOfData: 14,
+  );
+
   SleepSession night({
     required List<MapEntry<SleepStage, Duration>> stagePlan,
     int? avgHrv,
     int? avgHr,
     double? avgTemp,
+    double? avgRespRate,
   }) {
     final bedtime = DateTime(2026, 7, 15, 23);
     var cursor = bedtime;
@@ -65,8 +77,25 @@ void main() {
       avgHrvMs: avgHrv,
       avgHeartRateBpm: avgHr,
       avgSkinTempCelsius: avgTemp,
+      avgRespiratoryRateBrpm: avgRespRate,
     );
   }
+
+  // A night that lands exactly on [baseline]/[baselineWithRespRate] for
+  // every signal — HRV, sleep duration, HR, temp — so the combined score
+  // is exactly 0 (steady) and any change in the test is attributable to
+  // whichever signal the test varies, never a side effect of the others.
+  SleepSession onBaselineNight({double? avgRespRate}) => night(
+        stagePlan: [
+          const MapEntry(SleepStage.light, Duration(minutes: 250)),
+          const MapEntry(SleepStage.deep, Duration(minutes: 100)),
+          const MapEntry(SleepStage.rem, Duration(minutes: 70)),
+        ], // 420 min, matches baseline exactly; deep is well over 10%
+        avgHrv: 50,
+        avgHr: 60,
+        avgTemp: 33.6,
+        avgRespRate: avgRespRate,
+      );
 
   group('Insufficient baseline', () {
     test('fewer than 3 days of history returns the learning state', () {
@@ -409,6 +438,171 @@ void main() {
       expect(readout.actions.any((a) => a.contains('afternoon chai')), isFalse);
       expect(readout.actions, isNotEmpty,
           reason: 'filtering must not empty the actions out entirely');
+    });
+  });
+
+  group('Respiratory-rate flag (secondary, downward-only)', () {
+    test('on-baseline breathing rate has no effect — stays steady', () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baselineWithRespRate,
+        lastNight: onBaselineNight(avgRespRate: 15), // exactly at baseline
+        todaySnapshots: const [],
+      );
+
+      expect(readout.state, RecoveryState.steady);
+      expect(readout.meaning.toLowerCase().contains('breathing'), isFalse);
+      _expectNoMedicalLanguage(readout);
+    });
+
+    test('breathing rate more than 2.0 brpm above baseline nudges the '
+        'score down (steady -> stretched) and adds a wellness sentence',
+        () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baselineWithRespRate,
+        lastNight: onBaselineNight(avgRespRate: 18), // +3 vs baseline 15
+        todaySnapshots: const [],
+      );
+
+      expect(readout.state, RecoveryState.stretched,
+          reason: 'every other signal is on-baseline; only the elevated '
+              'respiratory rate should move the state');
+      expect(readout.meaning.toLowerCase().contains('breathing rate'), isTrue);
+      _expectNoMedicalLanguage(readout);
+    });
+
+    test('a breathing rate well BELOW baseline never raises the score — '
+        'state stays steady, never recharged', () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baselineWithRespRate,
+        lastNight: onBaselineNight(avgRespRate: 10), // -5 vs baseline 15
+        todaySnapshots: const [],
+      );
+
+      expect(readout.state, RecoveryState.steady,
+          reason: '_scoreRespRate must only ever return 0 or -1, never +1');
+    });
+
+    test('no baseline median (newer signal, most nights) is simply not '
+        'scored — no crash, no effect', () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baseline, // no medianRespiratoryRateBrpm
+        lastNight: onBaselineNight(avgRespRate: 30), // would flag if scored
+        todaySnapshots: const [],
+      );
+
+      expect(readout.state, RecoveryState.steady);
+    });
+  });
+
+  group('Derived stress and active calories (display only, never scored)',
+      () {
+    test('recovery score/state is IDENTICAL whether or not today has '
+        'stress/active-calorie inputs — proves no double-counting', () {
+      final lastNight = onBaselineNight();
+
+      final withoutDaytimeData = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: lastNight,
+        todaySnapshots: const [],
+      );
+
+      final withDaytimeData = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: lastNight,
+        todaySnapshots: [
+          HealthSnapshot(
+            timestamp: DateTime(2026, 7, 16, 10),
+            hrvMs: 20, // heavily depressed vs baseline 50
+            activeEnergyKcal: 500,
+          ),
+        ],
+      );
+
+      expect(withDaytimeData.state, withoutDaytimeData.state,
+          reason: 'stress/calories must never move the recovery score');
+      expect(withDaytimeData.headline, withoutDaytimeData.headline);
+      expect(withDaytimeData.dataQuality, withoutDaytimeData.dataQuality);
+
+      // The display values themselves DO reflect the daytime data —
+      // they're just not fed back into the score above.
+      expect(withoutDaytimeData.stressIndex, isNull);
+      expect(withDaytimeData.stressIndex, isNotNull);
+      expect(withoutDaytimeData.activeEnergyKcal, isNull);
+      expect(withDaytimeData.activeEnergyKcal, 500);
+    });
+
+    test('stress derivation is deterministic — same inputs, same output',
+        () {
+      final todaySnapshots = [
+        HealthSnapshot(timestamp: DateTime(2026, 7, 16, 9), hrvMs: 40),
+        HealthSnapshot(timestamp: DateTime(2026, 7, 16, 12), hrvMs: 30),
+      ];
+
+      final first = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: onBaselineNight(),
+        todaySnapshots: todaySnapshots,
+      );
+      final second = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: onBaselineNight(),
+        todaySnapshots: todaySnapshots,
+      );
+
+      expect(first.stressIndex, isNotNull);
+      expect(second.stressIndex, first.stressIndex);
+    });
+
+    test('a vendor/health-source stressIndex on today\'s snapshots is '
+        'passed through rather than re-derived from HRV', () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: onBaselineNight(),
+        todaySnapshots: [
+          HealthSnapshot(timestamp: DateTime(2026, 7, 16, 9), stressIndex: 77),
+        ],
+      );
+
+      expect(readout.stressIndex, 77);
+    });
+
+    test('today\'s active-calorie total is the latest cumulative reading, '
+        'not a sum across snapshots', () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: onBaselineNight(),
+        todaySnapshots: [
+          HealthSnapshot(
+              timestamp: DateTime(2026, 7, 16, 9), activeEnergyKcal: 100),
+          HealthSnapshot(
+              timestamp: DateTime(2026, 7, 16, 15), activeEnergyKcal: 340),
+        ],
+      );
+
+      expect(readout.activeEnergyKcal, 340);
+    });
+
+    test('no daytime data at all leaves both display values null, never '
+        'zero', () {
+      final readout = engine.evaluate(
+        date: today,
+        baseline: baseline,
+        lastNight: onBaselineNight(),
+        todaySnapshots: const [],
+      );
+
+      expect(readout.stressIndex, isNull);
+      expect(readout.activeEnergyKcal, isNull);
     });
   });
 

@@ -97,13 +97,24 @@ List<HealthSnapshot> mapBodyTemp(List<hk.HealthDataPoint> points) => _bucketNume
           timestamp: bucket, skinTempCelsius: double.parse(avg.toStringAsFixed(2))),
     );
 
-/// Unlike HR/HRV/SpO2 (point-in-time readings), the ring model's
-/// `steps` is CUMULATIVE SINCE MIDNIGHT, ring-local (see
-/// ring_models.dart) — not the raw per-interval count HealthKit/Health
-/// Connect report. This buckets onto the 10-minute grid per calendar
-/// day (so cumulative totals reset at each day boundary) THEN runs a
-/// cumulative sum across that day's buckets in order.
-List<HealthSnapshot> mapSteps(List<hk.HealthDataPoint> points) {
+/// A point-in-time reading, bucketed and averaged the same way as HR —
+/// unlike steps/active-energy, breaths-per-minute is a rate, not
+/// something that accumulates over the day.
+List<HealthSnapshot> mapRespiratoryRate(List<hk.HealthDataPoint> points) =>
+    _bucketNumeric(points,
+        (bucket, avg) => HealthSnapshot(timestamp: bucket, respiratoryRateBrpm: avg.round()));
+
+/// Unlike HR/HRV/SpO2/respiratory-rate (point-in-time readings), the
+/// ring model's `steps` and `activeEnergyKcal` are CUMULATIVE SINCE
+/// MIDNIGHT, ring-local (see ring_models.dart) — not the raw
+/// per-interval amount HealthKit/Health Connect report. This buckets
+/// onto the 10-minute grid per calendar day (so cumulative totals reset
+/// at each day boundary) THEN runs a cumulative sum across that day's
+/// buckets in order.
+List<HealthSnapshot> _bucketCumulativePerDay(
+  List<hk.HealthDataPoint> points,
+  HealthSnapshot Function(DateTime bucket, double cumulative) build,
+) {
   final byDay = <DateTime, Map<DateTime, double>>{};
   for (final point in points) {
     final value = _numericValue(point);
@@ -120,12 +131,22 @@ List<HealthSnapshot> mapSteps(List<hk.HealthDataPoint> points) {
     var running = 0.0;
     for (final bucket in sortedBuckets) {
       running += buckets[bucket]!;
-      result.add(HealthSnapshot(timestamp: bucket, steps: running.round()));
+      result.add(build(bucket, running));
     }
   }
   result.sort((a, b) => a.timestamp.compareTo(b.timestamp));
   return result;
 }
+
+List<HealthSnapshot> mapSteps(List<hk.HealthDataPoint> points) =>
+    _bucketCumulativePerDay(points,
+        (bucket, running) => HealthSnapshot(timestamp: bucket, steps: running.round()));
+
+List<HealthSnapshot> mapActiveEnergy(List<hk.HealthDataPoint> points) =>
+    _bucketCumulativePerDay(
+        points,
+        (bucket, running) =>
+            HealthSnapshot(timestamp: bucket, activeEnergyKcal: running.round()));
 
 /// Combines the separate per-metric snapshot lists (each produced by
 /// exactly one of the mapXxx functions above, each with only ITS OWN
@@ -150,6 +171,10 @@ List<HealthSnapshot> mergeSnapshots(List<List<HealthSnapshot>> perMetricLists) {
               spo2Percent: existing.spo2Percent ?? snap.spo2Percent,
               skinTempCelsius: existing.skinTempCelsius ?? snap.skinTempCelsius,
               steps: existing.steps ?? snap.steps,
+              respiratoryRateBrpm:
+                  existing.respiratoryRateBrpm ?? snap.respiratoryRateBrpm,
+              activeEnergyKcal: existing.activeEnergyKcal ?? snap.activeEnergyKcal,
+              stressIndex: existing.stressIndex ?? snap.stressIndex,
             );
     }
   }
@@ -217,6 +242,7 @@ List<MappedSleepSession> mapSleepSessions(
   List<hk.HealthDataPoint> hrvPoints = const [],
   List<hk.HealthDataPoint> spo2Points = const [],
   List<hk.HealthDataPoint> tempPoints = const [],
+  List<hk.HealthDataPoint> respRatePoints = const [],
 }) {
   final relevant = sleepPoints.where((p) => _stageFor(p.type) != null).toList()
     ..sort((a, b) => a.dateFrom.compareTo(b.dateFrom));
@@ -237,7 +263,8 @@ List<MappedSleepSession> mapSleepSessions(
 
   return [
     for (final cluster in clusters)
-      _buildSession(cluster, hrPoints, hrvPoints, spo2Points, tempPoints),
+      _buildSession(
+          cluster, hrPoints, hrvPoints, spo2Points, tempPoints, respRatePoints),
   ];
 }
 
@@ -247,6 +274,7 @@ MappedSleepSession _buildSession(
   List<hk.HealthDataPoint> hrvPoints,
   List<hk.HealthDataPoint> spo2Points,
   List<hk.HealthDataPoint> tempPoints,
+  List<hk.HealthDataPoint> respRatePoints,
 ) {
   final hadRealStages = cluster.any((p) => !_stagelessTypes.contains(p.type));
 
@@ -281,6 +309,11 @@ MappedSleepSession _buildSession(
       : double.parse(
           (tempValues.reduce((a, b) => a + b) / tempValues.length).toStringAsFixed(2));
 
+  final respRateValues = valuesInWindow(respRatePoints);
+  final avgRespRate = respRateValues.isEmpty
+      ? null
+      : respRateValues.reduce((a, b) => a + b) / respRateValues.length;
+
   return MappedSleepSession(
     session: SleepSession(
       bedtime: bedtime,
@@ -290,6 +323,7 @@ MappedSleepSession _buildSession(
       avgHrvMs: avgInt(hrvPoints),
       minSpo2Percent: minSpo2,
       avgSkinTempCelsius: avgTemp,
+      avgRespiratoryRateBrpm: avgRespRate,
     ),
     hadRealStages: hadRealStages,
   );

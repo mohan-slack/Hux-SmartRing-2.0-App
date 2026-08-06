@@ -190,6 +190,48 @@ void main() {
       await adapter.dispose();
     });
 
+    test('maps respiratory rate and active energy, and always leaves '
+        'stressIndex null (no honest health-store source)', () async {
+      final fake = _FakeHealth(data: [
+        point(
+            type: hk.HealthDataType.RESPIRATORY_RATE,
+            from: DateTime(2026, 7, 16, 8),
+            value: 15),
+        point(
+            type: hk.HealthDataType.ACTIVE_ENERGY_BURNED,
+            from: DateTime(2026, 7, 16, 8),
+            value: 120),
+      ]);
+      final adapter = HealthStoreRingAdapter(health: fake);
+      await adapter.connect();
+
+      final result = await adapter.syncSince(DateTime(2026, 7, 1));
+
+      expect(
+          result.snapshots
+              .any((s) => s.respiratoryRateBrpm == 15),
+          isTrue);
+      expect(result.snapshots.any((s) => s.activeEnergyKcal == 120), isTrue);
+      expect(result.snapshots.every((s) => s.stressIndex == null), isTrue);
+
+      await adapter.dispose();
+    });
+
+    test('requests RESPIRATORY_RATE and ACTIVE_ENERGY_BURNED permissions',
+        () async {
+      final fake = _FakeHealth();
+      final adapter = HealthStoreRingAdapter(health: fake);
+
+      await adapter.connect();
+
+      expect(fake.lastRequestedTypes,
+          contains(hk.HealthDataType.RESPIRATORY_RATE));
+      expect(fake.lastRequestedTypes,
+          contains(hk.HealthDataType.ACTIVE_ENERGY_BURNED));
+
+      await adapter.dispose();
+    });
+
     test('never requests HEART_RATE_VARIABILITY_RMSSD on iOS (throws on '
         'real HealthKit) — only whichever HRV type is platform-'
         'appropriate', () async {

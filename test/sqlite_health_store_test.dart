@@ -18,8 +18,14 @@ void main() {
       SqliteHealthStore.open(inMemoryDatabasePath,
           factory: databaseFactoryFfi);
 
-  HealthSnapshot snap(DateTime t, {int? hr}) =>
-      HealthSnapshot(timestamp: t, heartRateBpm: hr ?? 60, hrvMs: 50);
+  HealthSnapshot snap(DateTime t, {int? hr}) => HealthSnapshot(
+        timestamp: t,
+        heartRateBpm: hr ?? 60,
+        hrvMs: 50,
+        respiratoryRateBrpm: 15,
+        activeEnergyKcal: 120,
+        stressIndex: 42,
+      );
 
   SleepSession night(DateTime bedtime, {int? avgHr}) => SleepSession(
         bedtime: bedtime,
@@ -35,6 +41,7 @@ void main() {
               stage: SleepStage.light),
         ],
         avgHeartRateBpm: avgHr ?? 58,
+        avgRespiratoryRateBrpm: 14,
       );
 
   group('Snapshot idempotency — the core guarantee', () {
@@ -49,6 +56,9 @@ void main() {
           t.subtract(const Duration(hours: 1)),
           t.add(const Duration(hours: 1)));
       expect(all.length, 1);
+      expect(all.single.respiratoryRateBrpm, 15);
+      expect(all.single.activeEnergyKcal, 120);
+      expect(all.single.stressIndex, 42);
       await store.close();
     });
 
@@ -112,6 +122,29 @@ void main() {
       expect(loaded.segments.length, 2);
       expect(loaded.segments.first.stage, SleepStage.awake);
       expect(loaded.segments.last.stage, SleepStage.light);
+      expect(loaded.avgRespiratoryRateBrpm, 14);
+      await store.close();
+    });
+
+    test('a null avgRespiratoryRateBrpm round-trips as null, not zero',
+        () async {
+      final store = await openStore();
+      final bedtime = DateTime.utc(2026, 7, 14, 23, 30);
+      await store.saveSleepSessions([
+        SleepSession(
+          bedtime: bedtime,
+          wakeTime: bedtime.add(const Duration(hours: 8)),
+          segments: [
+            SleepSegment(
+                start: bedtime,
+                end: bedtime.add(const Duration(hours: 8)),
+                stage: SleepStage.light),
+          ],
+        ),
+      ]);
+
+      final loaded = await store.latestSleepSession();
+      expect(loaded!.avgRespiratoryRateBrpm, isNull);
       await store.close();
     });
 
@@ -484,6 +517,139 @@ void main() {
         startedAt: DateTime.utc(2026, 7, 2),
       ));
       expect((await store.loadModeState())?.id, ModeId.bigDay);
+
+      await store.close();
+    });
+  });
+
+  group('Schema migration v2 -> v3', () {
+    test('opening an old v2 database (no resp_rate/active_kcal/stress/'
+        'avg_resp_rate columns) preserves its data and adds those columns '
+        'as NULL for existing rows', () async {
+      sqfliteFfiInit();
+      final dir = await Directory.systemTemp.createTemp('hux_migration_v2_');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = p.join(dir.path, 'hux_v2.db');
+
+      final snapshotTs = DateTime.utc(2026, 7, 1, 8, 0);
+      final bedtime = DateTime.utc(2026, 6, 30, 23, 0);
+      final wakeTime = bedtime.add(const Duration(hours: 7));
+      final watermark = DateTime.utc(2026, 7, 1, 9, 0);
+
+      // Step 1: build a v2 database by hand — the schema _createSchema
+      // had right before this migration added the new columns. Simulates
+      // a real device that installed the app before this change.
+      final v2Db = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE snapshots (
+                ts INTEGER PRIMARY KEY,
+                hr INTEGER, hrv INTEGER, spo2 INTEGER, temp REAL, steps INTEGER
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE sleep_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bedtime INTEGER NOT NULL UNIQUE,
+                wake_time INTEGER NOT NULL,
+                avg_hr INTEGER, avg_hrv INTEGER, min_spo2 INTEGER, avg_temp REAL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE sleep_segments (
+                session_id INTEGER NOT NULL
+                  REFERENCES sleep_sessions(id) ON DELETE CASCADE,
+                start_ts INTEGER NOT NULL,
+                end_ts INTEGER NOT NULL,
+                stage TEXT NOT NULL
+              )
+            ''');
+            await db.execute(
+                'CREATE INDEX idx_segments_session ON sleep_segments(session_id)');
+            await db.execute('''
+              CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)
+            ''');
+            await db.execute('''
+              CREATE TABLE mode_state (
+                mode_id TEXT PRIMARY KEY,
+                json TEXT NOT NULL
+              )
+            ''');
+          },
+        ),
+      );
+
+      await v2Db.insert('snapshots', {
+        'ts': snapshotTs.millisecondsSinceEpoch,
+        'hr': 60,
+        'hrv': 50,
+        'spo2': 97,
+        'temp': 33.6,
+        'steps': 4200,
+      });
+      final sessionId = await v2Db.insert('sleep_sessions', {
+        'bedtime': bedtime.millisecondsSinceEpoch,
+        'wake_time': wakeTime.millisecondsSinceEpoch,
+        'avg_hr': 58,
+        'avg_hrv': 52,
+        'min_spo2': 95,
+        'avg_temp': 33.5,
+      });
+      await v2Db.insert('sleep_segments', {
+        'session_id': sessionId,
+        'start_ts': bedtime.millisecondsSinceEpoch,
+        'end_ts': wakeTime.millisecondsSinceEpoch,
+        'stage': 'light',
+      });
+      await v2Db.insert('meta', {
+        'key': 'last_synced_up_to',
+        'value': watermark.millisecondsSinceEpoch.toString(),
+      });
+      await v2Db.close();
+
+      // Step 2: reopen through SqliteHealthStore, which requests v3 —
+      // sqflite calls onUpgrade(2, 3) under the hood.
+      final store =
+          await SqliteHealthStore.open(path, factory: databaseFactoryFfi);
+
+      // Old data survived untouched, and the new columns default to
+      // null rather than 0 or throwing.
+      final snapshot = await store.latestSnapshot();
+      expect(snapshot, isNotNull);
+      expect(snapshot!.timestamp, snapshotTs);
+      expect(snapshot.heartRateBpm, 60);
+      expect(snapshot.steps, 4200);
+      expect(snapshot.respiratoryRateBrpm, isNull);
+      expect(snapshot.activeEnergyKcal, isNull);
+      expect(snapshot.stressIndex, isNull);
+
+      final session = await store.latestSleepSession();
+      expect(session, isNotNull);
+      expect(session!.bedtime, bedtime);
+      expect(session.avgHrvMs, 52);
+      expect(session.avgRespiratoryRateBrpm, isNull);
+
+      expect(await store.lastSyncedUpTo(), watermark);
+
+      // The new columns accept writes on the upgraded database.
+      await store.saveSnapshots([
+        HealthSnapshot(
+          timestamp: snapshotTs.add(const Duration(hours: 1)),
+          respiratoryRateBrpm: 16,
+          activeEnergyKcal: 200,
+          stressIndex: 55,
+        ),
+      ]);
+      final newSnapshot = await store.snapshotsBetween(
+        snapshotTs.add(const Duration(minutes: 30)),
+        snapshotTs.add(const Duration(hours: 2)),
+      );
+      expect(newSnapshot.single.respiratoryRateBrpm, 16);
+      expect(newSnapshot.single.activeEnergyKcal, 200);
+      expect(newSnapshot.single.stressIndex, 55);
 
       await store.close();
     });

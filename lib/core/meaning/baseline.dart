@@ -23,6 +23,13 @@ class PersonalBaseline {
   final double? medianRestingHeartRateBpm;
   final Duration? medianTotalSleep;
   final double? medianSkinTempCelsius;
+
+  /// Median overnight breaths-per-minute, from sleep sessions'
+  /// [SleepSession.avgRespiratoryRateBrpm]. An overnight-recovery input,
+  /// same family as the other medians here — NOT the daytime-derived
+  /// stress/calories figures, which intentionally have no baseline (see
+  /// meaning_engine.dart).
+  final double? medianRespiratoryRateBrpm;
   final int daysOfData;
 
   const PersonalBaseline({
@@ -31,6 +38,7 @@ class PersonalBaseline {
     required this.medianTotalSleep,
     required this.medianSkinTempCelsius,
     required this.daysOfData,
+    this.medianRespiratoryRateBrpm,
   });
 
   bool get insufficient => daysOfData < minDaysRequired;
@@ -44,11 +52,13 @@ class PersonalBaseline {
     final hr = <double>[];
     final sleepMinutes = <double>[];
     final temp = <double>[];
+    final respRate = <double>[];
 
     for (final s in sessions) {
       if (s.avgHrvMs != null) hrv.add(s.avgHrvMs!.toDouble());
       if (s.avgHeartRateBpm != null) hr.add(s.avgHeartRateBpm!.toDouble());
       if (s.avgSkinTempCelsius != null) temp.add(s.avgSkinTempCelsius!);
+      if (s.avgRespiratoryRateBrpm != null) respRate.add(s.avgRespiratoryRateBrpm!);
       sleepMinutes.add(s.totalSleep.inMinutes.toDouble());
     }
 
@@ -60,6 +70,7 @@ class PersonalBaseline {
           ? null
           : Duration(minutes: medianSleepMinutes.round()),
       medianSkinTempCelsius: _median(temp),
+      medianRespiratoryRateBrpm: _median(respRate),
       daysOfData: sessions.length,
     );
   }
