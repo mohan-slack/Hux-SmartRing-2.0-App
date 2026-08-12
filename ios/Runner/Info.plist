@@ -54,5 +54,10 @@
 	<string>HUX can read your existing Health data (heart rate, HRV, sleep, steps) as a stand-in for ring data during development. This is read-only and never leaves your phone.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>HUX does not write any data to Health.</string>
+	<!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
+	     the PROVISIONAL, reverse-engineered protocol in
+	     lib/core/ring/aizo_ble/aizo_protocol.dart. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>HUX uses Bluetooth to connect to your ring and read its battery level and send vibration alerts.</string>
 </dict>
 </plist>

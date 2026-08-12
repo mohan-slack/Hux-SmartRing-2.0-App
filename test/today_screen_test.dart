@@ -264,6 +264,12 @@ void main() {
     await settle(tester);
 
     expect(find.text('Night shift'), findsOneWidget);
+    // The Last Night section (its header now retitled "Last sleep" for
+    // Night Shift) sits further down the ListView since the ring status
+    // row was added above it — scroll it into view like the ModeStrip
+    // check above does for "Build".
+    await tester.scrollUntilVisible(find.text('Last sleep'), 300);
+    await tester.pump();
     expect(find.text('Last sleep'), findsOneWidget);
     expect(find.text('Last night'), findsNothing);
   });
@@ -327,5 +333,75 @@ void main() {
     }
     // No RenderFlex overflow or other layout exception at 1.3x scale.
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'ring status row and enriched Last Night cards render, and Test '
+      'ring completes a real vibrate() without crashing',
+      (tester) async {
+    late SqliteHealthStore store;
+    late MockRingAdapter ring;
+    late SyncService syncService;
+    late ReadoutService readoutService;
+
+    await tester.runAsync(() async {
+      store = await openStore();
+      ring = MockRingAdapter(seed: 53);
+      syncService = SyncService(
+        ring,
+        store,
+        firstSyncWindow: const Duration(days: 10),
+        maxAttempts: 5,
+        baseBackoff: const Duration(milliseconds: 10),
+      );
+      readoutService = ReadoutService(store);
+
+      final outcome = await syncService.syncNow();
+      expect(outcome.success, isTrue, reason: outcome.error ?? '');
+    });
+    addTearDown(() async {
+      await syncService.dispose();
+      await ring.dispose();
+      await store.close();
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: TodayScreen(
+          store: store,
+          syncService: syncService,
+          readoutService: readoutService,
+          modeService: ModeService(store),
+        ),
+      ),
+    ));
+    await settle(tester);
+
+    // Ring status row: verify it renders, and exercise the real
+    // Test ring -> NudgeModal -> sendTestBuzz() -> vibrate() path
+    // BEFORE scrolling further down (scrolling past it would leave
+    // nothing at this position to tap afterwards).
+    await tester.scrollUntilVisible(find.text('Test ring'), 300);
+    await tester.pump();
+    expect(find.text('Battery'), findsOneWidget);
+    expect(find.text('Test ring'), findsOneWidget);
+
+    await tester.tap(find.text('Test ring'));
+    await tester.pumpAndSettle();
+    expect(find.text('Buzz now'), findsOneWidget);
+
+    await tester.tap(find.text('Buzz now'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Buzz now'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    // Enriched Last Night section — new cards replacing/joining the
+    // flat stat grid.
+    await tester.scrollUntilVisible(find.text('Sleep stage split'), 300);
+    await tester.pump();
+    expect(find.text('Min SpO2'), findsOneWidget);
+    expect(find.text('Sleep stage split'), findsOneWidget);
+    expect(find.text('Stage breakdown'), findsOneWidget);
   });
 }

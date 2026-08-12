@@ -142,7 +142,9 @@ class _AppShellState extends State<AppShell> {
 /// real ring data, on any tab. Text and color both follow [source]
 /// truthfully: mock stays the original amber "DEMO" banner; the
 /// health-store dev adapter gets a visually distinct blue-grey "DEV"
-/// banner so the two are never confused for each other either.
+/// banner; the real-but-unofficial AIZO BLE adapter gets a third, equally
+/// distinct deep-teal treatment — genuinely real device data, but via an
+/// unofficial protocol, which is neither of the other two categories.
 class _SourceBanner extends StatelessWidget {
   final RingDataSource source;
 
@@ -151,15 +153,17 @@ class _SourceBanner extends StatelessWidget {
   Color get _background => switch (source) {
         RingDataSource.mock => HuxColors.demoAmber,
         RingDataSource.health => HuxColors.devBlueGrey,
+        RingDataSource.aizoBle => HuxColors.accentDeepTeal,
       };
 
   // Amber is light — the dedicated on-accent ink keeps ~10:1 contrast
   // (the app's regular ink is near-white now and would vanish on it).
-  // Blue-grey is dark enough (see hux_tokens.dart) that white text
-  // clears the 4.5:1 floor at ~7.2:1.
+  // Blue-grey and deep teal are both dark enough (see hux_tokens.dart)
+  // that white text clears the 4.5:1 floor comfortably.
   Color get _foreground => switch (source) {
         RingDataSource.mock => HuxColors.inkOnAccent,
         RingDataSource.health => Colors.white,
+        RingDataSource.aizoBle => Colors.white,
       };
 
   @override

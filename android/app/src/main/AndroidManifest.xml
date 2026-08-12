@@ -11,6 +11,24 @@
     <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE"/>
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
 
+    <!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
+         the PROVISIONAL, reverse-engineered protocol in
+         lib/core/ring/aizo_ble/aizo_protocol.dart. Scans by device name
+         only (never derives location from scan results), so
+         neverForLocation lets us skip requesting ACCESS_FINE_LOCATION on
+         API 31+. Legacy permissions below cover pre-Android-12 devices,
+         where BLE scanning requires location permission at the OS level
+         regardless of whether the app itself uses location. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
+    <!-- required="false": the default (mock/health) build must still
+         install on devices without BLE hardware — only HUX_SOURCE=aizo
+         actually needs it. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
+
     <application
         android:label="hux_app"
         android:name="${applicationName}"

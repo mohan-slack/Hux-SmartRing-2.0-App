@@ -23,6 +23,7 @@
 import 'dart:async';
 
 import '../ring/ring_adapter.dart';
+import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
 
 /// What a sync attempt produced.
@@ -68,6 +69,24 @@ class SyncService {
 
   final _status = StreamController<SyncStatus>.broadcast();
   bool _syncInProgress = false;
+
+  /// The [RingInfo] returned by the most recent successful `connect()` —
+  /// captured here (rather than discarded) so the UI has an immediate,
+  /// correct reading (e.g. battery) right after a sync, without waiting
+  /// on [batteryPercent]'s live stream, which some adapters only feed
+  /// stochastically over time.
+  RingInfo? lastRingInfo;
+
+  /// Live battery updates, straight from the connected [RingAdapter].
+  /// [RingAdapter] itself stays fully encapsulated behind this service —
+  /// screens never see it directly, same rule as everything else here.
+  Stream<int> get batteryPercent => _ring.batteryPercent;
+
+  /// Sends one real vibration to the ring, for a "test my ring" UI
+  /// affordance. Throws [RingConnectionException] when not connected,
+  /// same as every other [RingAdapter] method — callers use the same
+  /// try/catch-and-snackbar pattern already used for sync failures.
+  Future<void> sendTestBuzz() => _ring.vibrate();
 
   SyncService(
     this._ring,
@@ -121,7 +140,7 @@ class SyncService {
 
   Future<SyncOutcome> _syncOnce(int attempt) async {
     _status.add(SyncStatus(SyncPhase.connecting, attempt: attempt));
-    await _ring.connect();
+    lastRingInfo = await _ring.connect();
 
     _status.add(SyncStatus(SyncPhase.syncing, attempt: attempt));
     final watermark = await _store.lastSyncedUpTo();

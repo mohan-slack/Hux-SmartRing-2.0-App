@@ -6,6 +6,8 @@
 /// [SyncService], [ReadoutService], and [ModeService] — never to a
 /// RingAdapter or SQL.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/meaning/daily_readout.dart';
@@ -17,6 +19,7 @@ import '../core/modes/mode_service.dart';
 import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
+import '../theme/hux_cards.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
@@ -36,6 +39,11 @@ String? _lifestyleChipText(ActiveContext context) {
 }
 
 enum _Phase { syncing, loadingReadout, ready, error }
+
+/// Some adapters (e.g. AizoBleRingAdapter) use a negative sentinel for
+/// "battery read failed/unavailable" rather than a plausible-looking
+/// percent — never render that sentinel as a literal number here.
+int? _sanitizeBattery(int? raw) => (raw == null || raw < 0) ? null : raw;
 
 class TodayScreen extends StatefulWidget {
   final HealthStore store;
@@ -72,16 +80,26 @@ class _TodayScreenState extends State<TodayScreen> {
   ActiveContext _activeContext = const ActiveContext();
   String? _errorMessage;
 
+  /// Seeded from `syncService.lastRingInfo` right after each sync/load
+  /// (an immediate, correct reading), then kept fresh by the live
+  /// [SyncService.batteryPercent] subscription below.
+  int? _batteryPercent;
+  StreamSubscription<int>? _batterySub;
+
   @override
   void initState() {
     super.initState();
     widget.refreshSignal?.addListener(_onRefreshSignal);
+    _batterySub = widget.syncService.batteryPercent.listen((percent) {
+      if (mounted) setState(() => _batteryPercent = _sanitizeBattery(percent));
+    });
     _bootstrap();
   }
 
   @override
   void dispose() {
     widget.refreshSignal?.removeListener(_onRefreshSignal);
+    _batterySub?.cancel();
     super.dispose();
   }
 
@@ -131,6 +149,10 @@ class _TodayScreenState extends State<TodayScreen> {
       _lastNight = lastNight;
       _modeStrip = modeStrip;
       _activeContext = activeContext;
+      // Immediate, correct reading right after a sync — see the field's
+      // doc comment. Only overwrites when we actually have one; a
+      // subsequent live update from _batterySub can still refine it.
+      _batteryPercent = _sanitizeBattery(widget.syncService.lastRingInfo?.batteryPercent) ?? _batteryPercent;
       _phase = _Phase.ready;
     });
   }
@@ -174,6 +196,8 @@ class _TodayScreenState extends State<TodayScreen> {
             lastNight: _lastNight,
             modeStrip: _modeStrip,
             activeContext: _activeContext,
+            batteryPercent: _batteryPercent,
+            sendTestBuzz: widget.syncService.sendTestBuzz,
           ),
         );
     }
@@ -250,12 +274,16 @@ class _ReadoutBody extends StatelessWidget {
   final SleepSession? lastNight;
   final ModeStrip? modeStrip;
   final ActiveContext activeContext;
+  final int? batteryPercent;
+  final Future<void> Function() sendTestBuzz;
 
   const _ReadoutBody({
     required this.readout,
     required this.lastNight,
     required this.modeStrip,
     required this.activeContext,
+    required this.batteryPercent,
+    required this.sendTestBuzz,
   });
 
   @override
@@ -295,14 +323,19 @@ class _ReadoutBody extends StatelessWidget {
             activeEnergyKcal: readout.activeEnergyKcal,
           ),
         ),
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(
+          index: 4,
+          child: _RingStatusRow(batteryPercent: batteryPercent, sendTestBuzz: sendTestBuzz),
+        ),
         if (modeStrip != null) ...[
           const SizedBox(height: HuxSpacing.lg),
-          HuxEntrance(index: 4, child: _ModeStripCard(strip: modeStrip!)),
+          HuxEntrance(index: 5, child: _ModeStripCard(strip: modeStrip!)),
         ],
         if (lastNight != null) ...[
           const Divider(height: HuxSpacing.xxl),
           HuxEntrance(
-            index: 5,
+            index: 6,
             child: _LastNightStats(
               session: lastNight!,
               sectionLabel:
@@ -312,6 +345,65 @@ class _ReadoutBody extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Real ring-device status — battery gauge plus a "test your ring"
+/// affordance — grouped separately from the body-vitals row above since
+/// these are about the DEVICE, not the wearer. `sendTestBuzz` is the
+/// only place this screen ever reaches toward the ring, and it goes
+/// through [SyncService], never a raw RingAdapter (same rule as sync
+/// itself).
+class _RingStatusRow extends StatelessWidget {
+  final int? batteryPercent;
+  final Future<void> Function() sendTestBuzz;
+
+  const _RingStatusRow({required this.batteryPercent, required this.sendTestBuzz});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 168,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: HeroGaugeCard(
+              label: 'Battery',
+              value: batteryPercent?.toDouble(),
+              unit: '%',
+              size: 96,
+              strokeWidth: 10,
+            ),
+          ),
+          const SizedBox(width: HuxSpacing.sm),
+          Expanded(
+            child: HuxTapScale(
+              child: GestureDetector(
+                onTap: () => NudgeModal.show(
+                  context,
+                  title: 'Test your ring',
+                  message: 'Send one vibration to confirm it\'s connected.',
+                  icon: Icons.vibration,
+                  primaryLabel: 'Buzz now',
+                  onPrimary: sendTestBuzz,
+                ),
+                child: GlassPanel(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.vibration, color: HuxColors.accentMint, size: 32),
+                      const SizedBox(height: HuxSpacing.sm),
+                      Text('Test ring', style: Theme.of(context).textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -641,6 +733,8 @@ class _LastNightStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Min SpO2 moved to the SliderRangeCard below — shown once, not
+    // duplicated as a flat tile here too.
     final rows = <_StatRow>[
       _StatRow('Sleep', session.totalSleep.inMinutes.toDouble(), _formatMinutes,
           'hrs'),
@@ -649,11 +743,12 @@ class _LastNightStats extends StatelessWidget {
       if (session.avgHeartRateBpm != null)
         _StatRow('Avg heart rate', session.avgHeartRateBpm!.toDouble(),
             _formatInt, 'bpm'),
-      if (session.minSpo2Percent != null)
-        _StatRow(
-            'Min SpO2', session.minSpo2Percent!.toDouble(), _formatInt, '%'),
     ];
     final textTheme = Theme.of(context).textTheme;
+
+    final deepMinutes = session.stageTotal(SleepStage.deep).inMinutes.toDouble();
+    final remMinutes = session.stageTotal(SleepStage.rem).inMinutes.toDouble();
+    final totalSleepMinutes = session.totalSleep.inMinutes.toDouble();
 
     // A two-column grid of glass stat tiles (widget-board style), not
     // a label:value list — the numbers are what the user came for, so
@@ -680,6 +775,45 @@ class _LastNightStats extends StatelessWidget {
               ],
             );
           },
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        SliderRangeCard(
+          label: 'Min SpO2',
+          value: session.minSpo2Percent?.toDouble(),
+          unit: '%',
+          normalRangeMin: 90,
+          normalRangeMax: 100,
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        RadialProgressCard(
+          title: 'Sleep stage split',
+          primaryValue: deepMinutes,
+          secondaryValue: remMinutes,
+          max: totalSleepMinutes,
+          primaryLabel: 'Deep',
+          secondaryLabel: 'REM',
+          format: _formatMinutes,
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        BarVisualizerCard(
+          title: 'Stage breakdown',
+          value: totalSleepMinutes,
+          unit: 'min asleep',
+          format: _formatInt,
+          bars: [
+            BarVisualizerDatum(
+              label: 'Awake',
+              value: session.stageTotal(SleepStage.awake).inMinutes.toDouble(),
+              color: HuxColors.mutedText,
+            ),
+            BarVisualizerDatum(
+              label: 'Light',
+              value: session.stageTotal(SleepStage.light).inMinutes.toDouble(),
+              color: HuxColors.accentTeal,
+            ),
+            BarVisualizerDatum(label: 'Deep', value: deepMinutes, color: HuxColors.accentDeepTeal),
+            BarVisualizerDatum(label: 'REM', value: remMinutes, color: HuxColors.accentMint),
+          ],
         ),
       ],
     );

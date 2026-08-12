@@ -15,6 +15,7 @@ dependencies:
   fl_chart: ^0.66.2
   health: ^13.3.1
   google_fonts: ^6.3.2
+  flutter_reactive_ble: ^5.4.2
 
 dev_dependencies:
   flutter_test:

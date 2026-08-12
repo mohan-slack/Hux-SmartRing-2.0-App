@@ -10,6 +10,7 @@ import 'app.dart';
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
+import 'core/ring/aizo_ble/aizo_ble_ring_adapter.dart';
 import 'core/ring/data_source.dart';
 import 'core/ring/health_adapter/health_store_ring_adapter.dart';
 import 'core/ring/mock_ring_adapter.dart';
@@ -17,10 +18,14 @@ import 'core/ring/ring_adapter.dart';
 import 'core/storage/sqlite_health_store.dart';
 import 'core/sync/sync_service.dart';
 
-/// Which [RingAdapter] to wire up — 'mock' (default) or 'health', the
-/// dev-only Apple Health / Health Connect adapter. Pass
-/// `--dart-define=HUX_SOURCE=health` to a `flutter run`/`flutter build`
-/// invocation to switch; the default build is untouched either way.
+/// Which [RingAdapter] to wire up — 'mock' (default), 'health' (dev-only
+/// Apple Health / Health Connect adapter), or 'aizo' (real BLE hardware,
+/// PROVISIONAL reverse-engineered protocol — see aizo_ble/aizo_protocol
+/// .dart; NOT the eventual official eIoT SDK, see AizoBleRingAdapter's
+/// header comment for why it isn't named EIoTRingAdapter). Pass
+/// `--dart-define=HUX_SOURCE=health` or `=aizo` to a `flutter run`/
+/// `flutter build` invocation to switch; the default build is untouched
+/// either way.
 const _sourceEnv = String.fromEnvironment('HUX_SOURCE', defaultValue: 'mock');
 
 Future<void> main() async {
@@ -40,6 +45,9 @@ Future<void> main() async {
     case 'health':
       dataSource = RingDataSource.health;
       ring = HealthStoreRingAdapter();
+    case 'aizo':
+      dataSource = RingDataSource.aizoBle;
+      ring = AizoBleRingAdapter();
     default:
       // chaosMode is off for this demo build so behaviour stays
       // predictable; flip it on locally to exercise the reconnect/
