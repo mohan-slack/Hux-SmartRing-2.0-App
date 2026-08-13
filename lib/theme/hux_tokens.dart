@@ -1,5 +1,5 @@
-/// HUX Design Tokens — dark "liquid glass" edition
-/// -------------------------------------------------
+/// HUX Design Tokens — "vivid gradient" edition
+/// -----------------------------------------------
 /// The ONLY place a hex code or a spacing/radius/blur magic number is
 /// allowed to live. Screens import this file and reference its
 /// constants/helpers — never `Color(0x...)`, never a bare `16.0` for
@@ -7,14 +7,17 @@
 /// files that read these directly; everything else should get what it
 /// needs from `Theme.of(context)` plus the per-domain helpers below.
 ///
-/// DARK-FIRST since the liquid-glass pass: a deep green-black base
-/// with soft mint/teal radial glows behind everything, translucent
-/// "glass" surfaces on top (see hux_glass.dart for why most glass here
-/// is translucency + stroke + highlight rather than a real
-/// BackdropFilter blur), and the brand mint doing the glowing. The
-/// original light palette lives on only in the two places light
-/// matters: text ON a bright accent (buttons, the amber banner) keeps
-/// a near-black ink of its own.
+/// SECOND full palette pass (first was "dark liquid glass" — mint/teal
+/// on charcoal-grey, still visible in git history). This pass moves to
+/// a near-black stage and a saturated four-color brand set — Hot Pink,
+/// Cherry (red-orange), Solid Purple, and Athens Indigo — each named
+/// for exactly what it looks like, no metaphor. Cards move from
+/// translucent glass to solid/gradient fills as the primary surface
+/// (see hux_glass.dart's GlassPanel, kept for the surfaces that haven't
+/// been repainted yet — dialogs, sheets, Trends/Story in the interim).
+/// Text ON a bright accent fill still keeps its own near-black ink,
+/// same role [inkOnAccent] always played.
+library;
 
 import 'package:flutter/material.dart';
 
@@ -24,48 +27,56 @@ class HuxColors {
   const HuxColors._();
 
   // ---- the dark stage -------------------------------------------------
-  /// App background — dark charcoal-grey (with a whisper of the brand
-  /// green), NOT pitch black: per design review, pages read as grey so
-  /// the glass panels and glows have somewhere to sit above them.
-  static const bg = Color(0xFF1A1F1D);
+  /// App background — near-black, not charcoal-grey: the vivid cards
+  /// are the light sources now, so the stage recedes further than the
+  /// first (glass) pass needed it to.
+  static const bg = Color(0xFF0A0A0D);
 
-  /// Elevated OPAQUE surface: dialogs, sheets, pickers, snackbars —
-  /// places where see-through would hurt readability.
-  static const card = Color(0xFF242A28);
+  /// Elevated OPAQUE surface: dialogs, sheets, pickers, snackbars, and
+  /// any card not yet repainted to a bespoke gradient (see
+  /// [accentIndigo]'s doc comment for which Today/Modes cards use one).
+  static const card = Color(0xFF17161C);
 
   /// A step above [card] for the snackbar, so it reads as floating.
-  static const cardElevated = Color(0xFF2D3431);
+  static const cardElevated = Color(0xFF201F27);
 
   // ---- text -----------------------------------------------------------
-  /// Primary text — near-white with the brand's green cast.
-  /// ~16:1 on [bg], comfortably >4.5:1 on every glass surface.
-  static const ink = Color(0xFFEDF5F1);
+  /// Primary text — near-white with a faint warm/violet cast to match
+  /// the new palette. ~17:1 on [bg].
+  static const ink = Color(0xFFF3F1F6);
 
-  /// Secondary text — ~7:1 on [bg].
-  static const mutedText = Color(0xFF93A69F);
+  /// Secondary text — ~7.5:1 on [bg].
+  static const mutedText = Color(0xFF9C97A8);
 
-  /// Text ON a bright accent fill (mint buttons, the amber banner):
-  /// the old light-theme ink, kept for exactly this job. ~12:1 on
-  /// mint, ~10:1 on the demo amber.
-  static const inkOnAccent = Color(0xFF10201B);
+  /// Text ON a bright accent fill (Hot Pink buttons, the amber banner):
+  /// a near-black ink of its own, kept for exactly this job.
+  static const inkOnAccent = Color(0xFF1A0E17);
 
   // ---- brand accents ---------------------------------------------------
-  /// The hero accent — glows on dark. Readable AS text on [bg] (~11:1).
-  static const accentMint = Color(0xFF9AE6C8);
+  /// The hero accent — Hot Pink. Glows on dark, readable AS text on
+  /// [bg] (~5.2:1 — large numerals/labels only, not fine print; see
+  /// [accentCherry] for a slightly higher-contrast alternative where
+  /// body-sized text needs it).
+  static const accentPink = Color(0xFFF567B5);
 
-  /// Bright teal for glyphs/labels/lines on dark surfaces (~8.6:1 on
-  /// [bg]) — [accentDeepTeal] is too dim to read on dark and is kept
-  /// for fills and gradient ends only.
-  static const accentTeal = Color(0xFF2DD4BF);
+  /// Cherry — a saturated red-orange, the app's second bright accent
+  /// (glyphs/labels/lines, ~6.8:1 on [bg]).
+  static const accentCherry = Color(0xFFFF6A4D);
 
-  /// Depth end of the brand gradient; fills, never text on dark.
-  static const accentDeepTeal = Color(0xFF0F766E);
+  /// Solid Purple — depth end of the Hot-Pink gradient family; fills
+  /// and gradient ends only, too dim to read as text on dark.
+  static const accentPurple = Color(0xFF622585);
 
-  // ---- glass ------------------------------------------------------------
+  /// Athens Indigo — the palette's fourth color, reserved for
+  /// device/connectivity-themed surfaces (Battery, Test Ring) per its
+  /// literal signal-wave motif in the reference design. Fills and
+  /// glows only, same too-dim-for-text role as [accentPurple].
+  static const accentIndigo = Color(0xFF182788);
+
+  // ---- glass (kept for surfaces not yet repainted — see file header) -----
   /// Translucent white layers that make a surface read as glass over
   /// the dark stage. Pre-baked alphas (not `withValues` at call sites)
-  /// so "how glassy" stays a single tunable per role. Strengthened in
-  /// the review round — the first cut read as flat cards, not glass.
+  /// so "how glassy" stays a single tunable per role.
   static const glassFillTop = Color(0x1FFFFFFF); // white 12% — panel top
   static const glassFillBottom = Color(0x0DFFFFFF); // white 5% — panel base
   static const glassStroke = Color(0x2EFFFFFF); // white 18% — 1px border
@@ -85,15 +96,15 @@ class HuxColors {
 
   // ---- background glows --------------------------------------------------
   /// The two soft radial glows painted once behind the whole app
-  /// (see HuxBackground) — mint top-left, teal bottom-right. Strong
-  /// enough that frosted panels visibly blur them (that's what makes
-  /// the glassmorphism READ as glass).
-  static const bgGlowMint = Color(0x249AE6C8); // mint 14%
-  static const bgGlowTeal = Color(0x330F766E); // deep teal 20%
+  /// (see HuxBackground) — pink top-left, purple bottom-right.
+  static const bgGlowPink = Color(0x24F567B5); // pink 14%
+  static const bgGlowPurple = Color(0x33622585); // purple 20%
 
   // ---- recovery states (dot, header glow, chart accents) -----------------
-  /// Brightened from the light-theme set so they carry on dark. Used
-  /// for dots, washes, and glows — never body text.
+  /// A SEPARATE semantic system from the brand accents above — these
+  /// read as a wellness traffic-light (good/neutral/caution), which the
+  /// brand palette doesn't attempt to encode. Unchanged across both
+  /// design passes on purpose.
   static const recharged = Color(0xFF3FBF78);
   static const steady = Color(0xFF2DD4BF);
   static const stretched = Color(0xFFF5A524);
@@ -102,12 +113,39 @@ class HuxColors {
 
   // ---- source banners (meaning unchanged — these stay SOLID) -------------
   /// DEMO — simulated ring data. [inkOnAccent] text on this is ~10:1.
-  /// Deliberately NOT glass: the banner is a safety feature and must
-  /// never blend into the design.
+  /// Deliberately never a brand gradient: the banner is a safety
+  /// feature and must never blend into the design.
   static const demoAmber = Color(0xFFFFC107);
 
   /// DEV — health app data. White text on this is ~7.2:1.
   static const devBlueGrey = Color(0xFF455A64);
+
+  // ---- vivid card families (hux_vivid_cards.dart, hux_cards.dart) --------
+  /// Per-card gradient END colors that aren't already covered by a
+  /// named brand accent above (the START of each gradient below IS a
+  /// brand accent — [accentCherry]/[accentPink]/[accentPurple]/
+  /// [accentIndigo] — named once, reused; only the darker END of each
+  /// gradient needs its own token, since it's specific to that fade).
+  static const vividCherryEnd = Color(0xFF1A0805); // Cherry -> near-black
+  static const vividPinkPurpleMid = Color(0xFF3A1240); // pink -> purple midpoint wash
+
+  /// Decorative-only heart-rate waveform stroke — a lighter tint of
+  /// [accentCherry], never a data series (see hux_vivid_cards.dart).
+  static const vividHeartWave = Color(0xFFFFB199);
+
+  /// Stage-breakdown/segmented-bar tints, lightest to darkest: Light
+  /// sleep reads as the palest tint, Deep as the brightest/most
+  /// saturated — same "brightness = more of the deep, restorative
+  /// stage" convention the first design pass used.
+  static const vividSleepLight = Color(0xFFF6D3EA);
+  static const vividSleepRem = Color(0xFFF567B5);
+  static const vividSleepDeep = Color(0xFF9B3FA8);
+
+  // ---- Modes/Lifestyle image cards (modes_screen.dart) -------------------
+  /// The bottom-scrim end color on a photo mode card — [bg] at ~80%,
+  /// not pure black, so the scrim reads as "this app's dark" rather
+  /// than a generic vignette.
+  static const modeScrimEnd = Color(0xCC0A0A0D);
 }
 
 class HuxRadii {
@@ -115,6 +153,10 @@ class HuxRadii {
 
   static const card = 20.0;
   static const chip = 999.0;
+
+  /// The Today-screen vivid highlight cards read as bolder/chunkier than
+  /// the glass system's cards, per the reference — a larger radius.
+  static const vividCard = 28.0;
 }
 
 /// The 4/8/12/16/24/32 spacing scale. Named by feel (xs..xxl), not by
@@ -170,6 +212,34 @@ class HuxOpacity {
 
   /// The glass nav bar's fill over the blurred content behind it.
   static const navGlass = 0.72;
+
+  /// Secondary/label text on a vivid highlight card (hux_vivid_cards.dart)
+  /// — white text over a saturated gradient reads as too heavy at full
+  /// opacity for anything but the hero numeral.
+  static const vividSecondaryText = 0.72;
+
+  /// The flat "no data" track a vivid card's bar collapses to when it
+  /// has nothing real to show — faint on the same logic as [chartTrack].
+  static const vividEmptyTrack = 0.14;
+
+  /// [HuxGlassCorner]'s diagonal sheen and top-rim line — faint enough
+  /// to read as a light catching a glass edge, not a visible white
+  /// smear over a saturated gradient card or a busy photo.
+  static const glassCornerSheen = 0.16;
+  static const glassCornerRim = 0.55;
+
+  /// The drop shadow [HuxHoverLift] adds while a card is hovered.
+  static const hoverShadow = 0.35;
+
+  /// [HuxHoverLift]'s accent-colored outer glow — bright enough that
+  /// "this card is the active one" reads clearly even over a busy
+  /// photo background, not just a faint tint.
+  static const hoverGlow = 0.55;
+
+  /// A mode-card icon chip's backdrop — more opaque than [iconChip]
+  /// since it sits on top of a busy photo, not a flat surface, and
+  /// needs real contrast to stay legible.
+  static const modeIconChipBg = 0.68;
 }
 
 /// Type-scale numbers that live OUTSIDE the ThemeData text theme:
@@ -212,6 +282,12 @@ class HuxGlass {
   /// clear of the floating glass nav bar (nav height + home indicator
   /// + breathing room; the body extends behind the bar).
   static const navClearance = 120.0;
+
+  /// Blur radius for [HuxHoverLift]'s hover shadow.
+  static const hoverShadowBlur = 24.0;
+
+  /// Blur radius for [HuxHoverLift]'s accent glow.
+  static const hoverGlowBlur = 18.0;
 }
 
 /// Motion tokens — every animation in the app is built from these.
@@ -265,11 +341,11 @@ extension RecoveryStateColor on RecoveryState {
 
 /// The shared visual treatment for a mode/lifestyle accent icon chip
 /// (flag/heart/grad-cap/bedtime/twilight) — one consistent brand
-/// accent (mint backdrop glow, bright-teal glyph) rather than a
+/// accent (Hot Pink backdrop glow, Cherry glyph) rather than a
 /// different invented color per mode.
 class HuxModeAccent {
   const HuxModeAccent._();
 
-  static const background = HuxColors.accentMint;
-  static const foreground = HuxColors.accentTeal;
+  static const background = HuxColors.accentPink;
+  static const foreground = HuxColors.accentCherry;
 }

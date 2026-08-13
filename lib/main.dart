@@ -5,8 +5,11 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'core/auth/supabase_auth_service.dart';
+import 'core/auth/supabase_config.dart';
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
@@ -30,6 +33,9 @@ const _sourceEnv = String.fromEnvironment('HUX_SOURCE', defaultValue: 'mock');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.anonKey);
+  final authService = SupabaseAuthService();
 
   final dbPath = p.join(await getDatabasesPath(), 'hux.db');
   final store = await SqliteHealthStore.open(dbPath);
@@ -62,6 +68,7 @@ Future<void> main() async {
   final storyService = WeeklyStoryService(store);
 
   runApp(HuxApp(
+    authService: authService,
     store: store,
     syncService: syncService,
     readoutService: readoutService,

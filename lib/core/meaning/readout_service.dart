@@ -105,6 +105,7 @@ class ReadoutService {
       dataQuality: readout.dataQuality,
       stressIndex: readout.stressIndex,
       activeEnergyKcal: readout.activeEnergyKcal,
+      currentHeartRateBpm: readout.currentHeartRateBpm,
     );
   }
 

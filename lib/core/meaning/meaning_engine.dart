@@ -113,6 +113,7 @@ class MeaningEngine {
     // data doesn't mean today's daytime snapshots are unusable too.
     final stressIndex = _deriveStress(baseline, todaySnapshots);
     final activeEnergyKcal = _todayActiveEnergyKcal(todaySnapshots);
+    final currentHeartRateBpm = _todayHeartRateBpm(todaySnapshots);
 
     final hrvScore = _scoreHrv(baseline, lastNight);
     final sleepScore = _scoreSleep(baseline, lastNight);
@@ -126,7 +127,9 @@ class MeaningEngine {
 
     if (considered == 0) {
       return DailyReadout.noSignal(date,
-          stressIndex: stressIndex, activeEnergyKcal: activeEnergyKcal);
+          stressIndex: stressIndex,
+          activeEnergyKcal: activeEnergyKcal,
+          currentHeartRateBpm: currentHeartRateBpm);
     }
 
     var total = 0;
@@ -167,6 +170,7 @@ class MeaningEngine {
       dataQuality: quality,
       stressIndex: stressIndex,
       activeEnergyKcal: activeEnergyKcal,
+      currentHeartRateBpm: currentHeartRateBpm,
     );
   }
 
@@ -278,6 +282,16 @@ class MeaningEngine {
   int? _todayActiveEnergyKcal(List<HealthSnapshot> todaySnapshots) {
     for (final s in todaySnapshots.reversed) {
       if (s.activeEnergyKcal != null) return s.activeEnergyKcal;
+    }
+    return null;
+  }
+
+  /// The latest non-null [HealthSnapshot.heartRateBpm] among today's
+  /// snapshots — same "latest reading, not an average" shape as
+  /// [_todayActiveEnergyKcal]. Null when today has no HR readings yet.
+  int? _todayHeartRateBpm(List<HealthSnapshot> todaySnapshots) {
+    for (final s in todaySnapshots.reversed) {
+      if (s.heartRateBpm != null) return s.heartRateBpm;
     }
     return null;
   }

@@ -6,10 +6,13 @@
 /// "nudge" modal wired to a real ring action.
 ///
 /// Built entirely on the existing design system (HuxColors/HuxSpacing/
-/// GlassPanel/HuxMotion) — no new dependencies. The circular/radial
-/// shapes are the first hand-drawn Canvas work in this codebase (every
-/// chart elsewhere goes through fl_chart); see [_ArcGaugePainter]'s doc
-/// comment for why.
+/// HuxMotion) — no new dependencies. SECOND design pass: these cards
+/// moved from [GlassPanel] (translucent) to [_SolidCardShell] (solid
+/// near-black or accent-tinted fill), matching the app's move away from
+/// glass toward solid/gradient cards — see hux_tokens.dart's file header.
+/// The circular/radial shapes are the first hand-drawn Canvas work in
+/// this codebase (every chart elsewhere goes through fl_chart); see
+/// [_ArcGaugePainter]'s doc comment for why.
 ///
 /// NULL RULE (same as _DisplayStatTile in today_screen.dart): a null
 /// value must never render as if it were a confirmed zero. Each widget's
@@ -23,6 +26,45 @@ import 'package:flutter/material.dart';
 import 'hux_glass.dart';
 import 'hux_motion.dart';
 import 'hux_tokens.dart';
+
+/// The shared solid-fill shell every card in this file sits on —
+/// replaces [GlassPanel] for this catalog (see file header). [frosted]
+/// keeps its old meaning of "promote to the elevated surface," just
+/// without translucency: false uses [HuxColors.card], true
+/// [HuxColors.cardElevated]. Every card gets a decorative
+/// [HuxGlassCorner] sheen and lifts on hover via [HuxHoverLift] — THIRD
+/// design detail pass, layered on top of the second (solid-fill) one.
+class _SolidCardShell extends StatelessWidget {
+  final Widget child;
+  final bool frosted;
+  final Color? tint;
+
+  const _SolidCardShell({required this.child, this.frosted = false, this.tint});
+
+  static final _radius = BorderRadius.circular(HuxRadii.vividCard);
+
+  @override
+  Widget build(BuildContext context) {
+    return HuxHoverLift(
+      borderRadius: _radius,
+      child: ClipRRect(
+        borderRadius: _radius,
+        child: Container(
+          padding: const EdgeInsets.all(HuxSpacing.lg),
+          decoration: BoxDecoration(
+            color: tint ?? (frosted ? HuxColors.cardElevated : HuxColors.card),
+          ),
+          child: Stack(
+            children: [
+              child,
+              HuxGlassCorner(borderRadius: _radius),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// A dumb, stateless "draw whatever progress you're given" painter — no
 /// [AnimationController] here. The one-shot grow-in animation lives in
@@ -81,8 +123,8 @@ class _ArcGaugePainter extends CustomPainter {
 enum HeroGaugeLabelPosition { above, below }
 
 /// A single circular ring gauge with a big centered numeral — e.g. ring
-/// battery percent. Lives inside a [GlassPanel] like every other stat
-/// surface (the ring is content, not a card-chrome replacement).
+/// battery percent. Lives inside a [_SolidCardShell] (the ring is
+/// content, not a card-chrome replacement).
 ///
 /// NULL: renders the grey track only (no progress arc drawn at all), the
 /// center shows a plain em-dash in the numeral's own [TextStyle] (so
@@ -101,6 +143,13 @@ class HeroGaugeCard extends StatelessWidget {
   final HeroGaugeLabelPosition labelPosition;
   final bool frosted;
 
+  /// The card's background tint — separate from [accentColor] (the arc
+  /// stroke), so a card can sit in one color family (e.g. Athens Indigo
+  /// for a device/connectivity card) while its arc stays a brighter,
+  /// more legible color. Defaults to a subtle tint of [accentColor]
+  /// itself when not given.
+  final Color? cardTint;
+
   const HeroGaugeCard({
     super.key,
     required this.label,
@@ -110,9 +159,10 @@ class HeroGaugeCard extends StatelessWidget {
     this.format,
     this.size = 140,
     this.strokeWidth = 14,
-    this.accentColor = HuxColors.accentMint,
+    this.accentColor = HuxColors.accentPink,
     this.labelPosition = HeroGaugeLabelPosition.above,
     this.frosted = false,
+    this.cardTint,
   });
 
   @override
@@ -125,8 +175,9 @@ class HeroGaugeCard extends StatelessWidget {
     final labelWidget = Text(label, style: textTheme.bodySmall);
     final targetFraction = value == null ? 0.0 : (value! / max).clamp(0.0, 1.0);
 
-    return GlassPanel(
+    return _SolidCardShell(
       frosted: frosted,
+      tint: Color.alphaBlend((cardTint ?? accentColor).withValues(alpha: 0.28), HuxColors.card),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -219,6 +270,7 @@ class SliderRangeCard extends StatelessWidget {
   final double? normalRangeMax;
   final double trackHeight;
   final bool frosted;
+  final Color tint;
 
   const SliderRangeCard({
     super.key,
@@ -232,6 +284,7 @@ class SliderRangeCard extends StatelessWidget {
     this.normalRangeMax,
     this.trackHeight = 12,
     this.frosted = false,
+    this.tint = HuxColors.accentPink,
   });
 
   @override
@@ -247,8 +300,9 @@ class SliderRangeCard extends StatelessWidget {
     final bandEnd = normalRangeMax == null ? null : ((normalRangeMax! - min) / range).clamp(0.0, 1.0);
     final pillRadius = BorderRadius.circular(trackHeight / 2);
 
-    return GlassPanel(
+    return _SolidCardShell(
       frosted: frosted,
+      tint: Color.alphaBlend(tint.withValues(alpha: 0.22), HuxColors.card),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -319,7 +373,7 @@ class SliderRangeCard extends StatelessWidget {
                               child: Container(
                                 height: trackHeight,
                                 decoration: const BoxDecoration(
-                                  gradient: LinearGradient(colors: [HuxColors.accentMint, HuxColors.accentTeal]),
+                                  gradient: LinearGradient(colors: [HuxColors.accentPink, HuxColors.accentCherry]),
                                 ),
                               ),
                             ),
@@ -449,8 +503,8 @@ class RadialProgressCard extends StatelessWidget {
     required this.max,
     required this.primaryLabel,
     required this.secondaryLabel,
-    this.primaryColor = HuxColors.accentDeepTeal,
-    this.secondaryColor = HuxColors.accentTeal,
+    this.primaryColor = HuxColors.accentPurple,
+    this.secondaryColor = HuxColors.accentCherry,
     this.format,
     this.size = 140,
     this.strokeWidth = 14,
@@ -466,7 +520,7 @@ class RadialProgressCard extends StatelessWidget {
     final secondaryFraction =
         hasData && max > 0 ? (secondaryValue! / max).clamp(0.0, 1.0 - primaryFraction) : 0.0;
 
-    return GlassPanel(
+    return _SolidCardShell(
       frosted: frosted,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,7 +592,7 @@ class BarVisualizerDatum {
   final double? value;
   final Color color;
 
-  const BarVisualizerDatum({required this.label, required this.value, this.color = HuxColors.accentTeal});
+  const BarVisualizerDatum({required this.label, required this.value, this.color = HuxColors.accentCherry});
 }
 
 /// A hero numeral plus a row of vertical bars (an equalizer-style
@@ -565,6 +619,7 @@ class BarVisualizerCard extends StatelessWidget {
   final double maxBarHeight;
   final double barWidth;
   final bool frosted;
+  final Color tint;
 
   static const _nullStubHeight = 6.0;
 
@@ -578,6 +633,7 @@ class BarVisualizerCard extends StatelessWidget {
     this.maxBarHeight = 96,
     this.barWidth = 28,
     this.frosted = false,
+    this.tint = HuxColors.accentCherry,
   });
 
   @override
@@ -589,8 +645,9 @@ class BarVisualizerCard extends StatelessWidget {
     );
     final maxOfBars = bars.map((b) => b.value ?? 0).fold<double>(0, (a, b) => a > b ? a : b);
 
-    return GlassPanel(
+    return _SolidCardShell(
       frosted: frosted,
+      tint: Color.alphaBlend(tint.withValues(alpha: 0.2), HuxColors.card),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -672,7 +729,7 @@ class NudgeModal extends StatefulWidget {
     required this.title,
     required this.message,
     required this.icon,
-    this.accentColor = HuxColors.accentMint,
+    this.accentColor = HuxColors.accentPink,
     required this.primaryLabel,
     required this.onPrimary,
     this.secondaryLabel = 'Dismiss',
@@ -683,7 +740,7 @@ class NudgeModal extends StatefulWidget {
     required String title,
     required String message,
     required IconData icon,
-    Color accentColor = HuxColors.accentMint,
+    Color accentColor = HuxColors.accentPink,
     required String primaryLabel,
     required Future<void> Function() onPrimary,
     String secondaryLabel = 'Dismiss',
@@ -739,8 +796,9 @@ class _NudgeModalState extends State<NudgeModal> {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(HuxSpacing.lg),
-        child: GlassPanel(
+        child: _SolidCardShell(
           frosted: true,
+          tint: Color.alphaBlend(widget.accentColor.withValues(alpha: 0.14), HuxColors.cardElevated),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

@@ -142,8 +142,8 @@ class _Suggestion extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return GlassPanel(
       frosted: true,
-      tint: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
-      glow: HuxColors.accentMint,
+      tint: HuxColors.accentPink.withValues(alpha: HuxOpacity.activeCardWash),
+      glow: HuxColors.accentPink,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -109,6 +109,80 @@ class _HuxTapScaleState extends State<HuxTapScale> {
   }
 }
 
+/// "This card is the one you're on" feedback — answers BOTH signals a
+/// card can get: a desktop/web mouse hovering over it, AND a finger
+/// actually pressing it (the only signal that exists on a touch
+/// device, where hover never fires at all). Either one lifts the card
+/// forward: scaled up, dropped-shadow, ringed in [accentGlow] — clearly
+/// "this one," not [HuxTapScale]'s subtle press-dip (which still runs
+/// underneath, unaffected — different visual, different job). Reverses
+/// fully on release/exit, driven entirely by real pointer state, never
+/// a timer, so it can't strand `pumpAndSettle` either.
+class HuxHoverLift extends StatefulWidget {
+  final Widget child;
+  final double liftScale;
+  final BorderRadius borderRadius;
+  final Color accentGlow;
+
+  const HuxHoverLift({
+    super.key,
+    required this.child,
+    this.liftScale = 1.035,
+    this.borderRadius = const BorderRadius.all(Radius.circular(HuxRadii.vividCard)),
+    this.accentGlow = HuxColors.accentPink,
+  });
+
+  @override
+  State<HuxHoverLift> createState() => _HuxHoverLiftState();
+}
+
+class _HuxHoverLiftState extends State<HuxHoverLift> {
+  bool _hovering = false;
+  bool _pressed = false;
+
+  bool get _active => _hovering || _pressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Listener(
+        onPointerDown: (_) => setState(() => _pressed = true),
+        onPointerUp: (_) => setState(() => _pressed = false),
+        onPointerCancel: (_) => setState(() => _pressed = false),
+        child: AnimatedScale(
+          scale: _active ? widget.liftScale : 1.0,
+          duration: HuxMotion.quick,
+          curve: HuxMotion.easeOut,
+          child: AnimatedContainer(
+            duration: HuxMotion.quick,
+            curve: HuxMotion.easeOut,
+            decoration: BoxDecoration(
+              borderRadius: widget.borderRadius,
+              border: _active ? Border.all(color: widget.accentGlow, width: 2) : null,
+              boxShadow: _active
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: HuxOpacity.hoverShadow),
+                        blurRadius: HuxGlass.hoverShadowBlur,
+                        offset: const Offset(0, 10),
+                      ),
+                      BoxShadow(
+                        color: widget.accentGlow.withValues(alpha: HuxOpacity.hoverGlow),
+                        blurRadius: HuxGlass.hoverGlowBlur,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The recovery dot with a FINITE breathing halo: two damped pulses
 /// after load, then still. `sin(t·2π·2)·(1−t)` gives two cycles that
 /// fade out — alive on arrival, quiet afterwards (and pumpAndSettle-

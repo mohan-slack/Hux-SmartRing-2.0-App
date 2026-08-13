@@ -192,7 +192,15 @@ void main() {
     await tester.tap(find.text('Modes'));
     await settle(tester);
 
-    await tester.tap(find.text('Big Day'));
+    // Each mode tile is now a full 16:9 photo card whose title sits at
+    // the card's bottom edge — on the default (small) test viewport
+    // that puts "Big Day"'s own text right under AppShell's floating
+    // nav bar (which overlaps the bottom of the content by design).
+    // Tap the card's AspectRatio box instead: its CENTER lands well
+    // clear of the nav bar, unlike the bottom-anchored title text.
+    await tester.tap(find
+        .ancestor(of: find.text('Big Day'), matching: find.byType(AspectRatio))
+        .first);
     await settle(tester);
     await tester.pumpAndSettle();
 

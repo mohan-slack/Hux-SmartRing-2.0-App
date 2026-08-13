@@ -1,16 +1,16 @@
-/// HUX Theme — dark liquid-glass edition
-/// ---------------------------------------
+/// HUX Theme — vivid gradient edition
+/// -------------------------------------
 /// Builds the ONE `ThemeData` every screen renders under. Reads
 /// `hux_tokens.dart` exclusively — no color/radius/spacing literal
 /// lives in this file either, beyond assembling tokens into Flutter's
 /// theming types.
 ///
-/// Typography is unchanged from the first design pass: Fraunces
-/// (serif, warm, editorial) for display/headline slots, Space Grotesk
-/// for body/numerals/UI chrome. What changed is the stage: dark-first,
-/// glass surfaces, mint doing the glowing. Buttons flip to bright mint
-/// fills with near-black text — accents READ as light sources on the
-/// dark stage instead of dark stamps on paper.
+/// SECOND typography pass: Urbanist (a single geometric sans) replaces
+/// the first pass's Fraunces/Space Grotesk serif+sans pairing, for
+/// EVERY text slot — display, body, and numerals alike. The stage
+/// moved from charcoal-grey glass to near-black solid/gradient cards;
+/// Hot Pink is the new hero accent doing the glowing, in the same role
+/// mint played before.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,22 +19,22 @@ import 'hux_tokens.dart';
 
 ThemeData buildHuxTheme() {
   final colorScheme = ColorScheme.fromSeed(
-    seedColor: HuxColors.accentDeepTeal,
+    seedColor: HuxColors.accentPurple,
     brightness: Brightness.dark,
   ).copyWith(
-    primary: HuxColors.accentMint,
+    primary: HuxColors.accentPink,
     onPrimary: HuxColors.inkOnAccent,
-    primaryContainer: _overCard(HuxColors.accentMint, HuxOpacity.iconChip),
+    primaryContainer: _overCard(HuxColors.accentPink, HuxOpacity.iconChip),
     onPrimaryContainer: HuxColors.ink,
-    secondary: HuxColors.accentTeal,
+    secondary: HuxColors.accentCherry,
     onSecondary: HuxColors.inkOnAccent,
     secondaryContainer:
-        _overCard(HuxColors.accentMint, HuxOpacity.activeCardWash),
+        _overCard(HuxColors.accentPink, HuxOpacity.activeCardWash),
     onSecondaryContainer: HuxColors.ink,
-    tertiary: HuxColors.accentTeal,
-    onTertiary: HuxColors.inkOnAccent,
+    tertiary: HuxColors.accentPurple,
+    onTertiary: HuxColors.ink,
     tertiaryContainer:
-        _overCard(HuxColors.accentTeal, HuxOpacity.activeCardWash),
+        _overCard(HuxColors.accentPurple, HuxOpacity.activeCardWash),
     onTertiaryContainer: HuxColors.ink,
     error: HuxColors.rundown,
     onError: HuxColors.inkOnAccent,
@@ -73,7 +73,7 @@ ThemeData buildHuxTheme() {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: HuxColors.glassFillTop,
-      selectedColor: _overCard(HuxColors.accentMint, HuxOpacity.activeCardWash),
+      selectedColor: _overCard(HuxColors.accentPink, HuxOpacity.activeCardWash),
       side: const BorderSide(color: HuxColors.glassStroke),
       labelStyle: textTheme.labelLarge?.copyWith(color: HuxColors.ink),
       deleteIconColor: HuxColors.mutedText,
@@ -88,19 +88,19 @@ ThemeData buildHuxTheme() {
     // app_shell.dart.
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: HuxColors.card.withValues(alpha: HuxOpacity.navGlass),
-      indicatorColor: _overCard(HuxColors.accentMint, HuxOpacity.iconChip),
+      indicatorColor: _overCard(HuxColors.accentPink, HuxOpacity.iconChip),
       surfaceTintColor: Colors.transparent,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return textTheme.labelMedium?.copyWith(
-          color: selected ? HuxColors.accentMint : HuxColors.mutedText,
+          color: selected ? HuxColors.accentPink : HuxColors.mutedText,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
         );
       }),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return IconThemeData(
-          color: selected ? HuxColors.accentMint : HuxColors.mutedText,
+          color: selected ? HuxColors.accentPink : HuxColors.mutedText,
         );
       }),
     ),
@@ -108,7 +108,7 @@ ThemeData buildHuxTheme() {
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) {
           return states.contains(WidgetState.selected)
-              ? HuxColors.accentMint
+              ? HuxColors.accentPink
               : HuxColors.glassFillTop;
         }),
         foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -125,14 +125,14 @@ ThemeData buildHuxTheme() {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: HuxColors.cardElevated,
       contentTextStyle: textTheme.bodyMedium?.copyWith(color: HuxColors.ink),
-      actionTextColor: HuxColors.accentMint,
+      actionTextColor: HuxColors.accentPink,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HuxSpacing.sm),
       ),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: HuxColors.accentMint,
+      color: HuxColors.accentPink,
       circularTrackColor: HuxColors.hairline,
     ),
     dialogTheme: DialogThemeData(
@@ -169,12 +169,12 @@ ThemeData buildHuxTheme() {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(HuxSpacing.sm),
-        borderSide: const BorderSide(color: HuxColors.accentMint),
+        borderSide: const BorderSide(color: HuxColors.accentPink),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: HuxColors.accentMint,
+        backgroundColor: HuxColors.accentPink,
         foregroundColor: HuxColors.inkOnAccent,
         disabledBackgroundColor: HuxColors.glassFillTop,
         disabledForegroundColor: HuxColors.mutedText,
@@ -187,8 +187,8 @@ ThemeData buildHuxTheme() {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: HuxColors.accentMint,
-        side: const BorderSide(color: HuxColors.accentMint),
+        foregroundColor: HuxColors.accentPink,
+        side: const BorderSide(color: HuxColors.accentPink),
         minimumSize: const Size(0, huxMinTapTarget),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(HuxRadii.chip),
@@ -198,7 +198,7 @@ ThemeData buildHuxTheme() {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: HuxColors.accentMint,
+        foregroundColor: HuxColors.accentPink,
         minimumSize: const Size(0, huxMinTapTarget),
         textStyle: textTheme.labelLarge,
       ),
@@ -213,67 +213,82 @@ ThemeData buildHuxTheme() {
 Color _overCard(Color color, double opacity) =>
     Color.alphaBlend(color.withValues(alpha: opacity), HuxColors.card);
 
+/// H1-role letter spacing from the reference type spec: -1% of the
+/// resolved font size (a small NEGATIVE tracking reads as tighter,
+/// more "designed" at display sizes — the opposite of body text).
+double _h1Tracking(double fontSize) => fontSize * -0.01;
+
+/// Body-role letter spacing from the same spec: +2% of the resolved
+/// font size (a touch of positive tracking keeps small Urbanist text
+/// from feeling cramped, since it's a geometric sans, not a serif).
+double _bodyTracking(double fontSize) => fontSize * 0.02;
+
 TextTheme _huxTextTheme() {
-  final base = GoogleFonts.spaceGroteskTextTheme().apply(
+  final base = GoogleFonts.urbanistTextTheme().apply(
     bodyColor: HuxColors.ink,
     displayColor: HuxColors.ink,
   );
 
+  // H1-role slots (display/headline): Medium weight, 120% line height,
+  // -1% tracking — the reference spec's "H1 Title" spelled out exactly
+  // once, applied at each slot's own size rather than repeating the
+  // spec's literal 64sp everywhere (that size is a hero/marketing
+  // scale; in-app headlines stay at their existing, screen-tested
+  // sizes — only the WEIGHT/HEIGHT/TRACKING recipe carries over).
+  TextStyle h1(TextStyle? textStyle, double fontSize) => GoogleFonts.urbanist(
+        textStyle: textStyle,
+        fontSize: fontSize,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        letterSpacing: _h1Tracking(fontSize),
+      );
+
   return base.copyWith(
-    displayLarge: GoogleFonts.fraunces(
-        textStyle: base.displayLarge, fontWeight: FontWeight.w600),
-    displayMedium: GoogleFonts.fraunces(
-        textStyle: base.displayMedium, fontWeight: FontWeight.w600),
-    // Today's hero headline lives here: Fraunces at 36 — the top of
-    // the brand's specified 32-36 range.
-    displaySmall: GoogleFonts.fraunces(
-      textStyle: base.displaySmall,
-      fontSize: 36,
-      fontWeight: FontWeight.w600,
-      height: 1.15,
-    ),
-    headlineLarge: GoogleFonts.fraunces(
-      textStyle: base.headlineLarge,
-      fontSize: 32,
-      fontWeight: FontWeight.w600,
-      height: 1.2,
-    ),
-    headlineMedium: GoogleFonts.fraunces(
-        textStyle: base.headlineMedium, fontWeight: FontWeight.w600),
-    // Story's title and Modes'/Trends' section headers — Fraunces,
-    // still editorial but a step down from the Today hero.
-    headlineSmall: GoogleFonts.fraunces(
-      textStyle: base.headlineSmall,
-      fontSize: 24,
-      fontWeight: FontWeight.w600,
-      height: 1.25,
-    ),
+    displayLarge: h1(base.displayLarge, base.displayLarge?.fontSize ?? 57),
+    displayMedium: h1(base.displayMedium, base.displayMedium?.fontSize ?? 45),
+    // Today's hero headline lives here.
+    displaySmall: h1(base.displaySmall, 36),
+    headlineLarge: h1(base.headlineLarge, 32),
+    headlineMedium:
+        h1(base.headlineMedium, base.headlineMedium?.fontSize ?? 28),
+    // Story's title and Modes'/Trends' section headers — a step down
+    // from the Today hero, same H1 recipe.
+    headlineSmall: h1(base.headlineSmall, 24),
     // Story paragraphs read here (bodyLarge): 1.6 line height for
-    // comfortable, editorial-feeling long-form reading.
-    bodyLarge: GoogleFonts.spaceGrotesk(
+    // comfortable long-form reading (kept from the first pass — the
+    // reference spec's 120% is for shorter UI copy, not paragraphs).
+    bodyLarge: GoogleFonts.urbanist(
       textStyle: base.bodyLarge,
       height: 1.6,
+      letterSpacing: _bodyTracking(base.bodyLarge?.fontSize ?? 16),
       color: HuxColors.ink,
     ),
-    bodyMedium: GoogleFonts.spaceGrotesk(
+    bodyMedium: GoogleFonts.urbanist(
       textStyle: base.bodyMedium,
+      height: 1.2,
+      letterSpacing: _bodyTracking(base.bodyMedium?.fontSize ?? 14),
       color: HuxColors.ink,
     ),
-    bodySmall: GoogleFonts.spaceGrotesk(
+    bodySmall: GoogleFonts.urbanist(
       textStyle: base.bodySmall,
+      height: 1.2,
+      letterSpacing: _bodyTracking(base.bodySmall?.fontSize ?? 12),
       color: HuxColors.mutedText,
     ),
-    labelLarge: GoogleFonts.spaceGrotesk(
+    labelLarge: GoogleFonts.urbanist(
       textStyle: base.labelLarge,
       fontWeight: FontWeight.w600,
+      letterSpacing: _bodyTracking(base.labelLarge?.fontSize ?? 14),
       color: HuxColors.ink,
     ),
-    labelMedium: GoogleFonts.spaceGrotesk(
+    labelMedium: GoogleFonts.urbanist(
       textStyle: base.labelMedium,
+      letterSpacing: _bodyTracking(base.labelMedium?.fontSize ?? 12),
       color: HuxColors.mutedText,
     ),
-    labelSmall: GoogleFonts.spaceGrotesk(
+    labelSmall: GoogleFonts.urbanist(
       textStyle: base.labelSmall,
+      letterSpacing: _bodyTracking(base.labelSmall?.fontSize ?? 11),
       color: HuxColors.mutedText,
     ),
   );

@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 
 import '../core/meaning/daily_readout.dart';
 import '../core/meaning/readout_service.dart';
-import '../core/meaning/sleep_wording.dart';
 import '../core/modes/event_mode_engine.dart';
 import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
@@ -23,6 +22,7 @@ import '../theme/hux_cards.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
+import '../theme/hux_vivid_cards.dart';
 
 /// One line combining whichever lifestyle modes are active, or null if
 /// none are. Deliberately just concatenation, not a wall of chips —
@@ -86,12 +86,24 @@ class _TodayScreenState extends State<TodayScreen> {
   int? _batteryPercent;
   StreamSubscription<int>? _batterySub;
 
+  /// Live instantaneous heart rate for [VividHeartRateCard] — a genuine
+  /// point reading, not last night's stored average (that comes from
+  /// [_lastNight] instead). Null between readings is normal.
+  double? _heartRateBpm;
+  StreamSubscription<int?>? _heartRateSub;
+
   @override
   void initState() {
     super.initState();
     widget.refreshSignal?.addListener(_onRefreshSignal);
     _batterySub = widget.syncService.batteryPercent.listen((percent) {
       if (mounted) setState(() => _batteryPercent = _sanitizeBattery(percent));
+    });
+    // A missed live reading (motion, poor contact) is normal — only a
+    // REAL non-null tick updates the display; it never regresses an
+    // already-known-good reading back to a blank dash.
+    _heartRateSub = widget.syncService.heartRateBpm.listen((bpm) {
+      if (mounted && bpm != null) setState(() => _heartRateBpm = bpm.toDouble());
     });
     _bootstrap();
   }
@@ -100,6 +112,7 @@ class _TodayScreenState extends State<TodayScreen> {
   void dispose() {
     widget.refreshSignal?.removeListener(_onRefreshSignal);
     _batterySub?.cancel();
+    _heartRateSub?.cancel();
     super.dispose();
   }
 
@@ -153,6 +166,10 @@ class _TodayScreenState extends State<TodayScreen> {
       // doc comment. Only overwrites when we actually have one; a
       // subsequent live update from _batterySub can still refine it.
       _batteryPercent = _sanitizeBattery(widget.syncService.lastRingInfo?.batteryPercent) ?? _batteryPercent;
+      // Same idea for heart rate: seed from the readout's latest-known
+      // reading immediately (see DailyReadout.currentHeartRateBpm), so
+      // the card never sits blank waiting for the next live tick.
+      _heartRateBpm = readout.currentHeartRateBpm?.toDouble() ?? _heartRateBpm;
       _phase = _Phase.ready;
     });
   }
@@ -197,6 +214,7 @@ class _TodayScreenState extends State<TodayScreen> {
             modeStrip: _modeStrip,
             activeContext: _activeContext,
             batteryPercent: _batteryPercent,
+            heartRateBpm: _heartRateBpm,
             sendTestBuzz: widget.syncService.sendTestBuzz,
           ),
         );
@@ -275,6 +293,7 @@ class _ReadoutBody extends StatelessWidget {
   final ModeStrip? modeStrip;
   final ActiveContext activeContext;
   final int? batteryPercent;
+  final double? heartRateBpm;
   final Future<void> Function() sendTestBuzz;
 
   const _ReadoutBody({
@@ -283,6 +302,7 @@ class _ReadoutBody extends StatelessWidget {
     required this.modeStrip,
     required this.activeContext,
     required this.batteryPercent,
+    required this.heartRateBpm,
     required this.sendTestBuzz,
   });
 
@@ -317,161 +337,253 @@ class _ReadoutBody extends StatelessWidget {
         const SizedBox(height: HuxSpacing.lg),
         HuxEntrance(
           index: 3,
-          child: _TodayVitalsRow(
-            stressIndex: readout.stressIndex,
-            respiratoryRateBrpm: lastNight?.avgRespiratoryRateBrpm,
-            activeEnergyKcal: readout.activeEnergyKcal,
+          child: _TodayCardGrid(
+            readout: readout,
+            lastNight: lastNight,
+            heartRateBpm: heartRateBpm,
+            batteryPercent: batteryPercent,
+            sendTestBuzz: sendTestBuzz,
           ),
-        ),
-        const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 4,
-          child: _RingStatusRow(batteryPercent: batteryPercent, sendTestBuzz: sendTestBuzz),
         ),
         if (modeStrip != null) ...[
           const SizedBox(height: HuxSpacing.lg),
-          HuxEntrance(index: 5, child: _ModeStripCard(strip: modeStrip!)),
-        ],
-        if (lastNight != null) ...[
-          const Divider(height: HuxSpacing.xxl),
-          HuxEntrance(
-            index: 6,
-            child: _LastNightStats(
-              session: lastNight!,
-              sectionLabel:
-                  SleepWording(nightShiftActive: activeContext.nightShiftActive)
-                      .sectionLabel,
-            ),
-          ),
+          HuxEntrance(index: 4, child: _ModeStripCard(strip: modeStrip!)),
         ],
       ],
     );
   }
 }
 
-/// Real ring-device status — battery gauge plus a "test your ring"
-/// affordance — grouped separately from the body-vitals row above since
-/// these are about the DEVICE, not the wearer. `sendTestBuzz` is the
-/// only place this screen ever reaches toward the ring, and it goes
-/// through [SyncService], never a raw RingAdapter (same rule as sync
-/// itself).
-class _RingStatusRow extends StatelessWidget {
+/// The Today screen's full metric grid — exactly the ten cards the
+/// product spec calls for (Stress, Resp. rate, Active cal, Heart Rate,
+/// Calories, Sleep Scores, Battery, Test Ring, Min SpO2, Stage
+/// breakdown), each individually null-safe: a missing reading renders
+/// that ONE card's own documented null convention (em-dash, grey stub,
+/// omitted marker — never a fabricated zero), rather than hiding the
+/// card or gating the whole grid behind "do we have a night yet."
+///
+/// This replaces three earlier, overlapping sections — the vitals row,
+/// the ring-status row, and Last Night's flat grid + a duplicate
+/// sleep-stage-split ring (Sleep Scores' segmented bar already shows
+/// that breakdown) — with one consistent set. The three "hero" cards
+/// (Heart Rate, Test Ring, Calories) sit in a big-card-plus-two-small
+/// block, matching the reference layout; Sleep Scores gets its own
+/// full-width row since its segmented bar needs the space; the
+/// remaining six are paired two-up except the two that need width for
+/// their own bars (Min SpO2, Stage breakdown).
+class _TodayCardGrid extends StatelessWidget {
+  final DailyReadout readout;
+  final SleepSession? lastNight;
+  final double? heartRateBpm;
   final int? batteryPercent;
   final Future<void> Function() sendTestBuzz;
 
-  const _RingStatusRow({required this.batteryPercent, required this.sendTestBuzz});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 168,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: HeroGaugeCard(
-              label: 'Battery',
-              value: batteryPercent?.toDouble(),
-              unit: '%',
-              size: 96,
-              strokeWidth: 10,
-            ),
-          ),
-          const SizedBox(width: HuxSpacing.sm),
-          Expanded(
-            child: HuxTapScale(
-              child: GestureDetector(
-                onTap: () => NudgeModal.show(
-                  context,
-                  title: 'Test your ring',
-                  message: 'Send one vibration to confirm it\'s connected.',
-                  icon: Icons.vibration,
-                  primaryLabel: 'Buzz now',
-                  onPrimary: sendTestBuzz,
-                ),
-                child: GlassPanel(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.vibration, color: HuxColors.accentMint, size: 32),
-                      const SizedBox(height: HuxSpacing.sm),
-                      Text('Test ring', style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Today's three table-stakes daytime vitals — stress, overnight
-/// respiratory rate, and active calories — as small faux-glass tiles
-/// (never a new frosted hero panel, per the GPU budget). Always renders
-/// all three, with a graceful em-dash for whichever aren't available
-/// yet, rather than hiding a tile (which would read as "0").
-class _TodayVitalsRow extends StatelessWidget {
-  final int? stressIndex;
-  final double? respiratoryRateBrpm;
-  final int? activeEnergyKcal;
+  const _TodayCardGrid({
+    required this.readout,
+    required this.lastNight,
+    required this.heartRateBpm,
+    required this.batteryPercent,
+    required this.sendTestBuzz,
+  });
 
   /// Stress at or below this reads as "Calm", above as "Elevated" — a
   /// plain-language qualifier alongside the number, not a new score.
   static const _stressElevatedThreshold = 50;
 
-  const _TodayVitalsRow({
-    required this.stressIndex,
-    required this.respiratoryRateBrpm,
-    required this.activeEnergyKcal,
-  });
+  static String _formatInt(double v) => v.round().toString();
 
   @override
   Widget build(BuildContext context) {
-    final stressQualifier = stressIndex == null
-        ? null
-        : (stressIndex! > _stressElevatedThreshold ? 'Elevated' : 'Calm');
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tileWidth = (constraints.maxWidth - HuxSpacing.sm * 2) / 3;
-        return Wrap(
-          spacing: HuxSpacing.sm,
-          runSpacing: HuxSpacing.sm,
-          children: [
-            SizedBox(
-              width: tileWidth,
-              child: _DisplayStatTile(
-                label: 'Stress',
-                value: stressIndex?.toDouble(),
-                format: (v) => v.round().toString(),
-                unit: '/100',
-                qualifier: stressQualifier,
-              ),
+    final night = lastNight;
+    final totalSleepMinutes = night?.totalSleep.inMinutes.toDouble() ?? 0;
+    final timeInBedMinutes = night?.totalTimeInBed.inMinutes.toDouble() ?? 0;
+    // Sleep efficiency — time asleep / time in bed, a standard sleep-
+    // tracking metric computed from real segment data, never a
+    // fabricated "quality score." Null with no night, or a degenerate
+    // (zero-length) time-in-bed.
+    final efficiencyPercent =
+        (night == null || timeInBedMinutes <= 0) ? null : (totalSleepMinutes / timeInBedMinutes * 100).clamp(0.0, 100.0);
+    final segments = night == null || totalSleepMinutes <= 0
+        ? const <VividSleepSegment>[]
+        : [
+            VividSleepSegment(
+              label: 'Light',
+              percentOfSleep: night.stageTotal(SleepStage.light).inMinutes / totalSleepMinutes,
+              color: HuxColors.vividSleepLight,
             ),
-            SizedBox(
-              width: tileWidth,
+            VividSleepSegment(
+              label: 'REM',
+              percentOfSleep: night.stageTotal(SleepStage.rem).inMinutes / totalSleepMinutes,
+              color: HuxColors.vividSleepRem,
+            ),
+            VividSleepSegment(
+              label: 'Deep',
+              percentOfSleep: night.stageTotal(SleepStage.deep).inMinutes / totalSleepMinutes,
+              color: HuxColors.vividSleepDeep,
+            ),
+          ];
+    final stressQualifier = readout.stressIndex == null
+        ? null
+        : (readout.stressIndex! > _stressElevatedThreshold ? 'Elevated' : 'Calm');
+
+    return Column(
+      children: [
+        // Hero block: Heart Rate (big, left) | Test Ring + Calories
+        // (stacked, right) — the reference's "big card + pill + small
+        // card" grid, used once for the most device/vital-flavored trio.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: VividHeartRateCard(
+                  bpm: heartRateBpm,
+                  averageBpm: night?.avgHeartRateBpm?.toDouble(),
+                ),
+              ),
+              const SizedBox(width: HuxSpacing.sm),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: HuxTapScale(
+                        child: GestureDetector(
+                          onTap: () => NudgeModal.show(
+                            context,
+                            title: 'Test your ring',
+                            message: 'Send one vibration to confirm it\'s connected.',
+                            icon: Icons.vibration,
+                            primaryLabel: 'Buzz now',
+                            onPrimary: sendTestBuzz,
+                          ),
+                          child: HuxHoverLift(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(HuxRadii.vividCard),
+                              child: Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Color.alphaBlend(HuxColors.accentIndigo.withValues(alpha: 0.55), HuxColors.card),
+                                ),
+                                child: Stack(
+                                  children: [
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.vibration, color: HuxColors.ink, size: 28),
+                                        const SizedBox(height: HuxSpacing.xs),
+                                        Text('Test ring', style: Theme.of(context).textTheme.bodyMedium),
+                                      ],
+                                    ),
+                                    const HuxGlassCorner(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: HuxSpacing.sm),
+                    Expanded(
+                      child: VividCaloriesCard(kcal: readout.activeEnergyKcal?.toDouble()),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        VividSleepScoreCard(efficiencyPercent: efficiencyPercent, segments: segments),
+        const SizedBox(height: HuxSpacing.sm),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: HeroGaugeCard(
+                  label: 'Battery',
+                  value: batteryPercent?.toDouble(),
+                  unit: '%',
+                  size: 96,
+                  strokeWidth: 10,
+                  cardTint: HuxColors.accentIndigo,
+                ),
+              ),
+              const SizedBox(width: HuxSpacing.sm),
+              Expanded(
+                child: _DisplayStatTile(
+                  label: 'Stress',
+                  value: readout.stressIndex?.toDouble(),
+                  format: _formatInt,
+                  unit: '/100',
+                  qualifier: stressQualifier,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
               child: _DisplayStatTile(
                 label: 'Resp. rate',
-                value: respiratoryRateBrpm,
-                format: (v) => v.round().toString(),
+                value: night?.avgRespiratoryRateBrpm,
+                format: _formatInt,
                 unit: 'brpm',
               ),
             ),
-            SizedBox(
-              width: tileWidth,
+            const SizedBox(width: HuxSpacing.sm),
+            Expanded(
               child: _DisplayStatTile(
                 label: 'Active cal',
-                value: activeEnergyKcal?.toDouble(),
-                format: (v) => v.round().toString(),
+                value: readout.activeEnergyKcal?.toDouble(),
+                format: _formatInt,
                 unit: 'kcal',
               ),
             ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        SliderRangeCard(
+          label: 'Min SpO2',
+          value: night?.minSpo2Percent?.toDouble(),
+          unit: '%',
+          normalRangeMin: 90,
+          normalRangeMax: 100,
+        ),
+        const SizedBox(height: HuxSpacing.sm),
+        BarVisualizerCard(
+          title: 'Stage breakdown',
+          value: night?.totalSleep.inMinutes.toDouble(),
+          unit: 'min asleep',
+          format: _formatInt,
+          bars: [
+            BarVisualizerDatum(
+              label: 'Awake',
+              value: night?.stageTotal(SleepStage.awake).inMinutes.toDouble(),
+              color: HuxColors.mutedText,
+            ),
+            BarVisualizerDatum(
+              label: 'Light',
+              value: night?.stageTotal(SleepStage.light).inMinutes.toDouble(),
+              color: HuxColors.accentCherry,
+            ),
+            BarVisualizerDatum(
+              label: 'Deep',
+              value: night?.stageTotal(SleepStage.deep).inMinutes.toDouble(),
+              color: HuxColors.accentPurple,
+            ),
+            BarVisualizerDatum(
+              label: 'REM',
+              value: night?.stageTotal(SleepStage.rem).inMinutes.toDouble(),
+              color: HuxColors.accentPink,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -502,33 +614,48 @@ class _DisplayStatTile extends StatelessWidget {
       fontWeight: FontWeight.w700,
     );
 
-    return GlassPanel(
-      padding: const EdgeInsets.all(HuxSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: textTheme.bodySmall),
-          const SizedBox(height: HuxSpacing.xs),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+    // Solid near-black tile — the "Daily Streak" card family (see
+    // hux_tokens.dart's file header): plain dark cards for the simpler
+    // metrics, reserving the saturated gradients for the hero/vivid
+    // cards above.
+    return HuxHoverLift(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(HuxRadii.vividCard),
+        child: Container(
+          padding: const EdgeInsets.all(HuxSpacing.md),
+          decoration: const BoxDecoration(color: HuxColors.card),
+          child: Stack(
             children: [
-              if (value == null)
-                Text('—', style: numeralStyle)
-              else ...[
-                HuxCountUp(value: value!, format: format, style: numeralStyle),
-                Padding(
-                  padding: const EdgeInsets.only(
-                      left: HuxSpacing.xs, bottom: HuxSpacing.xs / 2),
-                  child: Text(unit, style: textTheme.bodySmall),
-                ),
-              ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: textTheme.bodySmall),
+                  const SizedBox(height: HuxSpacing.xs),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (value == null)
+                        Text('—', style: numeralStyle)
+                      else ...[
+                        HuxCountUp(value: value!, format: format, style: numeralStyle),
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: HuxSpacing.xs, bottom: HuxSpacing.xs / 2),
+                          child: Text(unit, style: textTheme.bodySmall),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (qualifier != null) ...[
+                    const SizedBox(height: HuxSpacing.xs / 2),
+                    Text(qualifier!, style: textTheme.bodySmall),
+                  ],
+                ],
+              ),
+              const HuxGlassCorner(),
             ],
           ),
-          if (qualifier != null) ...[
-            const SizedBox(height: HuxSpacing.xs / 2),
-            Text(qualifier!, style: textTheme.bodySmall),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -716,163 +843,3 @@ class _ModeStripCard extends StatelessWidget {
   }
 }
 
-class _LastNightStats extends StatelessWidget {
-  final SleepSession session;
-  final String sectionLabel;
-
-  const _LastNightStats({required this.session, required this.sectionLabel});
-
-  static String _formatMinutes(double minutes) {
-    final d = Duration(minutes: minutes.round());
-    final hours = d.inHours;
-    final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    return '$hours:$mins';
-  }
-
-  static String _formatInt(double v) => v.round().toString();
-
-  @override
-  Widget build(BuildContext context) {
-    // Min SpO2 moved to the SliderRangeCard below — shown once, not
-    // duplicated as a flat tile here too.
-    final rows = <_StatRow>[
-      _StatRow('Sleep', session.totalSleep.inMinutes.toDouble(), _formatMinutes,
-          'hrs'),
-      if (session.avgHrvMs != null)
-        _StatRow('Avg HRV', session.avgHrvMs!.toDouble(), _formatInt, 'ms'),
-      if (session.avgHeartRateBpm != null)
-        _StatRow('Avg heart rate', session.avgHeartRateBpm!.toDouble(),
-            _formatInt, 'bpm'),
-    ];
-    final textTheme = Theme.of(context).textTheme;
-
-    final deepMinutes = session.stageTotal(SleepStage.deep).inMinutes.toDouble();
-    final remMinutes = session.stageTotal(SleepStage.rem).inMinutes.toDouble();
-    final totalSleepMinutes = session.totalSleep.inMinutes.toDouble();
-
-    // A two-column grid of glass stat tiles (widget-board style), not
-    // a label:value list — the numbers are what the user came for, so
-    // they get the big Space Grotesk treatment. Wrap + LayoutBuilder
-    // (intrinsic tile height) instead of a fixed-extent grid, so large
-    // accessibility text grows the tiles rather than overflowing them.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(sectionLabel, style: textTheme.labelLarge),
-        const SizedBox(height: HuxSpacing.md),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final tileWidth = (constraints.maxWidth - HuxSpacing.sm) / 2;
-            return Wrap(
-              spacing: HuxSpacing.sm,
-              runSpacing: HuxSpacing.sm,
-              children: [
-                for (final row in rows)
-                  SizedBox(
-                    width: tileWidth,
-                    child: _StatTile(row: row),
-                  ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        SliderRangeCard(
-          label: 'Min SpO2',
-          value: session.minSpo2Percent?.toDouble(),
-          unit: '%',
-          normalRangeMin: 90,
-          normalRangeMax: 100,
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        RadialProgressCard(
-          title: 'Sleep stage split',
-          primaryValue: deepMinutes,
-          secondaryValue: remMinutes,
-          max: totalSleepMinutes,
-          primaryLabel: 'Deep',
-          secondaryLabel: 'REM',
-          format: _formatMinutes,
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        BarVisualizerCard(
-          title: 'Stage breakdown',
-          value: totalSleepMinutes,
-          unit: 'min asleep',
-          format: _formatInt,
-          bars: [
-            BarVisualizerDatum(
-              label: 'Awake',
-              value: session.stageTotal(SleepStage.awake).inMinutes.toDouble(),
-              color: HuxColors.mutedText,
-            ),
-            BarVisualizerDatum(
-              label: 'Light',
-              value: session.stageTotal(SleepStage.light).inMinutes.toDouble(),
-              color: HuxColors.accentTeal,
-            ),
-            BarVisualizerDatum(label: 'Deep', value: deepMinutes, color: HuxColors.accentDeepTeal),
-            BarVisualizerDatum(label: 'REM', value: remMinutes, color: HuxColors.accentMint),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  final _StatRow row;
-
-  const _StatTile({required this.row});
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    // titleLarge is a Space Grotesk slot — sized up via the token
-    // scale, per the brand's "numbers are Space Grotesk" rule.
-    final numeralStyle = textTheme.titleLarge?.copyWith(
-      fontSize: HuxType.numeral,
-      fontWeight: FontWeight.w700,
-    );
-
-    return GlassPanel(
-      padding: const EdgeInsets.all(HuxSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(row.label, style: textTheme.bodySmall),
-          const SizedBox(height: HuxSpacing.xs),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              HuxCountUp(
-                value: row.value,
-                format: row.format,
-                style: numeralStyle,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(
-                    left: HuxSpacing.xs, bottom: HuxSpacing.xs / 2),
-                child: Text(row.unit, style: textTheme.bodySmall),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One Last-sleep stat: a big counting numeral (Space Grotesk, bold)
-/// with a small muted unit label alongside — never one plain string,
-/// so the number a user actually cares about reads at a glance. The
-/// raw [value] + [format] pair (rather than a pre-formatted string)
-/// is what lets the numeral count up on entrance.
-class _StatRow {
-  final String label;
-  final double value;
-  final String Function(double) format;
-  final String unit;
-
-  const _StatRow(this.label, this.value, this.format, this.unit);
-}

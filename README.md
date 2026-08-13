@@ -622,13 +622,60 @@ the polarity reversed.
    hardware, not something a simulator/emulator can exercise (BLE is
    unavailable in both).
 
+## Authentication
+
+The app now requires a signed-in account before it reaches `AppShell` —
+`app.dart`'s `_AuthGate` watches `AuthService.authStateChanges` and shows
+`LoginScreen` until someone's signed in, same "one interface, swappable
+backend" shape as `RingAdapter`: `lib/core/auth/auth_service.dart` is the
+wall every screen talks to, `SupabaseAuthService` is the one real
+implementation, and nothing above that interface imports Supabase.
+
+- **Backend**: Supabase (project `Hux-SmartRing-2.0-App`, Singapore
+  region), connected via `lib/core/auth/supabase_config.dart`'s URL +
+  publishable/anon key — that key is meant to be public (Supabase's
+  model puts access control in Postgres Row Level Security, not in
+  hiding this key); a service-role key must never appear in this repo.
+- **Screens** (`lib/screens/auth/`): `LoginScreen`, `SignUpScreen`,
+  `ForgotPasswordScreen` (send code) → `VerifyCodeScreen` (verify code +
+  set new password in one call, so a wrong code never leaves an account
+  half-reset). All four share `AuthScaffold`'s chrome and validate
+  real-not-fabricated things (password length, confirm-password match)
+  before ever calling the backend.
+- **Sign-out**: a small icon on the source banner, only when
+  `AppShell.authService` is provided (every pre-auth test/caller passes
+  neither and simply doesn't get the icon).
+- **Google/Apple sign-in — code is wired, two manual setup steps
+  remain**, neither of which can be done from this repo alone:
+  1. Create an OAuth 2.0 **Web** client ID in Google Cloud Console, paste
+     it into `SupabaseConfig.googleWebClientId`, and enable the Google
+     provider (same client ID) in the Supabase dashboard under
+     Authentication > Providers. iOS additionally needs its own iOS-type
+     client ID registered as a URL scheme in `Info.plist` (see
+     `SupabaseConfig.googleWebClientId`'s doc comment) — Android needs
+     its own separate `google-services.json` setup. Until all of this is
+     done, tapping "Google" shows a calm on-screen error instead of
+     attempting the native flow: calling that SDK unconfigured doesn't
+     throw a catchable error, it crashes the whole app (caught the hard
+     way, once — `SupabaseAuthService.signInWithGoogle` now refuses to
+     call it while `googleWebClientId` is empty).
+  2. Enable the Apple provider in the Supabase dashboard, which needs
+     your Apple Developer Team ID, a Services ID, and a generated Sign-
+     in-with-Apple key from the Apple Developer portal. The app-side
+     entitlement (`com.apple.developer.applesignin`) is already added to
+     `Runner.entitlements`.
+  Email/password sign-up, sign-in, and password recovery need neither
+  of these and work end-to-end already.
+
 ## Deliberate constraints (do not "fix" these)
 
 - Models carry processed metrics only. No raw PPG fields until eIoT
   grants raw access (wiki gate 1).
 - Nullable readings are normal, not errors. Missing data is part of
   the contract.
-- No accounts, no cloud, no ML in v1 (wiki page 6).
+- No ML in v1 (wiki page 6). **Superseded this phase:** "no accounts, no
+  cloud" is no longer the rule — see "Authentication" below; accounts are
+  now required to reach the app at all.
 - `fl_chart` is pinned to `^0.66.2`, not the latest 1.x: this Flutter
   SDK (3.32.6) locks `vector_math` to 2.1.4, and fl_chart 1.1.0 calls a
   `Matrix4` method that only exists in a newer `vector_math` than this

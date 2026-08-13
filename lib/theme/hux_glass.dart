@@ -40,7 +40,7 @@ class HuxBackground extends StatelessWidget {
               gradient: RadialGradient(
                 center: Alignment(-1.2, -1.1),
                 radius: 1.4,
-                colors: [HuxColors.bgGlowMint, Colors.transparent],
+                colors: [HuxColors.bgGlowPink, Colors.transparent],
               ),
             ),
           ),
@@ -49,7 +49,7 @@ class HuxBackground extends StatelessWidget {
               gradient: RadialGradient(
                 center: Alignment(1.3, 1.2),
                 radius: 1.5,
-                colors: [HuxColors.bgGlowTeal, Colors.transparent],
+                colors: [HuxColors.bgGlowPurple, Colors.transparent],
               ),
             ),
           ),
@@ -169,6 +169,73 @@ class GlassPanel extends StatelessWidget {
               ],
       ),
       child: ClipRRect(borderRadius: radius, child: body),
+    );
+  }
+}
+
+/// A cheap, decorative "glass" sheen for the SOLID vivid cards
+/// (hux_cards.dart / hux_vivid_cards.dart / the Modes image cards) —
+/// a soft DIAGONAL highlight fading from the top-left corner, plus the
+/// same specular top-rim line [GlassPanel] uses, layered over a solid
+/// or gradient fill. Deliberately a diagonal wash rather than the
+/// first cut's tight circular spotlight — a distinct round "blob" read
+/// as an odd smudge, especially over a busy photo; a soft directional
+/// sheen reads as light catching an angled edge instead, the way real
+/// glass actually does. NOT real glass (no BackdropFilter, no actual
+/// translucency) — just enough of a cue at near-zero GPU cost.
+/// Purely decorative: wrapped in [IgnorePointer] so it never steals a
+/// tap or a hover from the card underneath.
+class HuxGlassCorner extends StatelessWidget {
+  final BorderRadius borderRadius;
+
+  const HuxGlassCorner({super.key, this.borderRadius = const BorderRadius.all(Radius.circular(HuxRadii.vividCard))});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: ClipRRect(
+          borderRadius: borderRadius,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      stops: const [0.0, 0.32],
+                      colors: [
+                        HuxColors.glassHighlight.withValues(alpha: HuxOpacity.glassCornerSheen),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                left: HuxSpacing.lg,
+                right: HuxSpacing.lg,
+                child: SizedBox(
+                  height: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          HuxColors.glassHighlight.withValues(alpha: HuxOpacity.glassCornerRim),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

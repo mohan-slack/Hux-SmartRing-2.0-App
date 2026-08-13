@@ -41,6 +41,14 @@ class DailyReadout {
   /// no active-energy readings yet.
   final int? activeEnergyKcal;
 
+  /// The latest heart-rate reading from today's snapshots, DISPLAY ONLY
+  /// — same "most recent non-null reading, never scored" treatment as
+  /// [stressIndex]/[activeEnergyKcal]. This is what lets a "live" heart-
+  /// rate card show a real number immediately on load, rather than
+  /// waiting on [RingAdapter.liveSnapshots] to tick again after the app
+  /// opens. Null when today has no heart-rate readings yet.
+  final int? currentHeartRateBpm;
+
   const DailyReadout({
     required this.date,
     required this.state,
@@ -50,6 +58,7 @@ class DailyReadout {
     required this.dataQuality,
     this.stressIndex,
     this.activeEnergyKcal,
+    this.currentHeartRateBpm,
   });
 
   /// The "still learning your body" readout shown while the baseline
@@ -74,11 +83,12 @@ class DailyReadout {
   /// no snapshots to fall back on. Distinct from [learning]: the body is
   /// known, last night just didn't come through.
   ///
-  /// [stressIndex]/[activeEnergyKcal] are still accepted here: a night
-  /// with no usable sleep data doesn't mean today's daytime snapshots
-  /// (which these are derived from) are unusable too.
+  /// [stressIndex]/[activeEnergyKcal]/[currentHeartRateBpm] are still
+  /// accepted here: a night with no usable sleep data doesn't mean
+  /// today's daytime snapshots (which these are derived from) are
+  /// unusable too.
   factory DailyReadout.noSignal(DateTime date,
-          {int? stressIndex, int? activeEnergyKcal}) =>
+          {int? stressIndex, int? activeEnergyKcal, int? currentHeartRateBpm}) =>
       DailyReadout(
         date: date,
         state: RecoveryState.learning,
@@ -93,5 +103,6 @@ class DailyReadout {
         dataQuality: DataQuality.sparse,
         stressIndex: stressIndex,
         activeEnergyKcal: activeEnergyKcal,
+        currentHeartRateBpm: currentHeartRateBpm,
       );
 }

@@ -15,6 +15,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../core/auth/auth_service.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/meaning/weekly_story.dart';
 import '../core/modes/mode_service.dart';
@@ -40,6 +41,11 @@ class AppShell extends StatefulWidget {
   /// every existing caller/test that predates this field is unaffected.
   final RingDataSource dataSource;
 
+  /// Optional so every existing caller/test that predates sign-in stays
+  /// unaffected — when null, the banner simply has no sign-out icon
+  /// (there's no `app.dart`-level auth gate to return to).
+  final AuthService? authService;
+
   const AppShell({
     super.key,
     required this.store,
@@ -48,6 +54,7 @@ class AppShell extends StatefulWidget {
     required this.storyService,
     required this.modeService,
     this.dataSource = RingDataSource.mock,
+    this.authService,
   });
 
   @override
@@ -91,7 +98,7 @@ class _AppShellState extends State<AppShell> {
             bottom: false,
             child: Column(
               children: [
-                _SourceBanner(source: widget.dataSource),
+                _SourceBanner(source: widget.dataSource, authService: widget.authService),
                 Expanded(
                   child: IndexedStack(
                     index: _index,
@@ -148,12 +155,15 @@ class _AppShellState extends State<AppShell> {
 class _SourceBanner extends StatelessWidget {
   final RingDataSource source;
 
-  const _SourceBanner({required this.source});
+  /// Null on every pre-auth caller/test — see [AppShell.authService].
+  final AuthService? authService;
+
+  const _SourceBanner({required this.source, this.authService});
 
   Color get _background => switch (source) {
         RingDataSource.mock => HuxColors.demoAmber,
         RingDataSource.health => HuxColors.devBlueGrey,
-        RingDataSource.aizoBle => HuxColors.accentDeepTeal,
+        RingDataSource.aizoBle => HuxColors.accentPurple,
       };
 
   // Amber is light — the dedicated on-accent ink keeps ~10:1 contrast
@@ -171,12 +181,25 @@ class _SourceBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       color: _background,
-      padding: const EdgeInsets.symmetric(
-          vertical: HuxSpacing.sm, horizontal: HuxSpacing.lg),
-      child: Text(
-        source.bannerText,
-        textAlign: TextAlign.center,
-        style: TextStyle(fontWeight: FontWeight.bold, color: _foreground),
+      padding: const EdgeInsets.symmetric(vertical: HuxSpacing.sm, horizontal: HuxSpacing.lg),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Text(
+            source.bannerText,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold, color: _foreground),
+          ),
+          if (authService != null)
+            Positioned(
+              right: -HuxSpacing.md,
+              child: IconButton(
+                icon: Icon(Icons.logout, color: _foreground, size: 20),
+                tooltip: 'Sign out',
+                onPressed: () => authService!.signOut(),
+              ),
+            ),
+        ],
       ),
     );
   }

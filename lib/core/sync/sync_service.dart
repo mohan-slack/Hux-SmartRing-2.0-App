@@ -82,6 +82,14 @@ class SyncService {
   /// screens never see it directly, same rule as everything else here.
   Stream<int> get batteryPercent => _ring.batteryPercent;
 
+  /// Live heart-rate readings, straight from [RingAdapter.liveSnapshots]
+  /// — for the Today screen's vivid Heart Rate highlight card, which
+  /// wants an instantaneous reading rather than last night's overnight
+  /// average. Nullable per snapshot, same as [HealthSnapshot.heartRateBpm]
+  /// itself: a snapshot with no HR reading (motion, poor contact) is
+  /// normal, not an error.
+  Stream<int?> get heartRateBpm => _ring.liveSnapshots.map((s) => s.heartRateBpm);
+
   /// Sends one real vibration to the ring, for a "test my ring" UI
   /// affordance. Throws [RingConnectionException] when not connected,
   /// same as every other [RingAdapter] method — callers use the same

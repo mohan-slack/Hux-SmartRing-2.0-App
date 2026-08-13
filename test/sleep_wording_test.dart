@@ -14,7 +14,6 @@ void main() {
       expect(wording.lastSleepPossessive, "Last night's");
       expect(wording.duringLastSleep, 'overnight');
       expect(wording.nextSleepPeriod, 'tonight');
-      expect(wording.sectionLabel, 'Last night');
     });
   });
 
@@ -27,7 +26,6 @@ void main() {
         wording.lastSleepPossessive,
         wording.duringLastSleep,
         wording.nextSleepPeriod,
-        wording.sectionLabel,
       ].join(' ').toLowerCase();
 
       expect(all.contains('last night'), isFalse);
@@ -40,7 +38,6 @@ void main() {
       expect(wording.lastSleepPossessive, "Your last sleep's");
       expect(wording.duringLastSleep, 'during your last sleep');
       expect(wording.nextSleepPeriod, 'before your next sleep');
-      expect(wording.sectionLabel, 'Last sleep');
     });
   });
 }

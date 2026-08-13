@@ -328,7 +328,7 @@ class _DeltaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final up = percent >= 0;
-    final color = up ? HuxColors.accentMint : HuxColors.stretched;
+    final color = up ? HuxColors.accentPink : HuxColors.stretched;
     return Container(
       padding: const EdgeInsets.symmetric(
           horizontal: HuxSpacing.sm, vertical: HuxSpacing.xs / 2),
@@ -450,11 +450,11 @@ class _SleepBarChart extends StatelessWidget {
     final highlightLabelStyle = Theme.of(context)
         .textTheme
         .labelSmall
-        ?.copyWith(color: HuxColors.accentMint, fontWeight: FontWeight.w700);
+        ?.copyWith(color: HuxColors.accentPink, fontWeight: FontWeight.w700);
     final targetStyle = Theme.of(context)
         .textTheme
         .labelSmall
-        ?.copyWith(color: HuxColors.accentMint);
+        ?.copyWith(color: HuxColors.accentPink);
     final interval = _weekdayLabelInterval(rows.length);
     final latestIndex = _latestIndex;
     final median = baseline.medianTotalSleep;
@@ -476,7 +476,7 @@ class _SleepBarChart extends StatelessWidget {
     const mintBar = LinearGradient(
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
-      colors: [HuxColors.accentDeepTeal, HuxColors.accentMint],
+      colors: [HuxColors.accentPurple, HuxColors.accentPink],
     );
 
     // Grow-in: tracks + target line appear immediately; the pills rise
@@ -555,7 +555,7 @@ class _SleepBarChart extends StatelessWidget {
               : ExtraLinesData(horizontalLines: [
                   HorizontalLine(
                     y: median.inMinutes / 60.0,
-                    color: HuxColors.accentMint
+                    color: HuxColors.accentPink
                         .withValues(alpha: HuxOpacity.targetLine),
                     strokeWidth: 1,
                     dashArray: HuxGlass.dashArray,
@@ -573,7 +573,7 @@ class _SleepBarChart extends StatelessWidget {
                   HorizontalRangeAnnotation(
                     y1: band.low.inMinutes / 60.0,
                     y2: band.high.inMinutes / 60.0,
-                    color: HuxColors.accentMint
+                    color: HuxColors.accentPink
                         .withValues(alpha: HuxOpacity.targetBand),
                   ),
                 ]),
@@ -634,11 +634,11 @@ class _MetricLineChart extends StatelessWidget {
                 isCurved: true,
                 preventCurveOverShooting: true,
                 gradient: const LinearGradient(
-                  colors: [HuxColors.accentMint, HuxColors.accentTeal],
+                  colors: [HuxColors.accentPink, HuxColors.accentCherry],
                 ),
                 barWidth: 3,
                 shadow: Shadow(
-                  color: HuxColors.accentMint
+                  color: HuxColors.accentPink
                       .withValues(alpha: HuxOpacity.chartLineGlow),
                   blurRadius: HuxGlass.chartGlowBlur,
                 ),
@@ -648,7 +648,7 @@ class _MetricLineChart extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      HuxColors.accentMint
+                      HuxColors.accentPink
                           .withValues(alpha: HuxOpacity.chartAreaFill),
                       Colors.transparent,
                     ],
@@ -662,9 +662,9 @@ class _MetricLineChart extends StatelessWidget {
                   getDotPainter: (spot, percent, barData, index) =>
                       FlDotCirclePainter(
                     radius: HuxSpacing.xs,
-                    color: HuxColors.accentMint,
+                    color: HuxColors.accentPink,
                     strokeWidth: HuxSpacing.sm,
-                    strokeColor: HuxColors.accentMint
+                    strokeColor: HuxColors.accentPink
                         .withValues(alpha: HuxOpacity.chartDotHalo),
                   ),
                 ),

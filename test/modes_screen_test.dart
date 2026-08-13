@@ -48,6 +48,12 @@ void main() {
 
     expect(find.text('Big Day'), findsOneWidget);
     expect(find.text('Shaadi'), findsOneWidget);
+    // Each mode tile is now a full 16:9 photo card (much taller than
+    // the old compact ListTile row), so the third one sits below the
+    // default test viewport — scroll it into view like every other
+    // below-the-fold check in this file.
+    await tester.scrollUntilVisible(find.text('Exam Season'), 300);
+    await tester.pump();
     expect(find.text('Exam Season'), findsOneWidget);
     expect(find.textContaining('Active:'), findsNothing);
   });
@@ -65,6 +71,11 @@ void main() {
       home: Scaffold(body: ModesScreen(modeService: ModeService(store))),
     ));
     await settle(tester);
+
+    // Each mode tile is now a full 16:9 photo card — scroll it into
+    // view before tapping (see the previous test's comment).
+    await tester.scrollUntilVisible(find.text('Shaadi'), 300);
+    await tester.pump();
 
     // _onTapMode awaits a real activeConfig() DB read before showing
     // the sheet, so this needs settle() (see today_screen_test.dart),
@@ -151,6 +162,11 @@ void main() {
 
     expect(find.textContaining('Active: Big Day'), findsOneWidget);
 
+    // Each mode tile is now a full 16:9 photo card — scroll it into
+    // view before tapping (see the first test's comment).
+    await tester.scrollUntilVisible(find.text('Exam Season'), 300);
+    await tester.pump();
+
     // _onTapMode awaits a real activeConfig() DB read before deciding
     // to show the replace-confirmation dialog — settle(), not
     // pumpAndSettle() — followed by pumpAndSettle() for the dialog's
@@ -188,6 +204,11 @@ void main() {
     ));
     await settle(tester);
 
+    // Each mode/lifestyle tile is now a full 16:9 photo card — scroll
+    // to the lifestyle section before checking it (see the first
+    // test's comment).
+    await tester.scrollUntilVisible(find.text('Fasting Companion'), 300);
+    await tester.pump();
     expect(find.text('Night Shift'), findsOneWidget);
     expect(find.text('Fasting Companion'), findsOneWidget);
     expect(find.byType(InputChip), findsNothing);

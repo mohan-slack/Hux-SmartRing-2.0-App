@@ -35,6 +35,25 @@ IconData _modeIcon(ModeId id) => switch (id) {
       ModeId.examSeason => Icons.school,
     };
 
+/// One reference photo per mode (see assets/images/modes/) — resized to
+/// 1200px-wide JPEGs (from 7-8MB source PNGs) so five images cost the
+/// bundle under 1MB total, not 40MB.
+String _modeImage(ModeId id) => switch (id) {
+      ModeId.bigDay => 'assets/images/modes/big-day.jpg',
+      ModeId.shaadi => 'assets/images/modes/shaadi.jpg',
+      ModeId.examSeason => 'assets/images/modes/exam-season.jpg',
+    };
+
+/// Per-mode accent — picked to fit each photo's own mood (see the
+/// asset itself), not assigned round-robin: Big Day's corporate glass
+/// tower reads as Indigo, Shaadi's literal warm-pink drapery IS Hot
+/// Pink, Exam Season's focused study light reads as Purple.
+Color _modeAccent(ModeId id) => switch (id) {
+      ModeId.bigDay => HuxColors.accentIndigo,
+      ModeId.shaadi => HuxColors.accentPink,
+      ModeId.examSeason => HuxColors.accentPurple,
+    };
+
 String _formatDate(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
 String _formatHour(int hour24) {
@@ -300,6 +319,8 @@ class _ModesScreenState extends State<ModesScreen> {
               index: 4,
               child: HuxTapScale(
                 child: _LifestyleTile(
+                  imageAsset: 'assets/images/modes/nightshift.jpg',
+                  accentColor: HuxColors.accentIndigo,
                   icon: Icons.bedtime,
                   title: 'Night Shift',
                   description: 'Main sleep happens in the daytime — swaps '
@@ -314,6 +335,8 @@ class _ModesScreenState extends State<ModesScreen> {
               index: 5,
               child: HuxTapScale(
                 child: _LifestyleTile(
+                  imageAsset: 'assets/images/modes/fasting-companion.jpg',
+                  accentColor: HuxColors.accentCherry,
                   icon: Icons.wb_twilight,
                   title: 'Fasting Companion',
                   description: 'A dated observance — Roza, Navratri, '
@@ -350,8 +373,8 @@ class _ActiveModeCard extends StatelessWidget {
     // with the mint outer glow.
     return GlassPanel(
       frosted: true,
-      tint: HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash),
-      glow: HuxColors.accentMint,
+      tint: HuxColors.accentPink.withValues(alpha: HuxOpacity.activeCardWash),
+      glow: HuxColors.accentPink,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -422,24 +445,21 @@ class _ModeListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: isActive
-          ? HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash)
-          : null,
-      child: ListTile(
-        leading: _AccentIconChip(icon: _modeIcon(modeId)),
-        title: Text(modeName(modeId)),
-        subtitle: Text(_modeDescription(modeId)),
-        trailing: isActive
-            ? const Icon(Icons.check_circle, color: HuxColors.accentMint)
-            : const Icon(Icons.chevron_right, color: HuxColors.mutedText),
-        onTap: onTap,
-      ),
+    return _ModeImageCard(
+      imageAsset: _modeImage(modeId),
+      accentColor: _modeAccent(modeId),
+      icon: _modeIcon(modeId),
+      title: modeName(modeId),
+      description: _modeDescription(modeId),
+      isActive: isActive,
+      onTap: onTap,
     );
   }
 }
 
 class _LifestyleTile extends StatelessWidget {
+  final String imageAsset;
+  final Color accentColor;
   final IconData icon;
   final String title;
   final String description;
@@ -447,6 +467,8 @@ class _LifestyleTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _LifestyleTile({
+    required this.imageAsset,
+    required this.accentColor,
     required this.icon,
     required this.title,
     required this.description,
@@ -456,18 +478,149 @@ class _LifestyleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: isActive
-          ? HuxColors.accentMint.withValues(alpha: HuxOpacity.activeCardWash)
-          : null,
-      child: ListTile(
-        leading: _AccentIconChip(icon: icon),
-        title: Text(title),
-        subtitle: Text(description),
-        trailing: isActive
-            ? const Icon(Icons.check_circle, color: HuxColors.accentMint)
-            : const Icon(Icons.chevron_right, color: HuxColors.mutedText),
+    return _ModeImageCard(
+      imageAsset: imageAsset,
+      accentColor: accentColor,
+      icon: icon,
+      title: title,
+      description: description,
+      isActive: isActive,
+      onTap: onTap,
+    );
+  }
+}
+
+/// The shared visual for every mode/lifestyle tile: a photo background
+/// (fixed 16:9 — matches every asset's own ~1.6-1.84:1 source ratio
+/// closely enough that `BoxFit.cover` crops only a sliver, never
+/// distorts), a bottom scrim for legible text, an accent icon chip, and
+/// an active-state ring + badge. Lifts on hover ([HuxHoverLift]), dips
+/// on press ([HuxTapScale]), and carries the same [HuxGlassCorner]
+/// sheen as every other card in the app — see hux_glass.dart.
+class _ModeImageCard extends StatelessWidget {
+  final String imageAsset;
+  final Color accentColor;
+  final IconData icon;
+  final String title;
+  final String description;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ModeImageCard({
+    required this.imageAsset,
+    required this.accentColor,
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(HuxRadii.vividCard);
+    final textTheme = Theme.of(context).textTheme;
+
+    return HuxTapScale(
+      child: GestureDetector(
         onTap: onTap,
+        child: HuxHoverLift(
+          borderRadius: radius,
+          accentGlow: accentColor,
+          child: ClipRRect(
+            borderRadius: radius,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: isActive ? Border.all(color: accentColor, width: 2) : null,
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.asset(imageAsset, fit: BoxFit.cover),
+                    // Bottom scrim: transparent at top so the photo
+                    // reads, near-opaque at the bottom where the title
+                    // and description sit.
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, HuxColors.modeScrimEnd],
+                          stops: [0.35, 1.0],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: HuxSpacing.md,
+                      left: HuxSpacing.md,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accentColor.withValues(alpha: HuxOpacity.modeIconChipBg),
+                          border: Border.all(color: accentColor, width: 1),
+                        ),
+                        child: Icon(icon, color: HuxColors.ink, size: 20),
+                      ),
+                    ),
+                    if (isActive)
+                      Positioned(
+                        top: HuxSpacing.md,
+                        right: HuxSpacing.md,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.sm, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: accentColor,
+                            borderRadius: BorderRadius.circular(HuxRadii.chip),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.check_circle, color: HuxColors.inkOnAccent, size: 14),
+                              const SizedBox(width: 4),
+                              Text('Active',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: HuxColors.inkOnAccent,
+                                    fontWeight: FontWeight.w700,
+                                  )),
+                            ],
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      left: HuxSpacing.md,
+                      right: HuxSpacing.md,
+                      bottom: HuxSpacing.md,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(title,
+                              style: textTheme.titleMedium?.copyWith(
+                                color: HuxColors.ink,
+                                fontWeight: FontWeight.w600,
+                              )),
+                          const SizedBox(height: 2),
+                          Text(
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodySmall?.copyWith(color: HuxColors.ink.withValues(alpha: 0.85)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    HuxGlassCorner(borderRadius: radius),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

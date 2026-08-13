@@ -210,8 +210,8 @@ void main() {
   });
 
   testWidgets(
-      'shows a lifestyle context chip and "Last sleep" wording when '
-      'Night Shift is active', (tester) async {
+      'shows a lifestyle context chip when Night Shift is active',
+      (tester) async {
     late SqliteHealthStore store;
     late MockRingAdapter ring;
     late SyncService syncService;
@@ -264,14 +264,6 @@ void main() {
     await settle(tester);
 
     expect(find.text('Night shift'), findsOneWidget);
-    // The Last Night section (its header now retitled "Last sleep" for
-    // Night Shift) sits further down the ListView since the ring status
-    // row was added above it — scroll it into view like the ModeStrip
-    // check above does for "Build".
-    await tester.scrollUntilVisible(find.text('Last sleep'), 300);
-    await tester.pump();
-    expect(find.text('Last sleep'), findsOneWidget);
-    expect(find.text('Last night'), findsNothing);
   });
 
   testWidgets(
@@ -396,12 +388,18 @@ void main() {
     expect(find.text('Buzz now'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // Enriched Last Night section — new cards replacing/joining the
-    // flat stat grid.
-    await tester.scrollUntilVisible(find.text('Sleep stage split'), 300);
+    // The rest of the ten-card grid, further down the screen.
+    expect(find.text('Heart Rate'), findsOneWidget);
+    expect(find.text('Calories'), findsOneWidget);
+    expect(find.text('Sleep Scores'), findsOneWidget);
+    expect(find.text('Stress'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Stage breakdown'), 300);
     await tester.pump();
+    expect(find.text('Resp. rate'), findsOneWidget);
+    expect(find.text('Active cal'), findsOneWidget);
     expect(find.text('Min SpO2'), findsOneWidget);
-    expect(find.text('Sleep stage split'), findsOneWidget);
     expect(find.text('Stage breakdown'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -30,7 +30,4 @@ class SleepWording {
   /// Forward-looking: "tonight" / "before your next sleep".
   String get nextSleepPeriod =>
       nightShiftActive ? 'before your next sleep' : 'tonight';
-
-  /// Today screen section header: "Last night" / "Last sleep".
-  String get sectionLabel => nightShiftActive ? 'Last sleep' : 'Last night';
 }
