@@ -4,6 +4,9 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
+import '../../core/auth/supabase_config.dart';
 
 import '../../theme/hux_glass.dart';
 import '../../theme/hux_tokens.dart';
@@ -96,6 +99,9 @@ class AuthSocialRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final google = SupabaseConfig.googleSignInEnabled;
+    final apple = SupabaseConfig.appleSignInEnabled;
+    if (!google && !apple) return const SizedBox.shrink();
     return Column(
       children: [
         Row(
@@ -110,23 +116,27 @@ class AuthSocialRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: HuxSpacing.lg),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: busy ? null : onGoogle,
-                child: const Text('Google'),
-              ),
+        // Apple's own button (App Store guideline 4.8 + HIG), iOS only.
+        if (apple)
+          AbsorbPointer(
+            absorbing: busy,
+            child: SignInWithAppleButton(
+              onPressed: onApple,
+              height: 48,
+              borderRadius: const BorderRadius.all(Radius.circular(HuxRadii.chip)),
             ),
-            const SizedBox(width: HuxSpacing.md),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: busy ? null : onApple,
-                child: const Text('Apple'),
-              ),
+          ),
+        if (apple && google) const SizedBox(height: HuxSpacing.sm),
+        if (google)
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: busy ? null : onGoogle,
+              icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+              label: const Text('Continue with Google'),
             ),
-          ],
-        ),
+          ),
       ],
     );
   }

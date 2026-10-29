@@ -9,6 +9,42 @@
 
 export type ChatMsg = { role: "user" | "assistant"; content: string };
 
+/** A hung provider must not hold the function (and the app spinner) open. */
+const TIMEOUT_MS = 25_000;
+
+/**
+ * Optional output check with a safety classifier (e.g. Llama Guard on
+ * Groq): MODERATION_MODEL secret. Returns true when the [reply] to
+ * [userText] is classified UNSAFE. Unset / errors => false (not blocking).
+ */
+export async function isUnsafeReply(userText: string, reply: string): Promise<boolean> {
+  const model = Deno.env.get("MODERATION_MODEL");
+  const key = Deno.env.get("GROQ_API_KEY");
+  if (!model || !key) return false;
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "user", content: userText.slice(0, 2000) },
+          { role: "assistant", content: reply.slice(0, 4000) },
+        ],
+        max_completion_tokens: 20,
+        temperature: 0,
+      }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const verdict = String(data?.choices?.[0]?.message?.content ?? "").trim().toLowerCase();
+    return verdict.startsWith("unsafe");
+  } catch {
+    return false;
+  }
+}
+
 export interface ChatRequest {
   model: string;
   system: string;
@@ -71,6 +107,7 @@ async function groqChat(req: ChatRequest): Promise<string> {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) await fail(res, "groq");
   const data = await res.json();
@@ -102,6 +139,7 @@ async function anthropicChat(req: ChatRequest): Promise<string> {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model: req.model, max_tokens: req.maxTokens, system: req.system, messages }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) await fail(res, "anthropic");
   const data = await res.json();

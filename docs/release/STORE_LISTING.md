@@ -57,7 +57,7 @@ PRIVATE BY DESIGN
 • No ads. Your data is never sold
 • Download or delete your data any time, inside the app
 
-Works with Health Connect (Android). HUX smart ring support is coming soon.
+Works with Health Connect (Android).
 
 HUX gives wellness insights from your own data. It is not a medical device and
 doesn't diagnose or treat any condition. For health concerns, please see a

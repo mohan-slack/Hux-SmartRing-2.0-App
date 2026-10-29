@@ -23,9 +23,12 @@ data, no HUX ring, AI coach, meal photos, air & heat alerts).
 | Everything goes over HTTPS | Supabase, Open-Meteo, Groq |
 | In-app account deletion, plus a web deletion page | Privacy & account screen, `docs/legal/delete-account.html` |
 
-**Groq retention:** confirm the API data-retention period under HUX's
-Groq terms. If it is longer than "real-time processing", the coach and photo
-data counts as **collected** for Apple. It is answered that way below.
+**Groq retention:** Zero Data Retention is ON for HUX's Groq organisation
+(Global ZDR + Inference APIs ZDR enabled; Batch and Fine-tuning off —
+confirmed in console.groq.com → Settings → Data Controls, Nov 2026; keep a
+dated screenshot). Groq neither stores nor logs inputs/outputs. The coach and
+photo data still passes through HUX's server with the user's sign-in, so it
+stays answered as **collected / linked** below (conservative).
 
 ---
 
@@ -180,10 +183,10 @@ across apps or websites.
 |---|---|---|---|
 | Contact Info → **Email Address** | **Linked** | No | App Functionality |
 | Identifiers → **User ID** | **Linked** | No | App Functionality |
-| Health & Fitness → **Health** (coach summary: sleep, charge; meal nutrition) | Not linked ² | No | App Functionality |
-| Health & Fitness → **Fitness** (steps, streak) | Not linked ² | No | App Functionality |
-| User Content → **Photos or Videos** (meal photos) | Not linked ² | No | App Functionality |
-| User Content → **Other User Content** (coach messages, reported replies) | Not linked ² | No | App Functionality |
+| Health & Fitness → **Health** (coach summary: sleep, charge; meal nutrition) | **Linked** (sent with your sign-in) | No | App Functionality |
+| Health & Fitness → **Fitness** (steps, streak) | **Linked** (sent with your sign-in) | No | App Functionality |
+| User Content → **Photos or Videos** (meal photos) | **Linked** (sent with your sign-in) | No | App Functionality |
+| User Content → **Other User Content** (coach messages, reported replies) | **Linked** (sent with your sign-in) | No | App Functionality |
 | Location → **Coarse Location** (city for air and heat) | Not linked | No | App Functionality |
 
 ² The AI provider never receives the user's identity. Reported replies are
@@ -233,7 +236,7 @@ Other Data.
 | 5.1.1(i) Privacy policy link in the app and in App Store Connect | Done in the app; add the URL in App Store Connect |
 | 5.1.1(v) In-app account deletion, including Sign in with Apple revocation | Done (`delete-account` + Apple revoke) |
 | 5.1.2 No tracking; no data used for ads | Done |
-| 5.1.3 Health data not used for ads or data mining, not stored in iCloud, clear disclosure | Done |
+| 5.1.3 Health data not used for ads or data mining, not stored in iCloud (DB in Application Support, excluded from backup), clear disclosure | Done |
 | 4.8 Sign in with Apple offered next to Google | Done |
 | 1.4.1 No medical claims; accuracy disclaimer | In-app copy done. **Check store screenshots and description.** |
 | 2.1 Reviewer can use the app (demo account, notes) | **To do: create the review account** |

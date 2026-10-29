@@ -434,7 +434,12 @@ class HuxPillNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return SafeArea(
+    // The bar has a fixed height: cap text scaling inside it so large
+    // accessibility text never overflows the tabs (content screens
+    // still scale fully).
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.2,
+      child: SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: HuxSpacing.md),
       child: Padding(
@@ -484,6 +489,8 @@ class HuxPillNavBar extends StatelessWidget {
                                         size: 22, color: i == index ? HuxColors.accentPurple : HuxColors.mutedText),
                                   ),
                                   Text(items[i].label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.clip,
                                       style: text.labelSmall?.copyWith(
                                         color: i == index ? HuxColors.accentPurple : HuxColors.mutedText,
                                         fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
@@ -530,6 +537,7 @@ class HuxPillNavBar extends StatelessWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }

@@ -35,8 +35,14 @@ class _AirHeatScreenState extends State<AirHeatScreen> {
   }
 
   Future<void> _init() async {
-    final city = await widget.env.city();
-    final alerts = await widget.env.alertsOn();
+    IndiaCity? city;
+    var alerts = false;
+    try {
+      city = await widget.env.city();
+      alerts = await widget.env.alertsOn();
+    } catch (_) {
+      // Fall through to "Choose your city" instead of an endless spinner.
+    }
     if (!mounted) return;
     setState(() {
       _city = city;
@@ -85,6 +91,7 @@ class _AirHeatScreenState extends State<AirHeatScreen> {
     );
     if (picked == null) return;
     await widget.env.setCity(picked);
+    if (!mounted) return;
     setState(() => _city = picked);
     await _load(picked);
   }

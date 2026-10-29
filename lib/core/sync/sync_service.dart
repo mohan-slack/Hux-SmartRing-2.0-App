@@ -68,6 +68,14 @@ class SyncService {
   final int maxAttempts;
   final Duration baseBackoff;
 
+  /// Start every fetch at LOCAL midnight. Health apps report steps and
+  /// active energy as per-interval amounts that the mapper turns into
+  /// a running total per day — a fetch window starting mid-day would
+  /// rebuild that day's total from the middle and overwrite the right
+  /// (higher) stored value. Aligning to midnight keeps each re-fetched
+  /// day whole.
+  final bool alignToDayStart;
+
   final _status = StreamController<SyncStatus>.broadcast();
   bool _syncInProgress = false;
 
@@ -104,7 +112,20 @@ class SyncService {
     this.firstSyncWindow = const Duration(days: 7),
     this.maxAttempts = 3,
     this.baseBackoff = const Duration(seconds: 2),
+    this.alignToDayStart = false,
   });
+
+  /// When the last successful sync finished (in memory, this run only)
+  /// — lets the UI skip a resume-sync that just happened.
+  DateTime? lastSuccessAt;
+
+  /// Syncs only if the last successful sync is older than [minGap].
+  /// For "app came back to the foreground" / "Home became visible".
+  Future<SyncOutcome?> syncIfStale({Duration minGap = const Duration(minutes: 15)}) async {
+    final last = lastSuccessAt;
+    if (last != null && DateTime.now().difference(last) < minGap) return null;
+    return syncNow();
+  }
 
   Stream<SyncStatus> get status => _status.stream;
 
@@ -133,6 +154,12 @@ class SyncService {
         return outcome;
       } on RingConnectionException catch (e) {
         lastError = e;
+        if (!e.retryable) {
+          // e.g. health access denied: asking again 3 times in a row
+          // only re-opens the permission sheet. Fail now.
+          _status.add(SyncStatus(SyncPhase.failed, attempt: attempt));
+          return SyncOutcome(success: false, attemptsUsed: attempt, error: e.message);
+        }
         if (attempt < maxAttempts) {
           // Exponential backoff: 2s, 4s, 8s...
           await Future.delayed(baseBackoff * (1 << (attempt - 1)));
@@ -163,9 +190,13 @@ class SyncService {
 
     _status.add(SyncStatus(SyncPhase.syncing, attempt: attempt));
     final watermark = await _store.lastSyncedUpTo();
-    final since = watermark == null
+    var since = watermark == null
         ? DateTime.now().toUtc().subtract(firstSyncWindow)
         : watermark.subtract(overlap);
+    if (alignToDayStart) {
+      final local = since.toLocal();
+      since = DateTime(local.year, local.month, local.day).toUtc();
+    }
 
     final result = await _ring.syncSince(since);
 
@@ -174,7 +205,15 @@ class SyncService {
     final snapshotsSaved = await _store.saveSnapshots(result.snapshots);
     final sessionsSaved =
         await _store.saveSleepSessions(result.sleepSessions);
-    await _store.setLastSyncedUpTo(result.syncedUpTo);
+    // A FIRST sync that found nothing at all usually means access was
+    // quietly denied (iOS never says) or the health app is still
+    // empty. Don't set a watermark: the next sync retries the full
+    // first window instead of starting from "now" and leaving a hole.
+    final foundNothing = result.snapshots.isEmpty && result.sleepSessions.isEmpty;
+    if (!(watermark == null && foundNothing)) {
+      await _store.setLastSyncedUpTo(result.syncedUpTo);
+    }
+    lastSuccessAt = DateTime.now();
 
     return SyncOutcome(
       success: true,

@@ -153,7 +153,8 @@ final _steps = <_Step>[
       write: (p, v) => _with(p, wearable: () => v),
     ),
   ]),
-  _Step('How should HUX talk to you?', 'You can change this any time.', [
+  _Step('How should HUX talk to you?',
+      'The app is in English for now — the coach can reply in your language. Change it any time.', [
     _single<CoachStyle>(
       heading: 'Style',
       options: CoachStyle.values,
@@ -162,7 +163,7 @@ final _steps = <_Step>[
       write: (p, v) => _with(p, coachStyle: () => v),
     ),
     _single<AppLanguage>(
-      heading: 'Language',
+      heading: 'Coach replies in',
       options: AppLanguage.values,
       label: (l) => l.label,
       read: (p) => p.language,
@@ -262,22 +263,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: HuxSpacing.xl),
-              HuxIconBadge(icon: _stepIcons[_index], color: _stepColors[_index], size: 56),
-              const SizedBox(height: HuxSpacing.lg),
-              Text('STEP ${_index + 1} OF ${_steps.length}',
-                  style: text.labelSmall?.copyWith(
-                      color: _stepColors[_index], letterSpacing: 0.8, fontWeight: FontWeight.w700)),
-              const SizedBox(height: HuxSpacing.xs),
-              Text(step.title, style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: HuxSpacing.sm),
-              Text(step.subtitle, style: text.bodyMedium?.copyWith(color: HuxColors.mutedText)),
-              const SizedBox(height: HuxSpacing.xl),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const SizedBox(height: HuxSpacing.xl),
+                      HuxIconBadge(icon: _stepIcons[_index], color: _stepColors[_index], size: 56),
+                      const SizedBox(height: HuxSpacing.lg),
+                      Text('STEP ${_index + 1} OF ${_steps.length}',
+                          style: text.labelSmall?.copyWith(
+                              color: _stepColors[_index], letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: HuxSpacing.xs),
+                      Text(step.title, style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: HuxSpacing.sm),
+                      Text(step.subtitle, style: text.bodyMedium?.copyWith(color: HuxColors.mutedText)),
+                      const SizedBox(height: HuxSpacing.xl),
                       for (final group in step.groups) ...[
                         if (group.heading != null) ...[
                           Text(group.heading!, style: text.titleSmall),

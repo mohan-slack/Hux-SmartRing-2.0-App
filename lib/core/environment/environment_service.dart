@@ -60,10 +60,13 @@ class EnvironmentService {
   final Notifier? _notifier;
   final JsonFetcher _fetch;
   final String? apiKey;
+  final DateTime Function() _now;
 
-  EnvironmentService(this._store, {Notifier? notifier, JsonFetcher fetch = httpGetJson, this.apiKey})
+  EnvironmentService(this._store,
+      {Notifier? notifier, JsonFetcher fetch = httpGetJson, this.apiKey, DateTime Function()? now})
       : _notifier = notifier,
-        _fetch = fetch;
+        _fetch = fetch,
+        _now = now ?? DateTime.now;
 
   Future<IndiaCity?> city() async => cityNamed(await _store.readSetting(_cityKey));
   Future<void> setCity(IndiaCity c) => _store.writeSetting(_cityKey, c.name);
@@ -157,8 +160,12 @@ class EnvironmentService {
     final c = await city();
     if (c == null) return;
     final o = await outlooks(c);
+    // Opened before 7 AM? The next alert is TODAY's — scheduling only
+    // tomorrow's (as before) cancelled the one due in a few hours.
+    final now = _now();
+    final todayAlert = DateTime(o.today.day.year, o.today.day.month, o.today.day.day, alertHour);
+    final t = now.isBefore(todayAlert) ? o.today : o.tomorrow;
     await _notifier.cancel(alertId);
-    final t = o.tomorrow;
     if (!t.alertWorthy) return;
     final at = DateTime(t.day.year, t.day.month, t.day.day, alertHour);
     await _notifier.scheduleOnce(

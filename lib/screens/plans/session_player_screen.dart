@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/plans/plan_models.dart';
 import '../../core/plans/speaker.dart';
@@ -67,10 +68,24 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
   void dispose() {
     _timer?.cancel();
     widget.speaker.stop();
+    _keepAwake(false);
     super.dispose();
   }
 
+  /// Keeps the screen on during a session: if the phone locks in a
+  /// pocket, the app is paused and voice cues stop mid-walk.
+  void _keepAwake(bool on) {
+    try {
+      on ? WakelockPlus.enable() : WakelockPlus.disable();
+    } catch (_) {
+      // Not fatal — the timer still uses the wall clock.
+    }
+  }
+
+  bool _finishing = false;
+
   void _start() {
+    _keepAwake(true);
     setState(() {
       _started = true;
       _startedAt = DateTime.now();
@@ -109,6 +124,8 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
 
   Future<void> _finish(bool completed) async {
     _timer?.cancel();
+    _keepAwake(false);
+    _finishing = true;
     if (!mounted) return;
     if (completed) {
       await showDialog<void>(
@@ -124,6 +141,10 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
   }
 
   Future<void> _endEarly() async {
+    // Hold the clock while the dialog is open: if the session finished
+    // underneath it, its own pop closed the dialog instead of the screen.
+    final wasRunning = _started && !_paused;
+    if (wasRunning) _togglePause();
     final end = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -135,7 +156,11 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
         ],
       ),
     );
-    if (end == true) _finish(false);
+    if (end == true) {
+      _finish(false);
+    } else if (wasRunning && mounted && _paused) {
+      _togglePause();
+    }
   }
 
   static String _label(SegmentKind k) => switch (k) {
@@ -173,7 +198,13 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
     final left = _started ? pos.secondsLeftInSegment : seg.seconds;
     final segProgress = seg.seconds == 0 ? 0.0 : (1 - left / seg.seconds).clamp(0.0, 1.0);
 
-    return Scaffold(
+    return PopScope(
+      // Back gesture mid-session asks first (it won't be marked done).
+      canPop: !_started || _finishing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _endEarly();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text('Week ${widget.session.week} · Session ${widget.session.day}'),
         actions: [
@@ -185,6 +216,13 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
         ],
       ),
       body: SafeArea(
+        // Scrolls on small phones / large text instead of overflowing;
+        // on normal screens it fills the height exactly (Spacers work).
+        child: LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: box.maxHeight),
+              child: IntrinsicHeight(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
           child: Column(
@@ -306,6 +344,11 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
             ],
           ),
         ),
+              ),
+            ),
+          ),
+        ),
+      ),
       ),
     );
   }

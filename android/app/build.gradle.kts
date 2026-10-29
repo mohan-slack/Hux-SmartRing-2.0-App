@@ -44,7 +44,8 @@ android {
         // Health Connect (health ^13) requires API 26+. Flutter's default
         // (21/24) lets the build pass but Health Connect fails at runtime.
         minSdk = 26
-        targetSdk = flutter.targetSdkVersion
+        // Pinned to Google Play's current requirement for new apps.
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

@@ -5,10 +5,10 @@
 > `lib/core/legal/privacy_notice.dart` (the in-app notice). When the meaning
 > changes, bump `PrivacyNotice.noticeVersion` so users agree again.
 
-**Last updated:** [DATE]
+**Last updated:** 29-10-2026
 
 **Who we are:** HUX is an app by **Viveon Gizit Private Limited** ("HUX", "we"),
-[REGISTERED ADDRESS], India. Contact: **privacy@hux.co.in**.
+[REGISTERED ADDRESS], India. Contact: **support@hux.co.in**.
 
 HUX is a wellness app. It is **not a medical device** and does not diagnose,
 treat or prevent any disease.
@@ -30,12 +30,14 @@ treat or prevent any disease.
 | Health readings you allow: steps, heart rate, heart-rate variability, sleep and sleep stages, blood oxygen, active calories, breathing rate | HUX Charge, sleep, trends, streaks, plans | Read from Apple Health (HealthKit) or Android Health Connect; stored **only on your phone** | Yes, for the core features |
 | Your onboarding answers, journal tags, meals, plan progress, settings | Personalise the app | **Only on your phone** | No |
 | AI coach: your messages plus a short summary (goals, diet, HUX Charge, steps vs goal, sleep duration, streak, protein, time of day) | Answer your questions | Sent to HUX's server and to our AI provider (Groq) to write a reply. **Not stored by HUX.** Your chat history stays on your phone. | No — only after you agree in the coach |
-| Meal photos you choose to analyse, plus an optional description | Estimate calories and protein | Sent to HUX's server and to our AI provider (Groq). **Not stored by HUX.** | No — only after you agree |
+| Meal photos you choose to analyse, plus an optional description | Estimate calories and protein | Location and other hidden photo details (EXIF) are removed on your phone first. Sent to HUX's server and to our AI provider (Groq Inc., USA). **Not stored by HUX.** | No — only after you agree |
 | The city you pick (not GPS) | Air-quality and heat alerts | Its coordinates go to Open-Meteo (weather service) | No |
 | A daily count of coach messages, linked to your account ID | Fair-use limit | HUX server; deleted after 7 days | Only if you use the coach |
 | A coach reply you report, the question before it, and the reason | Review and improve the coach | HUX server, linked to your account ID; deleted after 90 days | Only if you report a reply |
 
 We do **not** collect GPS location, contacts, microphone audio, or advertising IDs.
+
+Health readings, meals and your journal are stored **on your phone only**, in app storage that is excluded from iCloud and Google backups.
 
 ## 3. Apple Health and Health Connect
 
@@ -66,8 +68,10 @@ processes data (cross-border transfer), and each provider's retention period.]
   our hosting provider expire within [X] days.
 - **Coach message counts:** 7 days.
 - **Reported coach replies:** 90 days.
-- **Coach messages and meal photos:** HUX does not store them. Our AI provider
-  may keep them for a limited time under its own terms. [CONFIRM PERIOD]
+- **Coach messages and meal photos:** HUX does not store them. Our AI provider,
+  Groq Inc. (USA), processes them only to produce the reply and does not keep
+  them: we have turned on Groq's Zero Data Retention setting for HUX, so
+  inputs and outputs are not stored or logged by Groq.
 
 ## 6. Your rights (DPDP Act 2023)
 
@@ -82,7 +86,7 @@ You can:
   You can also request deletion at https://hux.co.in/delete-account.
 - **Nominate** someone to exercise these rights if you die or become unable to.
   Email us.
-- **Complain:** email **privacy@hux.co.in**. We reply within [X] days. If we don't
+- **Complain:** email **support@hux.co.in**. We reply within [X] days. If we don't
   resolve it, you may complain to the **Data Protection Board of India**.
 
 ## 7. Age
@@ -107,5 +111,5 @@ again in the app.
 
 ## 10. Contact and grievance officer
 
-[NAME], Grievance Officer, Viveon Gizit Private Limited — **privacy@hux.co.in**,
-[ADDRESS].
+Mohan Reddy, Grievance Officer, Viveon Gizit Private Limited — **support@hux.co.in**,
+Electronic City, Bengaluru, Karnataka 560100.

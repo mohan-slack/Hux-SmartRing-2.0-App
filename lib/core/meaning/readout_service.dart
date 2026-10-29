@@ -11,6 +11,7 @@ import '../storage/health_store.dart';
 import 'baseline.dart';
 import 'day_plan.dart';
 import 'hux_charge.dart';
+import 'step_goal_log.dart';
 import 'step_target.dart';
 import 'content/fasting_content.dart';
 import 'daily_readout.dart';
@@ -93,6 +94,16 @@ class ReadoutService {
       now: reference,
       effort: basePlan.effort?.level,
     ));
+    // Remember the goal shown today, so streaks/monthly use the same one.
+    final shownGoal = plan.steps?.target;
+    if (shownGoal != null) {
+      try {
+        await StepGoalLog(_store)
+            .record(DateTime(localNow.year, localNow.month, localNow.day), shownGoal);
+      } catch (_) {
+        // Bookkeeping only — never block the readout.
+      }
+    }
 
     final readout = _engine.evaluate(
       date: DateTime(localNow.year, localNow.month, localNow.day),
@@ -102,6 +113,17 @@ class ReadoutService {
       nightShiftActive: context.nightShiftActive,
       excludeDaytimeFood: fastingToday,
     );
+
+    // Never had ANY sleep: a phone-only user. Don't say "learning" with
+    // nothing to learn from — point at what works and how to get more.
+    if (history.isEmpty && readout.state == RecoveryState.learning) {
+      final steps = plan.steps;
+      return DailyReadout.noSleepYet(
+        readout.date,
+        stepsToday: steps?.today,
+        stepGoal: steps?.target,
+      ).withCharge(charge, plan: plan);
+    }
 
     if (!fastingToday || readout.state == RecoveryState.learning) {
       return readout.withCharge(charge, plan: plan);

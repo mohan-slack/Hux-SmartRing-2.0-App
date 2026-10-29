@@ -261,8 +261,11 @@ class HuxPill extends StatelessWidget {
               Icon(icon, size: 14, color: color),
               const SizedBox(width: HuxSpacing.xs),
             ],
-            Text(label,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w600)),
+            Flexible(
+              child: Text(label,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w600)),
+            ),
           ],
         ),
       );

@@ -18,7 +18,14 @@ class CoachScreen extends StatefulWidget {
   /// input lifted above the floating nav bar.
   final bool embedded;
 
-  const CoachScreen({super.key, required this.coach, this.embedded = false});
+  /// Pinged when the Coach tab becomes visible: re-checks consent and
+  /// history (e.g. after "Stop sharing" in Privacy & account).
+  final Listenable? refreshSignal;
+
+  /// "Not now" on the consent view inside the tab (e.g. go to Home).
+  final VoidCallback? onNotNow;
+
+  const CoachScreen({super.key, required this.coach, this.embedded = false, this.refreshSignal, this.onNotNow});
 
   @override
   State<CoachScreen> createState() => _CoachScreenState();
@@ -46,21 +53,35 @@ class _CoachScreenState extends State<CoachScreen> {
   @override
   void initState() {
     super.initState();
+    widget.refreshSignal?.addListener(_onRefresh);
     _init();
+  }
+
+  void _onRefresh() {
+    if (!_sending) _init();
   }
 
   @override
   void dispose() {
+    widget.refreshSignal?.removeListener(_onRefresh);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
   Future<void> _init() async {
-    final consent = await widget.coach.hasConsent();
-    final history = consent ? await widget.coach.history() : const <ChatMessage>[];
+    final bool consent;
+    final List<ChatMessage> history;
     List<String>? shared;
-    if (!consent) shared = (await widget.coach.previewContext()).preview();
+    try {
+      consent = await widget.coach.hasConsent();
+      history = consent ? await widget.coach.history() : const <ChatMessage>[];
+      if (!consent) shared = (await widget.coach.previewContext()).preview();
+    } catch (_) {
+      // Never an endless spinner: show the consent/empty state instead.
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _consent = consent;
@@ -233,7 +254,7 @@ class _CoachScreenState extends State<CoachScreen> {
           : !widget.coach.hasBackend
               ? const _Message(text: 'The coach needs the HUX online service, which isn\'t set up in this build yet.')
               : !_consent
-                  ? _ConsentView(shared: _shared ?? const [], onAgree: _agree)
+                  ? _ConsentView(shared: _shared ?? const [], onAgree: _agree, onNotNow: widget.onNotNow)
                   : _chat(context),
     );
   }
@@ -265,18 +286,30 @@ class _CoachScreenState extends State<CoachScreen> {
                 Text('I use your HUX numbers to keep it personal.',
                     textAlign: TextAlign.center, style: text.bodySmall),
                 const SizedBox(height: HuxSpacing.xl),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: HuxSpacing.sm,
-                  crossAxisSpacing: HuxSpacing.sm,
-                  childAspectRatio: 1.45,
-                  children: [
-                    for (final q in _suggestions)
-                      _SuggestionCard(icon: q.icon, color: q.color, text: q.text, onTap: () => _send(q.text)),
-                  ],
-                ),
+                // Two per row, each row as tall as its tallest card — no
+                // fixed aspect ratio, so large text never overflows.
+                for (var r = 0; r < _suggestions.length; r += 2) ...[
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var c = r; c < r + 2; c++) ...[
+                          if (c > r) const SizedBox(width: HuxSpacing.sm),
+                          Expanded(
+                            child: c < _suggestions.length
+                                ? _SuggestionCard(
+                                    icon: _suggestions[c].icon,
+                                    color: _suggestions[c].color,
+                                    text: _suggestions[c].text,
+                                    onTap: () => _send(_suggestions[c].text))
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: HuxSpacing.sm),
+                ],
                 const SizedBox(height: HuxSpacing.md),
                 Wrap(
                   spacing: HuxSpacing.sm,
@@ -310,10 +343,13 @@ class _CoachScreenState extends State<CoachScreen> {
         ),
         SafeArea(
           top: false,
+          // In the tab the shell uses extendBody, so the bottom padding
+          // SafeArea sees already includes the floating nav bar. While
+          // the keyboard is up the nav bar is hidden behind it, so drop
+          // that padding and sit right on the keyboard.
+          bottom: View.of(context).viewInsets.bottom == 0,
           child: Padding(
-            // In the tab, keep the input above the floating nav bar.
-            padding: EdgeInsets.fromLTRB(
-                HuxSpacing.lg, HuxSpacing.xs, HuxSpacing.lg, widget.embedded ? 96 : HuxSpacing.sm),
+            padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.xs, HuxSpacing.lg, HuxSpacing.sm),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -424,8 +460,9 @@ class _SuggestionCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Icon(icon, color: color, size: 22),
+              const SizedBox(height: HuxSpacing.md),
               Text(text,
-                  maxLines: 3,
+                  maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
             ],
@@ -530,7 +567,8 @@ class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderS
 class _ConsentView extends StatelessWidget {
   final List<String> shared;
   final VoidCallback onAgree;
-  const _ConsentView({required this.shared, required this.onAgree});
+  final VoidCallback? onNotNow;
+  const _ConsentView({required this.shared, required this.onAgree, this.onNotNow});
 
   @override
   Widget build(BuildContext context) {
@@ -542,8 +580,10 @@ class _ConsentView extends StatelessWidget {
         const SizedBox(height: HuxSpacing.sm),
         Text(
           'To give advice that fits YOU, the coach needs a short summary of your HUX numbers. '
-          'Your message and this summary go to HUX\'s server and an AI service to write the reply. '
-          'HUX doesn\'t keep your chat — it stays on this phone.',
+          'Your message and this summary go to HUX\'s server and then to Groq Inc. (an AI provider in '
+          'the USA) to write the reply. Neither HUX nor Groq stores it (Groq\'s zero data retention is '
+          'on) — your chat stays on this phone. Don\'t share anything you wouldn\'t want an AI '
+          'service to process.',
           style: text.bodyMedium,
         ),
         const SizedBox(height: HuxSpacing.lg),
@@ -560,7 +600,7 @@ class _ConsentView extends StatelessWidget {
         ),
         const SizedBox(height: HuxSpacing.xl),
         FilledButton(onPressed: onAgree, child: const Text('Agree & start')),
-        TextButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Not now')),
+        TextButton(onPressed: onNotNow ?? () => Navigator.of(context).maybePop(), child: const Text('Not now')),
       ],
     );
   }

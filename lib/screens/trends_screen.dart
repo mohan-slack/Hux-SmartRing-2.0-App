@@ -69,7 +69,10 @@ class TrendsScreen extends StatefulWidget {
   /// Clock override for tests; null = the real time.
   final DateTime Function()? now;
 
-  const TrendsScreen({super.key, required this.store, this.now});
+  /// Pinged when the Progress tab becomes visible: re-reads the data.
+  final Listenable? refreshSignal;
+
+  const TrendsScreen({super.key, required this.store, this.now, this.refreshSignal});
 
   @override
   State<TrendsScreen> createState() => _TrendsScreenState();
@@ -95,8 +98,17 @@ class _TrendsScreenState extends State<TrendsScreen> {
   @override
   void initState() {
     super.initState();
+    widget.refreshSignal?.addListener(_reload);
     _future = _fetch(_range);
   }
+
+  @override
+  void dispose() {
+    widget.refreshSignal?.removeListener(_reload);
+    super.dispose();
+  }
+
+  void _reload() => _onRangeChanged(_range);
 
   Future<_TrendsData> _fetch(_Range range) async {
     final now = (widget.now ?? DateTime.now)().toUtc();
@@ -322,7 +334,9 @@ class _TrendsCharts extends StatelessWidget {
             child: _SleepBarChart(rows: rows, baseline: baseline),
           ),
         ),
-        for (final (i, m) in _metrics.indexed) ...[
+        // A metric the source never provides (e.g. stress or breathing
+        // rate from a phone) gets no empty card at all.
+        for (final (i, m) in _metrics.where((m) => rows.any((r) => m.valueOf(r) != null)).indexed) ...[
           const SizedBox(height: HuxSpacing.lg),
           HuxEntrance(
             index: 2 + i,

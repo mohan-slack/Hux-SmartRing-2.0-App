@@ -11,6 +11,15 @@ library;
 
 enum FeatureStatus { available, comingSoon }
 
+/// v1 store builds don't show "Coming soon" cards (App Store 2.1 flags
+/// placeholder features, and they read as unfinished). Flip to true to
+/// show them again, e.g. for a beta with the vote button.
+const showComingSoonFeatures = false;
+
+/// Whether a feature may appear anywhere in the UI.
+bool isFeatureVisible(FeatureId id) =>
+    showComingSoonFeatures || FeatureCatalog.of(id).isAvailable;
+
 enum FeatureCategory { recovery, sleep, activity, food, mind, family, modes }
 
 extension FeatureCategoryLabel on FeatureCategory {

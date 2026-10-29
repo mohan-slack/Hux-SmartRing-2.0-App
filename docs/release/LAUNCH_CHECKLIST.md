@@ -42,7 +42,7 @@ the stores.
 
 - [ ] Lawyer reviews `docs/legal/PRIVACY_POLICY.md` and `TERMS_OF_USE.md`. Fill in every [bracket]: address, grievance officer, dates, liability cap, backup retention.
 - [ ] Publish https://hux.co.in/privacy, /terms, /delete-account (`docs/legal/delete-account.html`) and /support.
-- [ ] Confirm **Groq API data retention** for your organisation. Then finalise the "ephemeral" and "linked" answers in `STORE_FORMS.md` and in `ios/Runner/PrivacyInfo.xcprivacy`.
+- [x] Confirm **Groq API data retention** for your organisation (Zero Data Retention ON, Nov 2026). Then finalise the "ephemeral" and "linked" answers in `STORE_FORMS.md` and in `ios/Runner/PrivacyInfo.xcprivacy`.
 - [ ] Data-processing terms in place with Supabase and Groq. Write down where each one stores data (overseas transfer).
 - [ ] Use the "HUX" name without ® until trade-mark application 6922267 is registered.
 

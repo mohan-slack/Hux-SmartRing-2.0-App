@@ -88,6 +88,25 @@ class DailyReadout {
         plan: plan,
       );
 
+  /// No sleep has EVER arrived (phone only, or a watch that isn't worn to
+  /// bed). Charge can't exist yet — say so plainly and lead with what
+  /// does work today (steps), instead of "learning" forever.
+  factory DailyReadout.noSleepYet(DateTime date, {int? stepsToday, int? stepGoal}) => DailyReadout(
+        date: date,
+        state: RecoveryState.learning,
+        headline: 'Still learning your body — steps work already',
+        meaning: "HUX hasn't received any sleep from your health app yet, so there's no Charge or sleep "
+            'insight. Your steps, plans, food and journal work right away.',
+        actions: [
+          if (stepsToday != null && stepGoal != null)
+            'Walk toward today\'s goal: $stepsToday of $stepGoal steps'
+          else
+            'Take a 10-minute walk after your next meal',
+          'For Charge and sleep: wear a watch or band to bed that syncs to your health app',
+        ],
+        dataQuality: DataQuality.sparse,
+      );
+
   /// The "still learning your body" readout shown while the baseline
   /// is being established. Not an error state — a normal early-days one.
   factory DailyReadout.learning(DateTime date, {int daysOfData = 0}) =>
@@ -99,7 +118,7 @@ class DailyReadout {
             'needs a few more days ($daysOfData so far) before it can '
             'tell you what today means for you.',
         actions: const [
-          'Keep wearing your ring, including overnight',
+          'Keep your watch or tracker on overnight, syncing to your health app',
           'Check back tomorrow — your baseline is almost ready',
         ],
         dataQuality: DataQuality.sparse,
@@ -122,9 +141,9 @@ class DailyReadout {
         headline: 'No readings from last night',
         meaning: "We didn't get usable data from last night, so there's "
             'nothing to read into today. This happens — a missed sync or '
-            'a night the ring came off.',
+            'a night your watch or tracker was off.',
         actions: const [
-          'Make sure the ring is charged and snug for tonight',
+          'Make sure your watch or tracker is charged and worn tonight',
           'Open the app after your next sync to catch up',
         ],
         dataQuality: DataQuality.sparse,

@@ -3,8 +3,6 @@
 /// (RingAdapter, HealthStore) and never needs to change.
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
-import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
@@ -18,23 +16,21 @@ import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
 import 'core/profile/profile_service.dart';
-import 'core/ring/aizo_ble/aizo_ble_ring_adapter.dart';
+import 'core/progress/progress_service.dart';
 import 'core/ring/data_source.dart';
 import 'core/ring/health_adapter/health_store_ring_adapter.dart';
 import 'core/ring/mock_ring_adapter.dart';
 import 'core/ring/ring_adapter.dart';
+import 'core/storage/db_location.dart';
 import 'core/storage/sqlite_health_store.dart';
 import 'core/sync/sync_service.dart';
 import 'core/coach/coach_service.dart';
 
-/// Which [RingAdapter] to wire up — 'mock' (default), 'health' (dev-only
-/// Apple Health / Health Connect adapter), or 'aizo' (real BLE hardware,
-/// PROVISIONAL reverse-engineered protocol — see aizo_ble/aizo_protocol
-/// .dart; NOT the eventual official eIoT SDK, see AizoBleRingAdapter's
-/// header comment for why it isn't named EIoTRingAdapter). Pass
-/// `--dart-define=HUX_SOURCE=health` or `=aizo` to a `flutter run`/
-/// `flutter build` invocation to switch; the default build is untouched
-/// either way.
+/// Which [RingAdapter] to wire up — 'mock' (simulated demo data) or
+/// 'health' (Apple Health / Health Connect, the v1 launch source). Pass
+/// `--dart-define=HUX_SOURCE=health` or `=mock` to `flutter run` /
+/// `flutter build` to switch. (The provisional Aizo BLE ring adapter
+/// lives on the `ring/aizo-ble` git branch, not in v1.)
 ///
 /// RELEASE builds default to 'health' (the v1 launch: real data from the
 /// user's health app, no HUX ring yet). Debug builds keep the demo.
@@ -52,7 +48,8 @@ Future<void> main() async {
   await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.anonKey);
   final authService = SupabaseAuthService();
 
-  final dbPath = p.join(await getDatabasesPath(), 'hux.db');
+  // Kept out of iCloud / Google backups — see db_location.dart.
+  final dbPath = await huxDatabasePath();
   final store = await SqliteHealthStore.open(dbPath);
 
   // The ONE place the source is chosen. Everything below this line
@@ -66,9 +63,6 @@ Future<void> main() async {
     case 'health':
       dataSource = RingDataSource.health;
       ring = HealthStoreRingAdapter();
-    case 'aizo':
-      dataSource = RingDataSource.aizoBle;
-      ring = AizoBleRingAdapter();
     default:
       // chaosMode is off for this demo build so behaviour stays
       // predictable; flip it on locally to exercise the reconnect/
@@ -77,7 +71,17 @@ Future<void> main() async {
       ring = MockRingAdapter(seed: 42);
   }
 
-  final syncService = SyncService(ring, store);
+  // Health apps: re-read 3 whole days each sync (companion apps such as
+  // Zepp/Samsung often push data late) starting at local midnight so
+  // daily step totals stay whole; first sync pulls 30 days so the
+  // baseline isn't empty on day one (Health Connect allows 30 days back).
+  final syncService = SyncService(
+    ring,
+    store,
+    overlap: const Duration(days: 3),
+    firstSyncWindow: const Duration(days: 30),
+    alignToDayStart: true,
+  );
   final modeService = ModeService(store);
   final readoutService = ReadoutService(store, modeService: modeService);
   final storyService = WeeklyStoryService(store);
@@ -110,6 +114,15 @@ Future<void> main() async {
   // Rebuild the reminder schedule from saved settings (it can be lost on
   // reinstall/data clear). Never block or crash startup over it.
   nudgeService.resync().catchError((Object _) {});
+  // Morning briefing text mentions the current streak (if it's on).
+  () async {
+    try {
+      final streak = await ProgressService(store).streaks();
+      await nudgeService.refreshBriefing(streakDays: streak.current);
+    } catch (_) {
+      // Bonus only.
+    }
+  }();
 
   runApp(HuxApp(
     authService: authService,

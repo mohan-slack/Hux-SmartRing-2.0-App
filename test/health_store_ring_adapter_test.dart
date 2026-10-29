@@ -76,14 +76,15 @@ class _FakeHealth extends hk.Health {
 
 void main() {
   group('connect — permission granted', () {
-    test('resolves with RingInfo naming this a dev health-data source',
+    test('resolves with RingInfo naming the health app, with no battery',
         () async {
       final adapter = HealthStoreRingAdapter(health: _FakeHealth());
 
       final info = await adapter.connect();
 
-      expect(info.name, 'Health data (dev)');
-      expect(info.batteryPercent, 100);
+      expect(info.name, anyOf('Apple Health', 'Health Connect'));
+      // -1 = "no battery" sentinel: Home must not show a ring card.
+      expect(info.batteryPercent, -1);
       expect(info.firmwareVersion, anyOf('healthkit', 'healthconnect'));
 
       await adapter.dispose();

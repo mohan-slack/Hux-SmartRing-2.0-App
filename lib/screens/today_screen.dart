@@ -7,8 +7,10 @@
 /// RingAdapter or SQL.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/home/home_extras.dart';
 import '../core/meaning/daily_readout.dart';
@@ -45,9 +47,9 @@ String? _lifestyleChipText(ActiveContext context) {
   return parts.isEmpty ? null : parts.join(' · ');
 }
 
-enum _Phase { syncing, loadingReadout, ready, error }
+enum _Phase { priming, syncing, loadingReadout, ready, error }
 
-/// Some adapters (e.g. AizoBleRingAdapter) use a negative sentinel for
+/// Some adapters (e.g. the health-app one) use a negative sentinel for
 /// "battery read failed/unavailable" rather than a plausible-looking
 /// percent — never render that sentinel as a literal number here.
 int? _sanitizeBattery(int? raw) => (raw == null || raw < 0) ? null : raw;
@@ -82,6 +84,11 @@ class TodayScreen extends StatefulWidget {
   /// Agenda, food and mini trends for the richer Home; null = none.
   final Future<HomeExtras> Function()? extrasLoader;
 
+  /// Sync in the background on open and whenever the app comes back to
+  /// the foreground (throttled), so Home never shows yesterday's data.
+  /// Off by default so widget tests stay deterministic.
+  final bool autoSync;
+
   const TodayScreen({
     super.key,
     required this.store,
@@ -96,13 +103,14 @@ class TodayScreen extends StatefulWidget {
     this.onOpenProfile,
     this.onAsk,
     this.extrasLoader,
+    this.autoSync = false,
   });
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
 }
 
-class _TodayScreenState extends State<TodayScreen> {
+class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   _Phase _phase = _Phase.loadingReadout;
   DailyReadout? _readout;
   SleepSession? _lastNight;
@@ -128,6 +136,7 @@ class _TodayScreenState extends State<TodayScreen> {
   void initState() {
     super.initState();
     widget.refreshSignal?.addListener(_onRefreshSignal);
+    if (widget.autoSync) WidgetsBinding.instance.addObserver(this);
     _batterySub = widget.syncService.batteryPercent.listen((percent) {
       if (mounted) setState(() => _batteryPercent = _sanitizeBattery(percent));
     });
@@ -143,6 +152,7 @@ class _TodayScreenState extends State<TodayScreen> {
   @override
   void dispose() {
     widget.refreshSignal?.removeListener(_onRefreshSignal);
+    if (widget.autoSync) WidgetsBinding.instance.removeObserver(this);
     _batterySub?.cancel();
     _heartRateSub?.cancel();
     super.dispose();
@@ -153,6 +163,38 @@ class _TodayScreenState extends State<TodayScreen> {
   /// in-flight bootstrap already has this covered.
   void _onRefreshSignal() {
     if (_phase == _Phase.ready) _loadReadout();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _backgroundSync();
+  }
+
+  bool _bgSyncing = false;
+
+  static const _primedKey = 'health_permission_primed';
+
+  Future<void> _connectHealth() async {
+    try {
+      await widget.store.writeSetting(_primedKey, 'yes');
+    } catch (_) {}
+    await _bootstrap();
+  }
+
+  /// Quiet sync: pulls new health data without blanking the screen; on
+  /// success the readout reloads in place. Failures stay silent here —
+  /// pull-to-refresh is where the user asks and hears back.
+  Future<void> _backgroundSync() async {
+    if (!widget.autoSync || _bgSyncing || _phase != _Phase.ready) return;
+    _bgSyncing = true;
+    try {
+      final outcome = await widget.syncService.syncIfStale();
+      if (outcome != null && outcome.success && mounted) await _loadReadout();
+    } catch (_) {
+      // Quiet by design.
+    } finally {
+      _bgSyncing = false;
+    }
   }
 
   /// First open: sync automatically only if we've never synced before.
@@ -168,6 +210,12 @@ class _TodayScreenState extends State<TodayScreen> {
       if (!mounted) return;
 
       if (!everSynced) {
+        // First run (app only): explain WHY before the OS permission
+        // sheet appears — a cold Health prompt gets denied far more.
+        if (widget.autoSync && await widget.store.readSetting(_primedKey) != 'yes') {
+          if (mounted) setState(() => _phase = _Phase.priming);
+          return;
+        }
         setState(() => _phase = _Phase.syncing);
         final outcome = await widget.syncService.syncNow();
         if (!mounted) return;
@@ -182,6 +230,9 @@ class _TodayScreenState extends State<TodayScreen> {
     }
 
     await _loadReadout();
+    // Already-synced users: show what's on disk at once, then fetch
+    // what's new since last time in the background.
+    if (mounted) _backgroundSync();
   }
 
   /// Any failure lands on the error view (with Retry) — never an endless
@@ -195,7 +246,10 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   Future<void> _loadReadout() async {
-    if (mounted) setState(() => _phase = _Phase.loadingReadout);
+    // Only the very first load shows the full-screen spinner; later
+    // reloads (tab switch, background sync) keep the current readout
+    // on screen and swap in the new one — no flash, scroll kept.
+    if (mounted && _readout == null) setState(() => _phase = _Phase.loadingReadout);
     final DailyReadout readout;
     final SleepSession? lastNight;
     final ModeStrip? modeStrip;
@@ -216,6 +270,11 @@ class _TodayScreenState extends State<TodayScreen> {
         }
       }
     } catch (e) {
+      // A failed background reload keeps what's already on screen.
+      if (_readout != null) {
+        if (mounted) setState(() => _phase = _Phase.ready);
+        return;
+      }
       _showError(e.toString());
       return;
     }
@@ -253,7 +312,7 @@ class _TodayScreenState extends State<TodayScreen> {
     if (!outcome.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Couldn't sync with your ring — try again."),
+          content: const Text("Couldn't sync your health data — try again."),
           action: SnackBarAction(label: 'Retry', onPressed: _refresh),
         ),
       );
@@ -267,8 +326,10 @@ class _TodayScreenState extends State<TodayScreen> {
 
   Widget _buildBody() {
     switch (_phase) {
+      case _Phase.priming:
+        return _HealthPrimingView(onConnect: _connectHealth);
       case _Phase.syncing:
-        return const _MessageView(message: 'Syncing your ring…');
+        return const _MessageView(message: 'Syncing your health data…');
       case _Phase.loadingReadout:
         return const _MessageView(message: 'Loading your readout…');
       case _Phase.error:
@@ -332,7 +393,7 @@ class _ErrorView extends StatelessWidget {
   /// stack trace.
   static String _friendly(String? raw) {
     if (raw == null || raw.isEmpty) {
-      return 'It happens — check the ring is nearby and charged.';
+      return 'It happens — check your health app is set up, then try again.';
     }
     return raw.replaceFirst(RegExp(r'^\w*Exception:\s*'), '');
   }
@@ -345,10 +406,10 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.watch_outlined,
+            const Icon(Icons.sync_problem_rounded,
                 size: 40, color: HuxColors.mutedText),
             const SizedBox(height: HuxSpacing.md),
-            Text("Couldn't sync with your ring",
+            Text("Couldn't sync your health data",
                 style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: HuxSpacing.xs),
             Text(
@@ -358,8 +419,111 @@ class _ErrorView extends StatelessWidget {
             ),
             const SizedBox(height: HuxSpacing.lg),
             FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            const SizedBox(height: HuxSpacing.sm),
+            // Denied access or no Health Connect: give a way forward,
+            // not just "Retry" (Android stops re-showing the dialog).
+            if (Platform.isIOS)
+              TextButton.icon(
+                onPressed: () => openHealthHelp(context, Uri.parse('x-apple-health://')),
+                icon: const Icon(Icons.favorite_border_rounded),
+                label: const Text('Open the Health app'),
+              )
+            else if (Platform.isAndroid) ...[
+              TextButton.icon(
+                onPressed: () => openHealthHelp(
+                    context, Uri.parse('market://details?id=com.google.android.apps.healthdata'),
+                    fallback: Uri.parse('https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata')),
+                icon: const Icon(Icons.download_rounded),
+                label: const Text('Get Health Connect'),
+              ),
+            ],
+            if (Platform.isIOS)
+              Padding(
+                padding: const EdgeInsets.only(top: HuxSpacing.xs),
+                child: Text('In Health: your profile → Apps → HUX → turn on the data to share.',
+                    textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall),
+              )
+            else if (Platform.isAndroid)
+              Padding(
+                padding: const EdgeInsets.only(top: HuxSpacing.xs),
+                child: Text('Then: Settings → Health Connect → App permissions → HUX → Allow all.',
+                    textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Opens [uri] (the Health app / Play Store page), falling back to
+/// [fallback], and says so if neither can open.
+Future<void> openHealthHelp(BuildContext context, Uri uri, {Uri? fallback}) async {
+  var ok = false;
+  try {
+    ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {}
+  if (!ok && fallback != null) {
+    try {
+      ok = await launchUrl(fallback, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open it — find it in your phone's settings.")));
+  }
+}
+
+/// Shown once, before the first Health permission sheet: what HUX
+/// reads and why, so the OS prompt isn't a surprise.
+class _HealthPrimingView extends StatelessWidget {
+  final VoidCallback onConnect;
+
+  const _HealthPrimingView({required this.onConnect});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final app = Platform.isIOS ? 'Apple Health' : 'Health Connect';
+    Widget row(IconData icon, Color color, String label) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: HuxSpacing.xs),
+          child: Row(
+            children: [
+              HuxIconBadge(icon: icon, color: color, size: 36),
+              const SizedBox(width: HuxSpacing.md),
+              Expanded(child: Text(label, style: text.bodyMedium)),
+            ],
+          ),
+        );
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(HuxSpacing.xl, HuxSpacing.xl, HuxSpacing.xl, HuxGlass.navClearance),
+        children: [
+          const HuxIconBadge(icon: Icons.favorite_rounded, color: HuxColors.ringHeart, size: 64),
+          const SizedBox(height: HuxSpacing.lg),
+          Text('Connect your health data', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: HuxSpacing.sm),
+          Text(
+            'HUX reads from $app — whatever your phone, watch or band already records — '
+            'to show your charge, sleep, steps and plans.',
+            style: text.bodyMedium?.copyWith(color: HuxColors.mutedText),
+          ),
+          const SizedBox(height: HuxSpacing.lg),
+          row(Icons.directions_walk_rounded, HuxColors.ringSteps, 'Steps and active energy'),
+          row(Icons.bedtime_rounded, HuxColors.ringSleep, 'Sleep'),
+          row(Icons.monitor_heart_outlined, HuxColors.ringHeart, 'Heart rate, HRV, blood oxygen, breathing rate'),
+          const SizedBox(height: HuxSpacing.lg),
+          Text(
+            'Read-only: HUX never writes to $app. Your data stays on this phone and is never '
+            'used for ads. On the next screen, tap "Allow" / turn on all categories.',
+            style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
+          ),
+          const SizedBox(height: HuxSpacing.xl),
+          SizedBox(
+            height: 52,
+            child: FilledButton(onPressed: onConnect, child: const Text('Continue')),
+          ),
+        ],
       ),
     );
   }
@@ -939,6 +1103,9 @@ class _SleepCard extends StatelessWidget {
 
   const _SleepCard({required this.night});
 
+  static bool _hasStages(SleepSession n) =>
+      n.stageTotal(SleepStage.deep) > Duration.zero || n.stageTotal(SleepStage.rem) > Duration.zero;
+
   static String _hm(Duration d) => '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')}';
 
   @override
@@ -977,15 +1144,27 @@ class _SleepCard extends StatelessWidget {
           ),
           if (n != null) ...[
             const SizedBox(height: HuxSpacing.sm),
+            // Only what the source really measured: phones and many bands
+            // give one plain "asleep" block (no stages), and most have no
+            // breathing rate or SpO2 — never show "Deep 0:00" or "—" rows.
             HuxStatGrid(stats: [
-              HuxStat('Deep sleep', _hm(n.stageTotal(SleepStage.deep))),
-              HuxStat('REM sleep', _hm(n.stageTotal(SleepStage.rem))),
-              HuxStat('Light sleep', _hm(n.stageTotal(SleepStage.light))),
+              if (_hasStages(n)) ...[
+                HuxStat('Deep sleep', _hm(n.stageTotal(SleepStage.deep))),
+                HuxStat('REM sleep', _hm(n.stageTotal(SleepStage.rem))),
+                HuxStat('Light sleep', _hm(n.stageTotal(SleepStage.light))),
+              ] else
+                HuxStat('Asleep', _hm(n.totalSleep)),
               HuxStat('Awake time', _hm(n.stageTotal(SleepStage.awake))),
-              HuxStat('Resp. rate', n.avgRespiratoryRateBrpm == null ? '—' : n.avgRespiratoryRateBrpm!.round().toString(),
-                  unit: 'brpm'),
-              HuxStat('Min SpO2', n.minSpo2Percent == null ? '—' : '${n.minSpo2Percent}', unit: '%'),
+              if (n.avgRespiratoryRateBrpm != null)
+                HuxStat('Resp. rate', n.avgRespiratoryRateBrpm!.round().toString(), unit: 'brpm'),
+              if (n.minSpo2Percent != null) HuxStat('Min SpO2', '${n.minSpo2Percent}', unit: '%'),
             ]),
+            if (!_hasStages(n))
+              Padding(
+                padding: const EdgeInsets.only(top: HuxSpacing.xs),
+                child: Text('Your source doesn\'t report sleep stages (deep/REM).',
+                    style: text.labelSmall?.copyWith(color: HuxColors.mutedText)),
+              ),
           ],
         ],
       ),
@@ -1022,8 +1201,11 @@ class _BodyCard extends StatelessWidget {
           HuxStatGrid(stats: [
             HuxStat('Heart rate', heartRateBpm == null ? '—' : heartRateBpm!.round().toString(), unit: 'bpm'),
             HuxStat('Night avg HR', night?.avgHeartRateBpm == null ? '—' : '${night!.avgHeartRateBpm}', unit: 'bpm'),
-            HuxStat('Stress', stress == null ? '—' : '$stress',
-                unit: stress == null ? null : (stress > _stressElevatedThreshold ? '/100 · Elevated' : '/100 · Calm')),
+            if (night?.avgHrvMs != null) HuxStat('Night HRV', '${night!.avgHrvMs}', unit: 'ms'),
+            // An estimate from HRV — shown only when there's a reading.
+            if (stress != null)
+              HuxStat('Stress', '$stress',
+                  unit: stress > _stressElevatedThreshold ? '/100 · est. high' : '/100 · est. calm'),
             HuxStat('Active cal', readout.activeEnergyKcal == null ? '—' : '${readout.activeEnergyKcal}', unit: 'kcal'),
           ]),
         ],

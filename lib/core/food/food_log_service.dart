@@ -14,6 +14,10 @@ import 'protein_gap.dart';
 class FoodLogService {
   static const _logKey = 'food_log_v1';
   static const _goalKey = 'protein_goal_g';
+  static const _weightKey = 'body_weight_kg';
+
+  /// Common adult guide (ICMR-NIN RDA ~0.83 g/kg; WHO 0.8 g/kg).
+  static const proteinPerKg = 0.8;
   static const _consentKey = 'food_photo_consent';
 
   /// Days kept on the phone.
@@ -100,6 +104,22 @@ class FoodLogService {
 
   Future<void> setProteinGoal(double grams) =>
       _store.writeSetting(_goalKey, grams.clamp(20, 250).toString());
+
+  /// Body weight the user entered (kg), or null.
+  Future<double?> bodyWeightKg() async {
+    final v = double.tryParse(await _store.readSetting(_weightKey) ?? '');
+    return v == null || v <= 0 ? null : v;
+  }
+
+  /// Saves weight and sets the protein goal from it (0.8 g per kg,
+  /// rounded to 5 g). Returns the new goal in grams.
+  Future<double> setGoalFromWeight(double kg) async {
+    final w = kg.clamp(25, 250).toDouble();
+    await _store.writeSetting(_weightKey, w.toStringAsFixed(1));
+    final goal = ((w * proteinPerKg) / 5).round() * 5.0;
+    await setProteinGoal(goal);
+    return goal.clamp(20, 250).toDouble();
+  }
 
   Future<bool> hasPhotoConsent() async => (await _store.readSetting(_consentKey)) == 'yes';
 

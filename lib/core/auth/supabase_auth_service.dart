@@ -1,9 +1,10 @@
 /// The real [AuthService]: Supabase's GoTrue backend, Google Sign-In,
 /// and Sign in with Apple. This is the ONLY file that imports any of
 /// those three packages — everything above [AuthService] stays free of
-/// them, same containment rule [AizoBleRingAdapter] follows for its one
-/// BLE plugin.
+/// them, same containment rule the ring adapters follow for their plugins.
 library;
+
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:google_sign_in/google_sign_in.dart';
@@ -23,6 +24,10 @@ class SupabaseAuthService implements AuthService {
         _googleSignIn = googleSignIn ??
             GoogleSignIn(
               scopes: const ['email'],
+              // iOS needs its own client ID (see SupabaseConfig).
+              clientId: Platform.isIOS && SupabaseConfig.googleIosClientId.isNotEmpty
+                  ? SupabaseConfig.googleIosClientId
+                  : null,
               serverClientId: SupabaseConfig.googleWebClientId.isEmpty ? null : SupabaseConfig.googleWebClientId,
             );
 
@@ -85,7 +90,7 @@ class SupabaseAuthService implements AuthService {
         // Refuse before ever reaching the plugin, so an unconfigured
         // build fails as a normal on-screen error instead of a crash.
         // See SupabaseConfig.googleWebClientId's doc comment.
-        if (SupabaseConfig.googleWebClientId.isEmpty) {
+        if (!SupabaseConfig.googleSignInEnabled) {
           throw const AuthException(
               "Google sign-in isn't set up yet — see SupabaseConfig.googleWebClientId in the README.");
         }

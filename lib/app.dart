@@ -136,6 +136,7 @@ class _AuthGate extends StatelessWidget {
           store: store,
           profileService: profileService,
           authService: authService,
+          nudgeService: nudgeService,
           builder: (restart) => AppShell(
             onLocalDataDeleted: restart,
             store: store,
@@ -148,8 +149,9 @@ class _AuthGate extends StatelessWidget {
             profileService: profileService,
             mealAnalyzer: mealAnalyzer,
             coachInvoke: coachInvoke,
-        nudgeService: nudgeService,
-        environmentService: environmentService,
+            nudgeService: nudgeService,
+            environmentService: environmentService,
+            autoSync: true,
           ),
         );
       },
@@ -165,6 +167,9 @@ class _OwnedShell extends StatefulWidget {
   final ProfileService? profileService;
   final AuthService? authService;
 
+  /// Used to cancel the previous account's reminders on a data wipe.
+  final NudgeService? nudgeService;
+
   /// Builds the app; `restart` re-runs these first-run checks (used
   /// after "Delete data on this phone").
   final Widget Function(VoidCallback restart) builder;
@@ -176,6 +181,7 @@ class _OwnedShell extends StatefulWidget {
     required this.builder,
     this.profileService,
     this.authService,
+    this.nudgeService,
   });
 
   @override
@@ -189,7 +195,8 @@ class _OwnedShellState extends State<_OwnedShell> {
   late Future<({bool consent, bool onboarding})> _guard = _runGuard();
 
   Future<({bool consent, bool onboarding})> _runGuard() async {
-    await ensureLocalDataBelongsTo(widget.store, widget.userId);
+    await ensureLocalDataBelongsTo(widget.store, widget.userId,
+        onWipe: widget.nudgeService?.cancelEverything);
     final needsConsent = await PrivacyService(widget.store).needsConsent();
     final profiles = widget.profileService;
     final needsOnboarding = profiles != null && await profiles.loadProfile() == null;
@@ -219,14 +226,20 @@ class _OwnedShellState extends State<_OwnedShell> {
         // Even if the guard itself failed, never fall through to showing
         // possibly-foreign data silently: show the error instead.
         if (snapshot.hasError) {
-          return const Scaffold(
+          return Scaffold(
             body: Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  "Couldn't prepare your data on this device. "
-                  'Please restart the app.',
-                  textAlign: TextAlign.center,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "Couldn't prepare your data on this device.",
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _restart, child: const Text('Try again')),
+                  ],
                 ),
               ),
             ),

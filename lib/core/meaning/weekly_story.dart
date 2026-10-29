@@ -267,7 +267,7 @@ class WeeklyStoryService {
     final thin = thisNights < lastNights ? thisNights : lastNights;
     return thin == 0
         ? "There's not enough logged yet to compare the two weeks — "
-            'keep wearing your ring and check back.'
+            'keep your watch or tracker syncing and check back.'
         : "You've only got a handful of nights logged in one of these "
             'weeks, so take this as a rough sketch rather than the full '
             'picture.';
@@ -282,7 +282,7 @@ class WeeklyStoryService {
     required int? hrDeltaBpm,
   }) {
     if (thinData) {
-      return 'Wear your ring every night this week — a fuller week of '
+      return 'Wear your watch or tracker to bed every night this week — a fuller week of '
           'data means a sharper story next time.';
     }
 

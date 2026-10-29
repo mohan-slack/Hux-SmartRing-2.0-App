@@ -62,7 +62,7 @@ void main() {
     final morning = at(wake).value!;
     final evening = at(wake.add(const Duration(hours: 12))).value!;
     expect(evening, lessThan(morning));
-    expect(morning - evening, 30); // 12 h × 2.5
+    expect(morning - evening, 24); // 12 h × 2.0
   });
 
   test('activity and stress drain extra', () {
@@ -71,11 +71,19 @@ void main() {
     final busy = at(now, snaps: [
       HealthSnapshot(timestamp: now, activeEnergyKcal: 400, stressIndex: 100),
     ]).value!;
-    expect(quiet - busy, 30); // 400/20 + 10
+    expect(quiet - busy, 25); // 400/25 = 16 → capped at 15, + stress 10
+  });
+
+  test('a stale wake time stops draining after a normal day', () {
+    final day = at(wake.add(const Duration(hours: 17))).value!;
+    final stale = at(wake.add(const Duration(hours: 40))).value!;
+    expect(stale, day);
   });
 
   test('never drops below the floor, never above 100', () {
-    final exhausted = at(wake.add(const Duration(hours: 40))).value!;
+    final exhausted = at(wake.add(const Duration(hours: 17)), lastNight: night(minutes: 120, hrv: 10, hr: 90), snaps: [
+      HealthSnapshot(timestamp: wake.add(const Duration(hours: 17)), activeEnergyKcal: 2000, stressIndex: 100),
+    ]).value!;
     expect(exhausted, HuxChargeCalculator.floor);
     final great = at(wake, lastNight: night(minutes: 900, hrv: 200, hr: 30)).value!;
     expect(great, 100);

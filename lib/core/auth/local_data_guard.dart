@@ -10,9 +10,18 @@ library;
 
 import '../storage/health_store.dart';
 
-Future<void> ensureLocalDataBelongsTo(HealthStore store, String userId) async {
+/// [onWipe] runs before another account's data is deleted — used to
+/// cancel that account's scheduled reminders (they live in the OS, not
+/// the database, and would otherwise keep firing for the new user).
+Future<void> ensureLocalDataBelongsTo(HealthStore store, String userId,
+    {Future<void> Function()? onWipe}) async {
   final owner = await store.dataOwnerId();
   if (owner != null && owner != userId) {
+    try {
+      await onWipe?.call();
+    } catch (_) {
+      // Never block the privacy wipe on a notification error.
+    }
     await store.deleteAllData();
   }
   if (owner != userId) {

@@ -26,7 +26,7 @@ class _WalkNudgeScreenState extends State<WalkNudgeScreen> {
   @override
   void initState() {
     super.initState();
-    widget.nudges.walkSettings().then((s) {
+    widget.nudges.walkSettings().catchError((Object _) => WalkNudgeSettings.defaults).then((s) {
       if (mounted) setState(() => _s = s);
     });
   }

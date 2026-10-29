@@ -18,7 +18,6 @@
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
     <uses-permission android:name="android.permission.health.READ_SLEEP"/>
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
-    <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE"/>
     <!-- Must match every type in HealthStoreRingAdapter._readTypes:
          Health Connect never grants an undeclared permission, so a
          missing one makes requestAuthorization return false. -->
@@ -28,28 +27,17 @@
          phone's sensors. Don't add permissions HUX doesn't use — Play
          review rejects unjustified sensitive permissions. -->
 
-    <!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
-         the PROVISIONAL, reverse-engineered protocol in
-         lib/core/ring/aizo_ble/aizo_protocol.dart. Scans by device name
-         only (never derives location from scan results), so
-         neverForLocation lets us skip requesting ACCESS_FINE_LOCATION on
-         API 31+. Legacy permissions below cover pre-Android-12 devices,
-         where BLE scanning requires location permission at the OS level
-         regardless of whether the app itself uses location. -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
-    <!-- required="false": the default (mock/health) build must still
-         install on devices without BLE hardware — only HUX_SOURCE=aizo
-         actually needs it. -->
-    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
+    <!-- v1 ships without the HUX ring: no Bluetooth or location
+         permissions (unused permissions risk Play review). Restore the
+         BLE block from git history when ring support returns. -->
 
     <application
         android:label="HUX"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

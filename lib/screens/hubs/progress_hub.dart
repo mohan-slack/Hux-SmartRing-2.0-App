@@ -20,12 +20,16 @@ class ProgressHub extends StatelessWidget {
   final ProgressService progress;
   final ValueNotifier<ProgressSection> section;
 
+  /// Pinged when the Progress tab becomes visible (see AppShell).
+  final Listenable? refreshSignal;
+
   const ProgressHub({
     super.key,
     required this.store,
     required this.storyService,
     required this.progress,
     required this.section,
+    this.refreshSignal,
   });
 
   @override
@@ -63,9 +67,9 @@ class ProgressHub extends StatelessWidget {
             child: IndexedStack(
               index: current.index,
               children: [
-                TrendsScreen(store: store),
-                StoryScreen(storyService: storyService),
-                ProgressScreen(progress: progress, embedded: true),
+                TrendsScreen(store: store, refreshSignal: refreshSignal),
+                StoryScreen(storyService: storyService, refreshSignal: refreshSignal),
+                ProgressScreen(progress: progress, embedded: true, refreshSignal: refreshSignal),
               ],
             ),
           ),

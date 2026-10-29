@@ -31,8 +31,14 @@ class _SitNudgeScreenState extends State<SitNudgeScreen> {
   void initState() {
     super.initState();
     () async {
-      final s = await widget.nudges.sitSettings();
-      final w = await widget.nudges.walkSettings();
+      var s = SitNudgeSettings.defaults;
+      var w = WalkNudgeSettings.defaults;
+      try {
+        s = await widget.nudges.sitSettings();
+        w = await widget.nudges.walkSettings();
+      } catch (_) {
+        // Defaults (off) rather than an endless spinner.
+      }
       if (mounted) {
         setState(() {
           _s = s;

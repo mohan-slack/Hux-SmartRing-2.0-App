@@ -62,7 +62,11 @@ class SyncResult {
 
 class RingConnectionException implements Exception {
   final String message;
-  const RingConnectionException(this.message);
+
+  /// False when trying again can't help (e.g. the user denied health
+  /// access): the sync then fails at once instead of re-prompting.
+  final bool retryable;
+  const RingConnectionException(this.message, {this.retryable = true});
   @override
   String toString() => 'RingConnectionException: $message';
 }

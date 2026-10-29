@@ -230,6 +230,23 @@ class SqliteHealthStore implements HealthStore {
         final bedtimeMs = session.bedtime.toUtc().millisecondsSinceEpoch;
         final wakeMs = session.wakeTime.toUtc().millisecondsSinceEpoch;
 
+        // Never let a FRAGMENT replace a whole night: if a stored night
+        // overlapping this one is longer and this one sits inside it
+        // (a re-sync that only saw the tail of the night), keep the
+        // stored one. A longer or different night still replaces it.
+        final overlapping = await txn.query('sleep_sessions',
+            columns: ['bedtime', 'wake_time'],
+            where: 'bedtime = ? OR (bedtime < ? AND wake_time > ?)',
+            whereArgs: [bedtimeMs, wakeMs, bedtimeMs]);
+        const slackMs = 5 * 60 * 1000;
+        final isFragment = overlapping.any((r) {
+          final b = r['bedtime'] as int;
+          final w = r['wake_time'] as int;
+          final inside = bedtimeMs >= b - slackMs && wakeMs <= w + slackMs;
+          return inside && (w - b) > (wakeMs - bedtimeMs) + slackMs;
+        });
+        if (isFragment) continue;
+
         // Replace any stored session that OVERLAPS this one in time, not
         // just one with the identical bedtime: a night first synced
         // mid-sleep is stored partially, then re-fetched whole with a
@@ -317,12 +334,26 @@ class SqliteHealthStore implements HealthStore {
     return _sessionsFromRows(_db, rows);
   }
 
+  /// "Last night" = the LONGEST session that ended within
+  /// [mainSleepWindow] of the most recent one — so an afternoon nap, or
+  /// the short second half of a night split by a long awake gap
+  /// (Suhoor, a baby), never gets scored as the whole night.
+  static const mainSleepWindow = Duration(hours: 16);
+
   @override
   Future<SleepSession?> latestSleepSession() async {
-    final rows =
+    final latest =
         await _db.query('sleep_sessions', orderBy: 'bedtime DESC', limit: 1);
-    if (rows.isEmpty) return null;
+    if (latest.isEmpty) return null;
+    final latestWake = latest.first['wake_time'] as int;
+    final rows = await _db.query(
+      'sleep_sessions',
+      where: 'wake_time >= ?',
+      whereArgs: [latestWake - mainSleepWindow.inMilliseconds],
+      orderBy: 'bedtime DESC',
+    );
     final list = await _sessionsFromRows(_db, rows);
+    list.sort((a, b) => b.totalSleep.compareTo(a.totalSleep));
     return list.first;
   }
 

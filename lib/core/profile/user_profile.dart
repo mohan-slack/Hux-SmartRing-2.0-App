@@ -40,7 +40,7 @@ extension GoalLabel on Goal {
         Goal.loseWeight => 'Lose weight',
         Goal.getFit => 'Get fit or strong',
         Goal.lessStress => 'Less stress',
-        Goal.sugarBp => 'Keep sugar or BP in check',
+        Goal.sugarBp => 'Steadier energy (food & activity habits)',
         Goal.activeElder => 'Stay active (60+)',
         Goal.cycleHealth => 'Cycle health',
       };

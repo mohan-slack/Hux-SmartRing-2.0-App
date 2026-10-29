@@ -87,4 +87,14 @@ void main() {
     expect(await log.mealsFor(t), isEmpty);
     await store.close();
   });
+
+  test('protein goal from weight: 0.8 g/kg rounded to 5 g, weight remembered', () async {
+    final store = await openStore();
+    final log = FoodLogService(store, utcOffset: ist);
+    expect(await log.bodyWeightKg(), isNull);
+    expect(await log.setGoalFromWeight(68), 55); // 54.4 -> 55
+    expect(await log.proteinGoal(), 55);
+    expect(await log.bodyWeightKg(), 68);
+    await store.close();
+  });
 }

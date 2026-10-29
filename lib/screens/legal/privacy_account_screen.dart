@@ -236,7 +236,7 @@ class _PrivacyAccountScreenState extends State<PrivacyAccountScreen> {
                       icon: Icons.photo_camera_outlined,
                       color: HuxColors.ringFood,
                       title: 'Analyse meal photos',
-                      subtitle: 'Photos go to an AI service for an estimate; not stored by HUX',
+                      subtitle: 'Photos go to Groq (AI provider, USA) for an estimate; not stored by HUX',
                       value: _photosOn,
                       onChanged: _setPhotos,
                     ),

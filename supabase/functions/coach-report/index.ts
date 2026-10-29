@@ -10,13 +10,16 @@
 //
 //   supabase functions deploy coach-report
 
-import { callerId, json, projectUrl, serviceHeaders } from "../_shared/auth.ts";
+import { callerId, json, projectUrl, serviceHeaders, tooLarge, withinDailyLimit } from "../_shared/auth.ts";
 
-const MAX_TEXT = 4000;
+const MAX_TEXT = 2000;
+/** Reports per user per day (secret REPORT_DAILY_LIMIT) — stops flooding. */
+const DEFAULT_REPORT_LIMIT = 10;
 const REASONS = ["harmful", "wrong", "offensive", "other"];
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
+  if (tooLarge(req, 16_000)) return json({ error: "too large" }, 413);
   let uid: string | null;
   try {
     uid = await callerId(req);
@@ -35,6 +38,13 @@ Deno.serve(async (req) => {
   const reply = typeof body.reply === "string" ? body.reply.slice(0, MAX_TEXT) : "";
   const question = typeof body.question === "string" ? body.question.slice(0, MAX_TEXT) : null;
   if (!reason || !reply) return json({ error: "bad request" }, 400);
+
+  try {
+    const limit = Number(Deno.env.get("REPORT_DAILY_LIMIT") ?? String(DEFAULT_REPORT_LIMIT));
+    if (!(await withinDailyLimit(uid, "report", limit))) return json({ error: "daily_limit" });
+  } catch {
+    return json({ error: "report failed" }, 502);
+  }
 
   const res = await fetch(`${projectUrl()}/rest/v1/coach_reports`, {
     method: "POST",

@@ -14,6 +14,7 @@ import '../../core/profile/user_profile.dart';
 import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
 import '../../theme/hux_ui.dart';
+import '../../core/food/photo_privacy.dart';
 import 'meal_review_screen.dart';
 import '../../widgets/text_prompt.dart';
 
@@ -50,17 +51,28 @@ class _FoodScreenState extends State<FoodScreen> {
     _load();
   }
 
+  String? _loadError;
+
   Future<void> _load() async {
-    final now = DateTime.now();
-    final meals = await widget.foodLog.mealsFor(now);
-    final goal = await widget.foodLog.proteinGoal();
-    if (!mounted) return;
-    setState(() {
-      _meals = meals;
-      _total = meals.fold(Nutrients.zero, (s, m) => s + m.total);
-      _goal = goal;
-      _loading = false;
-    });
+    try {
+      final now = DateTime.now();
+      final meals = await widget.foodLog.mealsFor(now);
+      final goal = await widget.foodLog.proteinGoal();
+      if (!mounted) return;
+      setState(() {
+        _meals = meals;
+        _total = meals.fold(Nutrients.zero, (s, m) => s + m.total);
+        _goal = goal;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = "Couldn't load today's meals.";
+      });
+    }
   }
 
   Future<void> _review(MealAnalysis analysis, {List<String> unknown = const []}) async {
@@ -116,9 +128,10 @@ class _FoodScreenState extends State<FoodScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Analyse meal photos?'),
         content: const Text(
-          'To read your meal, the photo is sent securely to HUX\'s AI service, '
-          'used only to identify the food and portions, and not kept after. '
-          'Your meal log stays on this phone.',
+          'To read your meal, the photo is sent securely to HUX\'s server and then to Groq Inc. '
+          '(an AI provider in the USA), only to identify the food and portions. Location and other '
+          'hidden photo details are removed first. Neither HUX nor Groq stores the photo (Groq\'s '
+          'zero data retention is on). Your meal log stays on this phone.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Not now')),
@@ -158,7 +171,9 @@ class _FoodScreenState extends State<FoodScreen> {
 
     setState(() => _analysing = true);
     try {
-      final bytes = await file.readAsBytes();
+      // Re-encode before upload: drops EXIF (GPS location, device) —
+      // HUX promises "no GPS location".
+      final bytes = await stripPhotoMetadata(await file.readAsBytes());
       final analysis = await analyzer.analyze(imageJpeg: bytes, description: description);
       if (!mounted) return;
       setState(() => _analysing = false);
@@ -185,6 +200,54 @@ class _FoodScreenState extends State<FoodScreen> {
       );
 
   Future<void> _editGoal() async {
+    final how = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const HuxIconBadge(icon: Icons.monitor_weight_outlined, color: HuxColors.ringFood),
+              title: const Text('Set from my weight'),
+              subtitle: const Text('About 0.8 g protein per kg of body weight'),
+              onTap: () => Navigator.pop(c, 'weight'),
+            ),
+            ListTile(
+              leading: const HuxIconBadge(icon: Icons.edit_rounded, color: HuxColors.ringSteps),
+              title: const Text('Enter grams myself'),
+              onTap: () => Navigator.pop(c, 'grams'),
+            ),
+            const SizedBox(height: HuxSpacing.sm),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || how == null) return;
+    if (how == 'weight') {
+      final current = await widget.foodLog.bodyWeightKg();
+      if (!mounted) return;
+      final w = await showDialog<String>(
+        context: context,
+        builder: (_) => TextPromptDialog(
+          title: 'Your weight (kg)',
+          initialText: current == null ? '' : current.toStringAsFixed(0),
+          keyboardType: TextInputType.number,
+          confirmLabel: 'Set goal',
+          helper: 'Used only to work out your protein goal; stays on this phone. '
+              'Pregnant, an athlete, or managing a health condition? Ask your doctor or dietitian.',
+        ),
+      );
+      final kg = double.tryParse(w ?? '');
+      if (kg == null) return;
+      final goal = await widget.foodLog.setGoalFromWeight(kg);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Protein goal set to ${goal.round()} g a day.')));
+      return;
+    }
+    if (!mounted) return;
     final value = await showDialog<String>(
       context: context,
       builder: (_) => TextPromptDialog(
@@ -202,9 +265,34 @@ class _FoodScreenState extends State<FoodScreen> {
     await _load();
   }
 
+  bool _deleting = false;
+
+  /// Index-based delete: ignore taps until the list has reloaded (a
+  /// quick second tap would otherwise delete whichever meal shifted
+  /// into that slot), and offer Undo instead of a confirm dialog.
   Future<void> _deleteMeal(int index) async {
-    await widget.foodLog.deleteMeal(DateTime.now(), index);
-    await _load();
+    if (_deleting || index >= _meals.length) return;
+    _deleting = true;
+    final removed = _meals[index];
+    try {
+      await widget.foodLog.deleteMeal(DateTime.now(), index);
+      await _load();
+    } finally {
+      _deleting = false;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('${removed.type.label} deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await widget.foodLog.addMeal(removed);
+            await _load();
+          },
+        ),
+      ));
   }
 
   static IconData _mealIcon(MealType t) => switch (t) {
@@ -229,6 +317,17 @@ class _FoodScreenState extends State<FoodScreen> {
                 ListView(
                   padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.xxl),
                   children: [
+                    if (_loadError != null) ...[
+                      HuxCard(
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(_loadError!, style: text.bodyMedium)),
+                            TextButton(onPressed: _load, child: const Text('Retry')),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: HuxSpacing.md),
+                    ],
                     // ---- hero: protein ring + macros ----
                     HuxHeroCard(
                       icon: Icons.restaurant_rounded,

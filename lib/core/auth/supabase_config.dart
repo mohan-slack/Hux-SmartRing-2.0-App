@@ -12,6 +12,8 @@
 /// hiding this key. See https://supabase.com/docs/guides/api/api-keys.
 library;
 
+import 'dart:io';
+
 class SupabaseConfig {
   const SupabaseConfig._();
 
@@ -45,6 +47,20 @@ class SupabaseConfig {
   /// Neither is done here — this repo has no Google Cloud project
   /// credentials to add them with.
   static const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+
+  /// The iOS-type OAuth client ID (Google Cloud → Credentials → "iOS"
+  /// client). Required on iOS: without it — and without its REVERSED
+  /// form added as a URL scheme in ios/Runner/Info.plist
+  /// (CFBundleURLTypes) — the Google SDK crashes the app natively.
+  static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+
+  /// Whether to offer "Continue with Google" on this device at all.
+  static bool get googleSignInEnabled =>
+      googleWebClientId.isNotEmpty && (!Platform.isIOS || googleIosClientId.isNotEmpty);
+
+  /// Sign in with Apple is offered on iOS only (on Android it needs a
+  /// separate web flow this app doesn't set up, and fails).
+  static bool get appleSignInEnabled => Platform.isIOS;
 
   /// Optional Open-Meteo commercial key (free tier is non-commercial).
   static const openMeteoApiKey = String.fromEnvironment('OPEN_METEO_API_KEY');

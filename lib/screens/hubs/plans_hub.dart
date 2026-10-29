@@ -130,8 +130,12 @@ class _PlanCard extends StatelessWidget {
                         children: [
                           Icon(icon, color: color, size: 20),
                           const SizedBox(width: HuxSpacing.sm),
-                          Text(title.toUpperCase(),
-                              style: text.labelLarge?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+                          Expanded(
+                            child: Text(title.toUpperCase(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.labelLarge?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+                          ),
                         ],
                       ),
                       const SizedBox(height: HuxSpacing.sm),

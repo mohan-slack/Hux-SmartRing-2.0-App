@@ -154,6 +154,24 @@ void main() {
       await store.close();
     });
 
+    test('morning briefing: off by default, on schedules one daily nudge with the streak', () async {
+      final store = await openStore();
+      final n = FakeNotifier();
+      final service = NudgeService(store, n);
+      expect((await service.briefingSettings()).enabled, isFalse);
+      await service.refreshBriefing(streakDays: 5);
+      expect(n.daily.containsKey(NudgeIds.morningBriefing), isFalse);
+
+      await service.saveBriefingSettings(BriefingSettings.defaults.copyWith(enabled: true));
+      final b = n.daily[NudgeIds.morningBriefing]!;
+      expect(b.at.hour, 7);
+      expect(b.title, contains('5-day streak'));
+
+      await service.saveBriefingSettings(BriefingSettings.defaults);
+      expect(n.daily.containsKey(NudgeIds.morningBriefing), isFalse);
+      await store.close();
+    });
+
     test('resync rebuilds the schedule from saved settings', () async {
       final store = await openStore();
       await NudgeService(store, FakeNotifier()).saveWalkSettings(enabledSettings);

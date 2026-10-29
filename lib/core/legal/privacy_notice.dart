@@ -47,7 +47,8 @@ class PrivacyNotice {
   const PrivacyNotice._();
 
   /// Change this when the notice's meaning changes (forces re-consent).
-  static const noticeVersion = '2026-10-v1';
+  // v2: names the AI provider (Groq, USA) and its retention.
+  static const noticeVersion = '2026-11-v2';
 
   static const uses = <DataUse>[
     DataUse(
@@ -68,13 +69,15 @@ class PrivacyNotice {
     DataUse(
       what: 'A short summary of your numbers + your coach messages',
       why: 'To answer you in the HUX coach',
-      where: 'HUX server and an AI service (Groq) — not stored by HUX; your chat stays on this phone',
+      where: 'HUX server, then Groq Inc. (AI provider, USA) to write the reply. Neither stores it '
+          '(Groq zero data retention) — your chat stays on this phone',
       optional: true,
     ),
     DataUse(
       what: 'Meal photos you choose to analyse',
       why: 'To estimate protein and calories',
-      where: 'HUX server and an AI service (Groq) — not stored by HUX',
+      where: 'HUX server, then Groq Inc. (AI provider, USA). Location data is removed first; '
+          'neither stores the photo (Groq zero data retention)',
       optional: true,
     ),
     DataUse(

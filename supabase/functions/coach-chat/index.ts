@@ -8,12 +8,18 @@
 // Security & privacy:
 // - The AI API key lives ONLY here (Supabase secret), never in the app.
 //   Provider (Groq or Anthropic) is chosen by the AI_PROVIDER secret (_shared/llm.ts).
-// - Supabase verifies the caller's JWT before this runs (verify_jwt).
+// - verify_jwt is OFF for this function (config.toml) — the function
+//   itself validates the caller with Supabase Auth FIRST (_shared/auth.ts),
+//   before reading the body or spending anything.
 // - Nothing is stored except a per-user DAILY COUNT (ai_usage table,
 //   see supabase/migrations/*_ai_usage_and_hardening.sql) for the fair-use limit.
 //   Chat text is not logged or saved by HUX.
-// - Inputs are size-capped; roles are normalised; the context is
-//   treated as data inside a tag, never as instructions.
+// - Inputs are size-capped; roles are normalised. The context is REBUILT
+//   here from a fixed allowlist (numbers clamped, labels pattern-checked),
+//   so free text from the app can never reach the system prompt.
+// - Guardrails: per-user AND global daily limits, AI_PAUSED kill switch,
+//   refunds on failure, server-side red-flag help line, optional output
+//   moderation (MODERATION_MODEL), 25 s provider timeout.
 //
 // Setup:
 //   supabase db push                                   # creates ai_usage + bump_ai_usage()
@@ -24,8 +30,18 @@
 // SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY are provided
 // to edge functions automatically.
 
-import { callerId, json, withinDailyLimit } from "../_shared/auth.ts";
-import { chat } from "../_shared/llm.ts";
+import {
+  aiPaused,
+  callerId,
+  debugCodes,
+  json,
+  refundUsage,
+  tooLarge,
+  withinDailyLimit,
+  withinGlobalLimit,
+} from "../_shared/auth.ts";
+import { chat, isUnsafeReply } from "../_shared/llm.ts";
+import { helpPrefix, redFlag } from "../_shared/safety.ts";
 
 const MAX_TURNS = 12;
 const MAX_CHARS = 1000;
@@ -97,6 +113,57 @@ function normalise(raw: unknown): Msg[] {
   return msgs;
 }
 
+/** Short label: letters, digits, spaces and a few separators only. */
+function label(v: unknown, max = 40): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim().slice(0, max);
+  return /^[\p{L}\p{N} .,:/+&()'-]+$/u.test(t) ? t : undefined;
+}
+
+function num(v: unknown, min: number, max: number): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) ? Math.round(Math.min(max, Math.max(min, v))) : undefined;
+}
+
+const PARTS_OF_DAY = ["morning", "afternoon", "evening", "night"];
+
+/**
+ * Rebuilds the user summary from KNOWN keys only (see CoachContext.toJson
+ * in the app). Anything else the client sends is dropped, so the app can
+ * never smuggle instructions into the system prompt.
+ */
+function safeContext(raw: unknown): string {
+  const c = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const goals = Array.isArray(c.goals)
+    ? c.goals.map((g) => label(g)).filter((g): g is string => !!g).slice(0, 6)
+    : [];
+  const out: Record<string, unknown> = {
+    partOfDay: PARTS_OF_DAY.includes(String(c.partOfDay)) ? c.partOfDay : undefined,
+    goals: goals.length ? goals : undefined,
+    audience: label(c.audience),
+    dayType: label(c.dayType),
+    diet: label(c.diet),
+    fasting: label(c.fasting),
+    charge: num(c.charge, 0, 100),
+    chargeLabel: label(c.chargeLabel),
+    effortToday: label(c.effortToday),
+    stepsToday: num(c.stepsToday, 0, 100_000),
+    stepGoal: num(c.stepGoal, 0, 100_000),
+    targetBedtime: label(c.targetBedtime, 12),
+    lastNightSleepMin: num(c.lastNightSleepMin, 0, 24 * 60),
+    usualSleepMin: num(c.usualSleepMin, 0, 24 * 60),
+    streakDays: num(c.streakDays, 0, 10_000),
+    moveDaysThisWeek: num(c.moveDaysThisWeek, 0, 7),
+    proteinTodayG: num(c.proteinTodayG, 0, 1000),
+    proteinGoalG: num(c.proteinGoalG, 0, 1000),
+  };
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  return JSON.stringify(out).slice(0, MAX_CONTEXT_CHARS).replaceAll("<", "‹");
+}
+
+const SAFE_FALLBACK =
+  "I can't help with that one. For anything about symptoms, medicines or how you're feeling, " +
+  "please check with a doctor. I'm happy to help with sleep, food, walking and daily habits.";
+
 async function callModel(system: string, messages: Msg[]): Promise<string> {
   // Generous budget: reasoning models spend some tokens thinking first.
   return chat({ model: Deno.env.get("COACH_MODEL") ?? "", system, messages, maxTokens: 1500 });
@@ -104,6 +171,17 @@ async function callModel(system: string, messages: Msg[]): Promise<string> {
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
+  if (tooLarge(req, 64_000)) return json({ error: "too large" }, 413);
+
+  // Who is calling — BEFORE reading the body or touching any limit.
+  let uid: string | null;
+  try {
+    uid = await callerId(req);
+  } catch {
+    return json({ error: "coach unavailable", ...(debugCodes() ? { code: "config" } : {}) }, 502);
+  }
+  if (!uid) return json({ error: "unauthorized" }, 401);
+  if (aiPaused()) return json({ error: "paused" }, 503);
 
   let body: { messages?: unknown; context?: unknown; style?: unknown; language?: unknown };
   try {
@@ -116,29 +194,36 @@ Deno.serve(async (req) => {
   if (!messages.length || messages[messages.length - 1].role !== "user") {
     return json({ error: "bad request" }, 400);
   }
-  const style = typeof body.style === "string" ? body.style : "dost";
-  const language = typeof body.language === "string" ? body.language : "english";
-  let contextJson = "{}";
-  if (body.context && typeof body.context === "object") {
-    contextJson = JSON.stringify(body.context).slice(0, MAX_CONTEXT_CHARS).replaceAll("<", "‹");
-  }
+  const style = typeof body.style === "string" && body.style in STYLES ? body.style : "dost";
+  const language = typeof body.language === "string" && body.language in LANGUAGES ? body.language : "english";
+  const contextJson = safeContext(body.context);
+  const question = messages[messages.length - 1].content;
+  const flag = redFlag(question);
 
+  let counted = false;
   try {
-    const uid = await callerId(req);
-    if (!uid) return json({ error: "unauthorized" }, 401);
     const limit = Number(Deno.env.get("COACH_DAILY_LIMIT") ?? "30");
     if (!(await withinDailyLimit(uid, "coach", limit))) return json({ error: "daily_limit" });
+    counted = true;
+    if (!(await withinGlobalLimit("coach", 5000))) {
+      await refundUsage(uid, "coach");
+      return json({ error: "busy" }, 503);
+    }
 
-    const reply = await callModel(systemPrompt(style, language, contextJson), messages);
-    if (!reply) return json({ error: "empty" }, 502);
-    return json({ reply });
+    let reply = await callModel(systemPrompt(style, language, contextJson), messages);
+    if (!reply) {
+      await refundUsage(uid, "coach");
+      return json({ error: "empty" }, 502);
+    }
+    if (await isUnsafeReply(question, reply)) reply = SAFE_FALLBACK;
+    return json({ reply: helpPrefix(flag) + reply });
   } catch (e) {
+    if (counted) await refundUsage(uid, "coach");
     // Never leak provider details, keys or message text to the client or logs.
     const msg = (e as Error).message;
     console.error("coach-chat failed:", msg);
-    // A short, safe code so the app (debug builds) can show WHAT failed:
-    // config = a secret is missing; usage_N = fair-use counter (DB) error;
-    // model_N = AI provider error (401 bad key, 400 credits/model, 404 model id).
+    // Red flag + AI down: still give the help line, never just an error.
+    if (flag) return json({ reply: helpPrefix(flag).trim() });
     const code = msg.startsWith("server not configured")
       ? "config"
       : msg.startsWith("usage error")
@@ -146,6 +231,6 @@ Deno.serve(async (req) => {
       : msg.startsWith("model error")
       ? `model_${msg.split(" ").pop()}`
       : "other";
-    return json({ error: "coach unavailable", code }, 502);
+    return json({ error: "coach unavailable", ...(debugCodes() ? { code } : {}) }, 502);
   }
 });

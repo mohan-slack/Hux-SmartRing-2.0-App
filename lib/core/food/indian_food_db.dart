@@ -160,6 +160,21 @@ class IndianFoodDb {
   static FoodItem? match(String text) {
     final q = _normalise(text);
     if (q.isEmpty) return null;
+    // "2 rotis", "3 idlis", "eggs": try the singular when the plural
+    // doesn't match (most aliases are singular).
+    final direct = _match(q);
+    if (direct != null) return direct;
+    final singular = q.split(' ').map(_singular).join(' ');
+    return singular == q ? null : _match(singular);
+  }
+
+  static String _singular(String w) {
+    if (w.length > 4 && w.endsWith('ies')) return '${w.substring(0, w.length - 3)}y';
+    if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.substring(0, w.length - 1);
+    return w;
+  }
+
+  static FoodItem? _match(String q) {
     for (final f in indianFoods) {
       if (f.aliases.contains(q) || _normalise(f.name) == q) return f;
     }

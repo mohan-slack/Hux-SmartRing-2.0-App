@@ -34,6 +34,13 @@ DateTime bucketStart(DateTime t) {
   return DateTime(t.year, t.month, t.day, t.hour, minute);
 }
 
+/// Which app/device wrote a point (for de-duplicating sources).
+String _sourceKey(hk.HealthDataPoint p) {
+  final id = p.sourceId;
+  if (id.isNotEmpty) return id;
+  return p.sourceName;
+}
+
 double? _numericValue(hk.HealthDataPoint point) {
   final value = point.value;
   return value is hk.NumericHealthValue ? value.numericValue.toDouble() : null;
@@ -115,15 +122,32 @@ List<HealthSnapshot> _bucketCumulativePerDay(
   List<hk.HealthDataPoint> points,
   HealthSnapshot Function(DateTime bucket, double cumulative) build,
 ) {
-  final byDay = <DateTime, Map<DateTime, double>>{};
+  // Phone AND watch (or Google Fit AND Samsung Health) both write the
+  // same walk, so summing every raw sample double-counts. Per day, keep
+  // only the source with the biggest total — the one that saw the most
+  // of the day (what Apple Health's own de-duplicated total is closest
+  // to). Points with no source id are treated as one source.
+  final perDaySource = <DateTime, Map<String, List<hk.HealthDataPoint>>>{};
   for (final point in points) {
-    final value = _numericValue(point);
-    if (value == null) continue;
+    if (_numericValue(point) == null) continue;
     final day = DateTime(point.dateFrom.year, point.dateFrom.month, point.dateFrom.day);
-    final bucket = bucketStart(point.dateFrom);
-    final buckets = byDay.putIfAbsent(day, () => {});
-    buckets[bucket] = (buckets[bucket] ?? 0) + value;
+    perDaySource
+        .putIfAbsent(day, () => {})
+        .putIfAbsent(_sourceKey(point), () => [])
+        .add(point);
   }
+
+  final byDay = <DateTime, Map<DateTime, double>>{};
+  perDaySource.forEach((day, sources) {
+    double total(List<hk.HealthDataPoint> ps) =>
+        ps.fold(0.0, (sum, p) => sum + (_numericValue(p) ?? 0));
+    final best = sources.values.reduce((a, b) => total(a) >= total(b) ? a : b);
+    final buckets = byDay.putIfAbsent(day, () => {});
+    for (final point in best) {
+      final bucket = bucketStart(point.dateFrom);
+      buckets[bucket] = (buckets[bucket] ?? 0) + _numericValue(point)!;
+    }
+  });
 
   final result = <HealthSnapshot>[];
   for (final buckets in byDay.values) {
@@ -243,6 +267,7 @@ List<MappedSleepSession> mapSleepSessions(
   List<hk.HealthDataPoint> spo2Points = const [],
   List<hk.HealthDataPoint> tempPoints = const [],
   List<hk.HealthDataPoint> respRatePoints = const [],
+  DateTime? clippedBefore,
 }) {
   final relevant = sleepPoints.where((p) => _stageFor(p.type) != null).toList()
     ..sort((a, b) => a.dateFrom.compareTo(b.dateFrom));
@@ -263,9 +288,28 @@ List<MappedSleepSession> mapSleepSessions(
 
   return [
     for (final cluster in clusters)
-      _buildSession(
-          cluster, hrPoints, hrvPoints, spo2Points, tempPoints, respRatePoints),
+      // A night whose first sample starts before the fetch window may be
+      // cut off at the front — never return it as if it were complete.
+      if (clippedBefore == null || !cluster.first.dateFrom.isBefore(clippedBefore))
+        _buildSession(
+            cluster, hrPoints, hrvPoints, spo2Points, tempPoints, respRatePoints),
   ];
+}
+
+/// Sorts segments and trims any that overlap an earlier one (two
+/// sources reporting the same minutes), so time is never counted twice.
+List<SleepSegment> _withoutOverlaps(List<SleepSegment> input) {
+  final sorted = [...input]..sort((a, b) => a.start.compareTo(b.start));
+  final out = <SleepSegment>[];
+  DateTime? coveredUntil;
+  for (final seg in sorted) {
+    var start = seg.start;
+    if (coveredUntil != null && start.isBefore(coveredUntil)) start = coveredUntil;
+    if (!seg.end.isAfter(start)) continue; // fully covered already
+    out.add(SleepSegment(start: start, end: seg.end, stage: seg.stage));
+    coveredUntil = seg.end;
+  }
+  return out;
 }
 
 MappedSleepSession _buildSession(
@@ -278,10 +322,22 @@ MappedSleepSession _buildSession(
 ) {
   final hadRealStages = cluster.any((p) => !_stagelessTypes.contains(p.type));
 
-  final segments = [
-    for (final p in cluster)
+  // De-duplicate before counting, or one night reads as ~15 h:
+  // - with real stages (Watch, Fitbit…), the "in bed" / generic
+  //   "asleep" blocks cover the same time again — drop them;
+  // - with no stages, prefer "asleep" over "in bed" when both exist
+  //   (in bed includes time lying awake).
+  final hasAsleep = cluster.any((p) => p.type == hk.HealthDataType.SLEEP_ASLEEP);
+  final kept = cluster.where((p) {
+    if (hadRealStages) return !_stagelessTypes.contains(p.type);
+    if (hasAsleep) return p.type != hk.HealthDataType.SLEEP_IN_BED;
+    return true;
+  }).toList();
+
+  final segments = _withoutOverlaps([
+    for (final p in kept)
       SleepSegment(start: p.dateFrom, end: p.dateTo, stage: _stageFor(p.type)!),
-  ]..sort((a, b) => a.start.compareTo(b.start));
+  ]);
 
   final bedtime = segments.first.start;
   final wakeTime = segments.last.end;

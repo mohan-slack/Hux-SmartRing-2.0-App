@@ -56,8 +56,8 @@ print('Slept ${night.totalSleep.inMinutes} min, '
 
 ```
 lib/core/ring/       Data models, adapter interface, mock TM21, dev-only
-                     Health-Store adapter (health_adapter/), a provisional
-                     real BLE adapter (aizo_ble/), data source switch
+                     Health-Store adapter (health_adapter/), data source
+                     switch (BLE ring adapter: see ring/aizo-ble branch)
 lib/core/storage/    HealthStore interface + SQLite implementation
 lib/core/sync/       SyncService: overlap, retry, watermark, plus a thin
                      battery/vibrate passthrough for the ring status UI
@@ -340,92 +340,13 @@ again on iOS (a documented HealthKit privacy limitation, not a bug
 here) — the app will just harmlessly re-sync nothing new and keep
 showing whatever was last cached.
 
-## AIZO BLE ring adapter (provisional, reverse-engineered protocol)
+## AIZO BLE ring adapter — moved off v1
 
-`lib/core/ring/aizo_ble/` is the THIRD real `RingAdapter` implementation
-(after the mock and the Health-Store adapter), and the first that talks to
-actual ring hardware over Bluetooth LE. It is deliberately **NOT** the
-official eIoT SDK integration — `main.dart`'s composition-root switch
-reserves the name `EIoTRingAdapter` for that future, contractual
-integration; this one is honestly named `AizoBleRingAdapter` after the
-unofficial protocol it actually speaks, reverse-engineered from the AIZO
-RING Android app (`com.eiot.be.ring`, Shenzhen eIoT Technology) by
-decompiling its APK and confirming behavior live against a Rogbid SR10
-(firmware 4.15.06). Every UUID/opcode/response-command byte lives in one
-file, `aizo_protocol.dart`, each tagged `confirmed: true/false` — nothing
-downstream may hardcode a protocol literal.
-
-**HONESTY RULE, same spirit as the Health-Store adapter**: only what's
-been confirmed working on real hardware is implemented — a battery read
-and a one-shot vibration. Every other `HealthSnapshot` field (HR, sleep,
-SpO2, steps, respiratory rate, stress, calories) has no confirmed readout
-command on this protocol; `liveSnapshots` exists and is never fed, and
-`syncSince` always returns an honest empty `SyncResult` — there is no
-confirmed way to pull historical data off this ring, only live device
-operations. The ring's own unsolicited `0x7901` push (probably step/
-activity data, sent every ~2-3 minutes) is recognized but deliberately
-never decoded into a real field — its byte layout was never confirmed, so
-guessing at it would violate the one rule that matters more than any
-feature: never fabricate a reading.
-
-- `aizo_protocol.dart` — service `FE02`, write characteristic `0101`,
-  notify characteristic `010A`, frame header `0x9240`. Confirmed opcodes:
-  `sendExperience` (`[0x16, 0x10, type, intensity]`, a complete one-shot
-  buzz — used for `vibrate()`), `getBattery` (`[0x38, 0x38, 0x02]` — ⚠️
-  can intermittently trigger a physical buzz on this firmware, so it's
-  only ever called on connect and on explicit user refresh, never on a
-  timer), and `vibratePhone` (call-state-based buzz control, confirmed
-  working but unused — `sendExperience` already covers the one-shot case
-  `vibrate()` needs).
-- `aizo_packet_framer.dart` — pure Dart: `[length 2B][header 2B][sequence
-  2B][payload][CRC16 2B]` framing and a custom CRC16, golden-vector tested
-  (`[0x10,0x08,0x01]` → CRC `0x1677`).
-- `aizo_response_decoder.dart` — a sealed `AizoResponse` hierarchy
-  (`AizoBatteryResponse`, `AizoExperienceAck`, `AizoVibratePhoneAck`,
-  `AizoUnknownResponse` with a reason enum distinguishing "too
-  short/bad CRC" from "known command, refused to decode" from "genuinely
-  unrecognized"). Never throws.
-- `aizo_ble_transport.dart` / `aizo_reactive_ble_transport.dart` — a
-  plugin-agnostic `AizoBleTransport` interface plus the one real
-  implementation, built on `flutter_reactive_ble`. **Not
-  `flutter_blue_plus`**: that package's v2.x line requires a paid
-  commercial license for any for-profit use (caught by reading its actual
-  LICENSE file before writing any code against it, not by trusting the
-  package name); `flutter_reactive_ble` is BSD-3, free, and covers the
-  same scan/connect/discover/write/subscribe surface this adapter needs.
-  A `FakeAizoBleTransport` test double keeps every other file in this
-  folder testable without hardware or a real BLE plugin.
-- `aizo_ble_ring_adapter.dart` — `AizoBleRingAdapter implements
-  RingAdapter`. Uses the sentinel `-1` (never a plausible-looking `0`) for
-  "battery read failed/timed out," resolved at the UI boundary (see
-  `_sanitizeBattery` in `today_screen.dart`) so a failed read never
-  renders as a literal, alarming zero percent.
-
-**Choosing the source** — same `HUX_SOURCE` switch in `main.dart` as the
-Health-Store adapter: pass `--dart-define=HUX_SOURCE=aizo` to pair a real
-ring. The banner above every tab shows a distinct deep-teal "UNOFFICIAL —
-connected via reverse-engineered protocol (battery + vibration only)" for
-this source, never conflating it with the amber demo banner or the
-Health-Store adapter's blue-grey dev banner.
-
-**Platform setup this phase required:** `NSBluetoothAlwaysUsageDescription`
-in `Info.plist` (iOS); on Android, the API 31+ scoped BLE permissions
-(`BLUETOOTH_SCAN` with `neverForLocation`, `BLUETOOTH_CONNECT`, plus
-legacy `maxSdkVersion="30"` fallbacks) and a `<uses-feature
-android:name="android.hardware.bluetooth_le" android:required="false"/>`
-— `required="false"` on purpose, so the Play Store doesn't block install
-on BLE-less devices for a feature only reachable via an explicit
-`--dart-define` flag.
-
-**Verifying without a ring**: every file above `aizo_reactive_ble_transport.dart`
-is unit-tested against `FakeAizoBleTransport` (27 tests, no hardware, no
-real BLE plugin) — connect/disconnect lifecycle, the exact
-`sendExperience` payload bytes, the battery-timeout fallback, and that
-garbage bytes on the notify stream never crash the adapter or corrupt
-state. Verifying the transport itself needs the real thing: a physical
-phone paired to a physical AIZO-protocol ring (BLE is unavailable in any
-iOS Simulator or Android Emulator — an OS-level restriction, not a bug
-here).
+The provisional, reverse-engineered Aizo BLE ring adapter (and its
+`flutter_reactive_ble` transport, Bluetooth permissions and tests) lives on
+the `ring/aizo-ble` git branch. v1 launches without a ring and ships no
+Bluetooth code. When the official eIoT SDK arrives, add its adapter as a new
+`RingAdapter` and a new `RingDataSource` value.
 
 ## HUX card catalog — Today screen enrichment
 
@@ -610,17 +531,11 @@ the polarity reversed.
 1. **Settings screen** — data export/delete (the DPDP hook already
    exists in `HealthStore.deleteAllData()`), ring pairing UI.
 2. **eIoT ring adapter** — swap in the real TM21 SDK behind
-   `RingAdapter` once eIoT delivers it; `HealthStoreRingAdapter` and
-   `AizoBleRingAdapter` are two worked examples of "another real
+   `RingAdapter` once eIoT delivers it; `HealthStoreRingAdapter` (and
+   `AizoBleRingAdapter` on the `ring/aizo-ble` branch) are worked examples of "another real
    `RingAdapter` implementation slots in without touching a single
    screen."
-3. **Physical-hardware verification of `AizoBleRingAdapter`** — every
-   file down to (not including) the real BLE transport is unit-tested
-   against a fake; confirming a real phone actually connects to a real
-   AIZO-protocol ring, reads a real battery percent, and feels a real
-   buzz from the "Test ring" tile is a manual check against real
-   hardware, not something a simulator/emulator can exercise (BLE is
-   unavailable in both).
+3. **Ring hardware verification** — on the `ring/aizo-ble` branch, or with the eIoT SDK.
 
 ## Authentication
 

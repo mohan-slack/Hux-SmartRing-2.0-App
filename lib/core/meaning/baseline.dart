@@ -47,7 +47,11 @@ class PersonalBaseline {
   /// Sessions with a null field simply don't contribute to that field's
   /// median — one missing HRV reading doesn't spoil the sleep-duration
   /// baseline, or vice versa.
-  factory PersonalBaseline.fromSleepSessions(List<SleepSession> sessions) {
+  factory PersonalBaseline.fromSleepSessions(List<SleepSession> allSessions) {
+    // One main sleep per day: naps and the short half of a split night
+    // would otherwise drag "your usual sleep" down and count as extra
+    // "nights" toward the learning period.
+    final sessions = mainSleepPerDay(allSessions);
     final hrv = <double>[];
     final hr = <double>[];
     final sleepMinutes = <double>[];
@@ -73,6 +77,18 @@ class PersonalBaseline {
       medianRespiratoryRateBrpm: _median(respRate),
       daysOfData: sessions.length,
     );
+  }
+
+  /// Keeps the longest session per local wake-up date.
+  static List<SleepSession> mainSleepPerDay(List<SleepSession> sessions) {
+    final byDay = <DateTime, SleepSession>{};
+    for (final s in sessions) {
+      final w = s.wakeTime.toLocal();
+      final key = DateTime(w.year, w.month, w.day);
+      final current = byDay[key];
+      if (current == null || s.totalSleep > current.totalSleep) byDay[key] = s;
+    }
+    return byDay.values.toList()..sort((a, b) => a.bedtime.compareTo(b.bedtime));
   }
 
   static double? _median(List<double> values) {

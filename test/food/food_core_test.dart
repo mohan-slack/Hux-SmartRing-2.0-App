@@ -26,6 +26,12 @@ void main() {
       expect(IndianFoodDb.match('masala dosa')?.id, 'masala_dosa');
     });
 
+    test('plurals match the singular dish ("2 rotis", "3 idlis")', () {
+      expect(IndianFoodDb.match('rotis')?.id, 'roti');
+      expect(IndianFoodDb.match('idlis')?.id, 'idli');
+      expect(IndianFoodDb.match('2 dosas')?.id, 'dosa');
+    });
+
     test('unknown dish -> null, never a wrong guess', () {
       expect(IndianFoodDb.match('thukpa'), isNull);
       expect(IndianFoodDb.match(''), isNull);

@@ -179,7 +179,9 @@ void main() {
       final n = _FakeNotifier();
       final bad = forecast(temp: (d, h) => 25, pm25: (d, h) => d == 1 ? 130 : 20);
       final env = EnvironmentService(store,
-          notifier: n, fetch: (u) async => u.host.contains('air-quality') ? bad.air : bad.weather);
+          notifier: n,
+          fetch: (u) async => u.host.contains('air-quality') ? bad.air : bad.weather,
+          now: () => DateTime(2026, 5, 20, 12));
       await env.setCity(cityNamed('Delhi')!);
       expect(await env.setAlerts(true), isTrue);
 
@@ -190,7 +192,9 @@ void main() {
 
       final good = forecast(temp: (d, h) => 25, pm25: (d, h) => 20);
       final env2 = EnvironmentService(store,
-          notifier: n, fetch: (u) async => u.host.contains('air-quality') ? good.air : good.weather);
+          notifier: n,
+          fetch: (u) async => u.host.contains('air-quality') ? good.air : good.weather,
+          now: () => DateTime(2026, 5, 20, 12));
       await env2.refreshAlert();
       expect(n.once.containsKey(EnvironmentService.alertId), isFalse);
       await store.close();

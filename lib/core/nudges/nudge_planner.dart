@@ -117,8 +117,29 @@ class DailyNudge {
   const DailyNudge({required this.id, required this.at, required this.title, required this.body});
 }
 
+/// Opt-in daily morning briefing ("today's charge and plan are ready").
+class BriefingSettings {
+  final bool enabled;
+  final TimeOfDayHm at;
+
+  const BriefingSettings({required this.enabled, required this.at});
+
+  static const defaults = BriefingSettings(enabled: false, at: TimeOfDayHm(7, 30));
+
+  BriefingSettings copyWith({bool? enabled, TimeOfDayHm? at}) =>
+      BriefingSettings(enabled: enabled ?? this.enabled, at: at ?? this.at);
+
+  Map<String, Object?> toJson() => {'enabled': enabled, 'at': at.encode()};
+
+  static BriefingSettings fromJson(Map<String, Object?> j) => BriefingSettings(
+        enabled: j['enabled'] == true,
+        at: TimeOfDayHm.decode(j['at'] as String?) ?? defaults.at,
+      );
+}
+
 class NudgeIds {
   const NudgeIds._();
+  static const morningBriefing = 1201;
   static const walkLunch = 1001;
   static const walkDinner = 1002;
   static const walkAfterLogged = 1003;

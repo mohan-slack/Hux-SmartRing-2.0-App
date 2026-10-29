@@ -1,5 +1,5 @@
 name: hux_app
-description: HUX Smart Ring companion app. Numbers -> Meaning -> Action.
+description: HUX — daily wellness readouts from your health data. Numbers -> Meaning -> Action.
 publish_to: none
 # version: <name>+<build>. Bump the build number (+N) for EVERY store upload.
 version: 1.0.0+1
@@ -17,9 +17,10 @@ dependencies:
   fl_chart: ^0.66.2
   health: ^13.3.1
   google_fonts: ^6.3.2
-  flutter_reactive_ble: ^5.4.2
   supabase_flutter: ^2.15.4
   image_picker: ^1.1.2
+  image: ^4.2.0
+  wakelock_plus: ^1.2.8
   flutter_local_notifications: ^22.3.2
   timezone: ^0.11.2
   flutter_timezone: ^5.1.1

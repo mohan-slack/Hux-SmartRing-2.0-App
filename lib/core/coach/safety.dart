@@ -57,6 +57,12 @@ class SafetyCheck {
     'heart attack', 'having a stroke', 'stroke symptoms', 'heat stroke', 'heatstroke',
     'seizure', 'fits aa', 'heavy bleeding',
     'spo2 below 90', 'oxygen below 90', 'oxygen is 8',
+    // Native scripts (the coach replies in these): Hindi, Telugu, Tamil,
+    // Kannada. Keep in step with supabase/functions/_shared/safety.ts.
+    'सीने में दर्द', 'छाती में दर्द', 'सांस नहीं', 'साँस नहीं', 'बेहोश', 'दिल का दौरा',
+    'ఛాతీ నొప్పి', 'ఊపిరి ఆడటం లేదు', 'స్పృహ తప్పి', 'గుండెపోటు',
+    'நெஞ்சு வலி', 'மூச்சு விட முடியவில்லை', 'மாரடைப்பு',
+    'ಎದೆ ನೋವು', 'ಉಸಿರಾಡಲು ಆಗುತ್ತಿಲ್ಲ', 'ಪ್ರಜ್ಞೆ ತಪ್ಪಿ', 'ಹೃದಯಾಘಾತ',
   ];
 
   static const _selfHarm = [
@@ -65,6 +71,10 @@ class SafetyCheck {
     'harm myself', 'self harm', 'self-harm', 'cut myself',
     'marna chahta', 'marna chahti', 'mar jaana chahta', 'mar jana chahti', 'jeena nahi',
     'khudkushi', 'aatmahatya', 'atmahatya', 'chachipovali', 'chanipovali',
+    'आत्महत्या', 'खुदकुशी', 'मरना चाहता', 'मरना चाहती', 'जीना नहीं',
+    'ఆత్మహత్య', 'చనిపోవాలని',
+    'தற்கொலை', 'சாக வேண்டும்',
+    'ಆತ್ಮಹತ್ಯೆ', 'ಸಾಯಬೇಕು',
   ];
 
   /// The card to show for [text], or null. Self-harm wins over

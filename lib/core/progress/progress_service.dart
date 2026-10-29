@@ -4,6 +4,7 @@ library;
 
 import '../food/food_log_service.dart';
 import '../journal/journal.dart';
+import '../meaning/step_goal_log.dart';
 import '../meaning/step_target.dart';
 import '../storage/health_store.dart';
 import '../trends/night_row.dart';
@@ -40,6 +41,7 @@ class ProgressService {
       now.toUtc().add(const Duration(days: 1)),
     );
     final totals = StepTargetCalculator.dailyTotals(snapshots, utcOffset: _utcOffset);
+    final shownGoals = await StepGoalLog(_store).loadAll();
 
     final out = <DateTime, DayRecord>{};
     for (var d = from; !d.isAfter(todayKey); d = DateTime.utc(d.year, d.month, d.day + 1)) {
@@ -49,9 +51,11 @@ class ProgressService {
       out[d] = DayRecord(
         day: d,
         steps: steps,
-        // Past goals are re-worked from the week before, without that
-        // day's effort level (not stored) — close to what Today showed.
-        stepGoal: StepTargetCalculator.targetFor(StepTargetCalculator.usualFor(totals, d), null),
+        // The goal Home showed that day (rest/push days included);
+        // re-worked from the week before only for days Home never
+        // showed one (e.g. before this was recorded).
+        stepGoal: shownGoals[StepGoalLog.dayKey(d)] ??
+            StepTargetCalculator.targetFor(StepTargetCalculator.usualFor(totals, d), null),
         planSession: k.contains(ActivityKind.planSession),
         meal: k.contains(ActivityKind.meal),
         journal: k.contains(ActivityKind.journal),

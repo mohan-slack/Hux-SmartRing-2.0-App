@@ -11,12 +11,16 @@ import '../theme/hux_motion.dart';
 import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
 import '../theme/hux_ui.dart';
+import '../widgets/share_card.dart';
 import '../widgets/wellness_note.dart';
 
 class StoryScreen extends StatefulWidget {
   final WeeklyStoryService storyService;
 
-  const StoryScreen({super.key, required this.storyService});
+  /// Pinged when the Progress tab becomes visible: rebuilds the story.
+  final Listenable? refreshSignal;
+
+  const StoryScreen({super.key, required this.storyService, this.refreshSignal});
 
   @override
   State<StoryScreen> createState() => _StoryScreenState();
@@ -28,7 +32,22 @@ class _StoryScreenState extends State<StoryScreen> {
   @override
   void initState() {
     super.initState();
+    widget.refreshSignal?.addListener(_reload);
     _future = widget.storyService.buildStory();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshSignal?.removeListener(_reload);
+    super.dispose();
+  }
+
+  // FutureBuilder keeps showing the previous story while the new one
+  // builds, so a refresh never flashes the spinner.
+  void _reload() {
+    setState(() {
+      _future = widget.storyService.buildStory();
+    });
   }
 
   @override
@@ -41,6 +60,18 @@ class _StoryScreenState extends State<StoryScreen> {
         child: FutureBuilder<WeeklyStory>(
           future: _future,
           builder: (context, snapshot) {
+            if (snapshot.hasError && !snapshot.hasData) {
+              // Never an endless "Building…": say so and offer a retry.
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("Couldn't build your week."),
+                    TextButton(onPressed: _reload, child: const Text('Retry')),
+                  ],
+                ),
+              );
+            }
             if (!snapshot.hasData) {
               return const _MessageView(message: 'Building your week…');
             }
@@ -84,23 +115,34 @@ class _StoryBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
           HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
-        HuxEntrance(
-          child: HuxHeroCard(
-            icon: Icons.auto_stories_rounded,
-            color: HuxColors.accentPurple,
-            eyebrow: 'Your week',
-            title: story.title,
+        // The whole story is one shareable card (WhatsApp, Instagram…).
+        ShareCapture(
+          fileName: 'hux-my-week.png',
+          shareText: 'My week on HUX',
+          buttonLabel: 'Share my week',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              HuxEntrance(
+                child: HuxHeroCard(
+                  icon: Icons.auto_stories_rounded,
+                  color: HuxColors.accentPurple,
+                  eyebrow: 'Your week',
+                  title: story.title,
+                ),
+              ),
+              const SizedBox(height: HuxSpacing.lg),
+              HuxEntrance(
+                index: 1,
+                child: _Observations(observations: story.observations),
+              ),
+              const SizedBox(height: HuxSpacing.md),
+              HuxEntrance(
+                index: 2,
+                child: _Suggestion(suggestion: story.suggestion),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 1,
-          child: _Observations(observations: story.observations),
-        ),
-        const SizedBox(height: HuxSpacing.md),
-        HuxEntrance(
-          index: 2,
-          child: _Suggestion(suggestion: story.suggestion),
         ),
         const WellnessNote(),
       ],

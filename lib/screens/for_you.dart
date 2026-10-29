@@ -41,7 +41,7 @@ class ForYouSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: HuxSpacing.sm),
-        for (final id in featured) ...[
+        for (final id in featured.where(isFeatureVisible)) ...[
           FeatureCard(info: FeatureCatalog.of(id), onTap: () => onOpen(id)),
           const SizedBox(height: HuxSpacing.sm),
         ],
@@ -186,7 +186,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Future<void> _edit() async {
     await widget.onEditAnswers();
-    if (mounted) setState(() => _featured = widget.profileService.featured());
+    if (mounted) {
+      setState(() {
+        _featured = widget.profileService.featured();
+      });
+    }
   }
 
   @override
@@ -202,7 +206,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       body: FutureBuilder<List<FeatureId>>(
         future: _featured,
         builder: (context, snapshot) {
-          final featured = snapshot.data ?? const <FeatureId>[];
+          final featured = (snapshot.data ?? const <FeatureId>[]).where(isFeatureVisible).toList();
           return ListView(
             padding: const EdgeInsets.all(HuxSpacing.lg),
             children: [
@@ -218,7 +222,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
               for (final category in FeatureCategory.values) ...[
                 Text(category.label, style: text.titleMedium),
                 const SizedBox(height: HuxSpacing.sm),
-                for (final info in FeatureCatalog.all.where((f) => f.category == category)) ...[
+                for (final info in FeatureCatalog.all
+                    .where((f) => f.category == category && isFeatureVisible(f.id))) ...[
                   FeatureCard(info: info, onTap: () => widget.onOpen(info.id)),
                   const SizedBox(height: HuxSpacing.sm),
                 ],

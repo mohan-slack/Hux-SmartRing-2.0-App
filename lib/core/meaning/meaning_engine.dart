@@ -80,6 +80,9 @@ class MeaningEngine {
   /// data back into the score would double-count one signal.
   static const stressHrvDepressionCeilingPct = 0.40;
 
+  /// Typical awake HRV as a share of overnight HRV.
+  static const daytimeHrvFactor = 0.75;
+
   // ---- Combined-score cutoffs for the overall RecoveryState -----------
   static const rechargedThreshold = 3;
   static const steadyThreshold = 0;
@@ -208,7 +211,13 @@ class MeaningEngine {
     }
 
     final totalMinutes = last.inMinutes;
-    if (totalMinutes > 0) {
+    // Only judge deep sleep when the source actually reports stages.
+    // Phones, many bands and manual entries give one plain "asleep"
+    // block (mapped to light): deep 0 there means "not measured", not
+    // "no deep sleep" — penalising it docked those users every night.
+    final hasStages = lastNight.stageTotal(SleepStage.deep) > Duration.zero ||
+        lastNight.stageTotal(SleepStage.rem) > Duration.zero;
+    if (totalMinutes > 0 && hasStages) {
       final deepMinutes = lastNight.stageTotal(SleepStage.deep).inMinutes;
       if (deepMinutes / totalMinutes < minDeepSleepFraction) {
         score = (score - 1).clamp(-2, 1);
@@ -269,7 +278,11 @@ class MeaningEngine {
     if (todayHrv.isEmpty) return null;
 
     final avgHrv = todayHrv.reduce((a, b) => a + b) / todayHrv.length;
-    final depression = (baseHrv - avgHrv) / baseHrv; // positive = below baseline
+    // The baseline is OVERNIGHT HRV; awake HRV normally sits well below
+    // it. Comparing against the raw night value read "stressed" every
+    // day — compare against the expected daytime level instead.
+    final dayBase = baseHrv * daytimeHrvFactor;
+    final depression = (dayBase - avgHrv) / dayBase; // positive = below usual
     final normalized =
         (depression / stressHrvDepressionCeilingPct).clamp(0.0, 1.0);
     return (normalized * 100).round();

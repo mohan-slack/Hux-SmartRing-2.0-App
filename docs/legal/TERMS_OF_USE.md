@@ -150,8 +150,8 @@ updated terms.
 
 ## 15. Grievance officer and contact
 
-[NAME], Grievance Officer, Viveon Gizit Private Limited. Email
-**privacy@hux.co.in**, address [ADDRESS].
+Mohan Reddy, Grievance Officer, Viveon Gizit Private Limited. Email
+**support@hux.co.in**, address Electronic City, Bengaluru, Karnataka 560100.
 
 We acknowledge complaints within 24 hours and aim to resolve them within
 15 days (Information Technology (Intermediary Guidelines and Digital Media

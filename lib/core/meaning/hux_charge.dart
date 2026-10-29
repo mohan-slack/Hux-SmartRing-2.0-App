@@ -64,11 +64,21 @@ class HuxChargeCalculator {
   static const restingHrWeight = 0.2;
 
   // Daytime drain.
-  /// Points lost per hour awake (16 h awake ≈ 40 points).
-  static const drainPerHourAwake = 2.5;
+  /// Points lost per hour awake (16 h awake ≈ 32 points) — gentle
+  /// enough that a usual night (70) still reads "okay" in the evening.
+  static const drainPerHourAwake = 2.0;
 
-  /// Active calories per point lost (400 kcal ≈ 20 points).
-  static const kcalPerPoint = 20.0;
+  /// Hours awake stop counting after this. A wake time older than a
+  /// normal day (missed night, stale data) must not pin Charge at the
+  /// floor — that reads as "you're exhausted" when we simply don't know.
+  static const maxHoursAwake = 17.0;
+
+  /// Active calories per point lost (400 kcal ≈ 16 points)…
+  static const kcalPerPoint = 25.0;
+
+  /// …but movement never costs more than this, so walking more is not
+  /// punished harder than it should be (the app also asks you to move).
+  static const maxActivityDrain = 15.0;
 
   /// Daytime stress 0–100 drains up to this many points.
   static const maxStressDrain = 10.0;
@@ -142,7 +152,7 @@ class HuxChargeCalculator {
     final wake = lastNight?.wakeTime.toUtc();
     final nowUtc = now.toUtc();
     if (wake != null && nowUtc.isAfter(wake)) {
-      final hoursAwake = nowUtc.difference(wake).inMinutes / 60.0;
+      final hoursAwake = (nowUtc.difference(wake).inMinutes / 60.0).clamp(0.0, maxHoursAwake);
       drain += hoursAwake * drainPerHourAwake;
     }
 
@@ -153,7 +163,9 @@ class HuxChargeCalculator {
       stress ??= s.stressIndex;
       if (activeKcal != null && stress != null) break;
     }
-    if (activeKcal != null && activeKcal > 0) drain += activeKcal / kcalPerPoint;
+    if (activeKcal != null && activeKcal > 0) {
+      drain += (activeKcal / kcalPerPoint).clamp(0.0, maxActivityDrain);
+    }
     if (stress != null && stress > 0) drain += (stress.clamp(0, 100) / 100) * maxStressDrain;
 
     final morningInt = morning.round().clamp(floor, 100).toInt();

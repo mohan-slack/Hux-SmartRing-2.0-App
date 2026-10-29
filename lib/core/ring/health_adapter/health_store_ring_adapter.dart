@@ -1,17 +1,11 @@
-/// HUX Health-Store Ring Adapter (dev tool, not user-facing)
-/// -------------------------------------------------------------
+/// HUX Health-Store Adapter — the v1 LAUNCH data source
+/// ----------------------------------------------------
 /// Reads REAL data from Apple Health (iOS) / Health Connect (Android)
 /// via the `health` package and maps it through health_mappers.dart
-/// into the exact same [RingAdapter] contract [MockRingAdapter]
-/// implements. Purpose: exercise the Meaning engine, Modes, Story, and
-/// Trends against real human data before the eIoT ring exists.
-///
-/// This is NOT a user-facing feature. main.dart only wires it in when
-/// launched with `--dart-define=HUX_SOURCE=health`, and the banner
-/// pinned above every tab (see app_shell.dart / data_source.dart)
-/// always reads "DEV — your health app data (not a HUX ring)" while
-/// it's active — screenshots of this build must never be mistaken for
-/// either the simulated-ring demo or a real HUX ring.
+/// into the same [RingAdapter] contract every source implements.
+/// Release builds use this by default (see main.dart): v1 ships without
+/// the HUX ring, so there is no battery or buzz — [getRingInfo] reports
+/// battery as unavailable and Home hides the ring card.
 ///
 /// READ-ONLY: this adapter never requests write permissions and never
 /// calls any of the `health` package's write* methods.
@@ -45,6 +39,15 @@ class HealthStoreRingAdapter implements RingAdapter {
 
   RingConnectionState _state = RingConnectionState.disconnected;
 
+  /// How much earlier than `since` sleep data is fetched (see syncSince).
+  static const sleepLookBack = Duration(hours: 18);
+
+  /// Types turned into running totals per day — fetched from `since`.
+  static const _cumulativeTypes = {
+    hk.HealthDataType.STEPS,
+    hk.HealthDataType.ACTIVE_ENERGY_BURNED,
+  };
+
   HealthStoreRingAdapter({hk.Health? health}) : _health = health ?? hk.Health();
 
   /// HRV type is platform-specific, not just differently-scaled data on
@@ -63,7 +66,9 @@ class HealthStoreRingAdapter implements RingAdapter {
         _hrvType,
         hk.HealthDataType.BLOOD_OXYGEN,
         hk.HealthDataType.STEPS,
-        hk.HealthDataType.BODY_TEMPERATURE,
+        // BODY_TEMPERATURE is deliberately NOT read in v1: nothing on
+        // screen shows it and the privacy notice doesn't list it (Health
+        // Connect review rejects unused permissions).
         hk.HealthDataType.RESPIRATORY_RATE,
         hk.HealthDataType.ACTIVE_ENERGY_BURNED,
         hk.HealthDataType.SLEEP_ASLEEP,
@@ -117,7 +122,8 @@ class HealthStoreRingAdapter implements RingAdapter {
       _setState(RingConnectionState.disconnected);
       throw const RingConnectionException(
           "Couldn't reach your health app. Make sure it's set up on this "
-          'device and try again.');
+          'device and try again.',
+          retryable: false);
     }
 
     // NOTE: on iOS, HealthKit will not disclose per-type grant status
@@ -130,7 +136,8 @@ class HealthStoreRingAdapter implements RingAdapter {
       _setState(RingConnectionState.disconnected);
       throw const RingConnectionException(
           "Health data access wasn't granted. You can turn it on in your "
-          'health app\'s settings and try again.');
+          'health app\'s settings and try again.',
+          retryable: false);
     }
 
     _setState(RingConnectionState.connected);
@@ -157,12 +164,19 @@ class HealthStoreRingAdapter implements RingAdapter {
     // even though _hrvType already avoids requesting it there. A
     // single unsupported or quietly-denied type must not take down
     // the rest of the sync.
+    // Sleep (and the HR/HRV/SpO2/breathing averaged over it) is fetched
+    // from further back than steps/energy: a night that STARTED before
+    // `since` must come back whole. Starting at `since` returned only
+    // its tail (e.g. 06:30–07:00), and that fragment then replaced the
+    // full stored night. Steps/energy stay at `since` (local midnight)
+    // because they're rebuilt as running totals per day.
+    final sleepSince = since.subtract(sleepLookBack);
     final points = <hk.HealthDataPoint>[];
     for (final type in _readTypes) {
       try {
         points.addAll(await _health.getHealthDataFromTypes(
           types: [type],
-          startTime: since,
+          startTime: _cumulativeTypes.contains(type) ? since : sleepSince,
           endTime: now,
         ));
       } catch (e) {
@@ -178,10 +192,15 @@ class HealthStoreRingAdapter implements RingAdapter {
     final hrPoints = byType(hk.HealthDataType.HEART_RATE);
     final hrvPoints = byType(_hrvType);
     final spo2Points = byType(hk.HealthDataType.BLOOD_OXYGEN);
-    final stepPoints = byType(hk.HealthDataType.STEPS);
+    // A sample that STARTED before `since` (e.g. 23:55–00:05) would land
+    // in the previous day as a tiny partial total and overwrite that
+    // day's real one — drop it; the previous sync already counted it.
+    List<hk.HealthDataPoint> fromSince(hk.HealthDataType type) =>
+        byType(type).where((p) => !p.dateFrom.isBefore(since)).toList();
+    final stepPoints = fromSince(hk.HealthDataType.STEPS);
     final tempPoints = byType(hk.HealthDataType.BODY_TEMPERATURE);
     final respRatePoints = byType(hk.HealthDataType.RESPIRATORY_RATE);
-    final activeEnergyPoints = byType(hk.HealthDataType.ACTIVE_ENERGY_BURNED);
+    final activeEnergyPoints = fromSince(hk.HealthDataType.ACTIVE_ENERGY_BURNED);
     final sleepPoints = points.where((p) => _sleepTypes.contains(p.type)).toList();
 
     // NOTE: no mapStress call here, and HealthSnapshot.stressIndex is
@@ -201,7 +220,10 @@ class HealthStoreRingAdapter implements RingAdapter {
     ]);
 
     final mappedSessions = mapSleepSessions(
+      // Drop nights whose very first sample sits at the edge of the
+      // look-back window: they may themselves be clipped.
       sleepPoints,
+      clippedBefore: sleepSince.add(const Duration(minutes: 1)),
       hrPoints: hrPoints,
       hrvPoints: hrvPoints,
       spo2Points: spo2Points,
@@ -238,10 +260,12 @@ class HealthStoreRingAdapter implements RingAdapter {
 
   @override
   Future<RingInfo> getRingInfo() async => RingInfo(
-        deviceId: 'health-adapter-dev',
-        name: 'Health data (dev)',
+        deviceId: 'health-app',
+        name: Platform.isAndroid ? 'Health Connect' : 'Apple Health',
         firmwareVersion: Platform.isAndroid ? 'healthconnect' : 'healthkit',
-        batteryPercent: 100,
+        // -1 = "no battery" (same sentinel the BLE adapter uses): Home
+        // only shows the ring card when a real battery reading exists.
+        batteryPercent: -1,
       );
 
   @override

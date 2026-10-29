@@ -10,6 +10,7 @@ import '../../core/progress/streaks.dart';
 import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
 import '../../theme/hux_ui.dart';
+import '../../widgets/share_card.dart';
 
 class ProgressScreen extends StatefulWidget {
   final ProgressService progress;
@@ -18,7 +19,11 @@ class ProgressScreen extends StatefulWidget {
   /// extra bottom space for the floating nav bar.
   final bool embedded;
 
-  const ProgressScreen({super.key, required this.progress, this.embedded = false});
+  /// Pinged when the Progress tab becomes visible: recomputes the streak
+  /// and report (a meal or session logged elsewhere changes them).
+  final Listenable? refreshSignal;
+
+  const ProgressScreen({super.key, required this.progress, this.embedded = false, this.refreshSignal});
 
   @override
   State<ProgressScreen> createState() => _ProgressScreenState();
@@ -47,14 +52,27 @@ class _ProgressScreenState extends State<ProgressScreen> {
   @override
   void initState() {
     super.initState();
+    widget.refreshSignal?.addListener(_refresh);
     _month = _thisMonth;
-    _load();
+    _load(refreshStreak: true);
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    widget.refreshSignal?.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (!_loading) _load(refreshStreak: true);
+  }
+
+  /// Month arrows reuse the streak (it doesn't depend on the month);
+  /// a tab refresh recomputes it.
+  Future<void> _load({bool refreshStreak = false}) async {
     setState(() => _loading = true);
     try {
-      final streak = _streak ?? await widget.progress.streaks();
+      final streak = refreshStreak || _streak == null ? await widget.progress.streaks() : _streak!;
       final report = await widget.progress.monthly(_month.year, _month.month);
       if (!mounted) return;
       setState(() {
@@ -97,7 +115,15 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   Text(_error!, style: text.bodyMedium),
                   TextButton(onPressed: _load, child: const Text('Retry')),
                 ],
-                if (streak != null) _StreakPanel(streak: streak),
+                if (streak != null)
+                  streak.current >= 2
+                      ? ShareCapture(
+                          fileName: 'hux-streak.png',
+                          shareText: 'My ${streak.current}-day streak on HUX',
+                          buttonLabel: 'Share my streak',
+                          child: _StreakPanel(streak: streak),
+                        )
+                      : _StreakPanel(streak: streak),
                 const SizedBox(height: HuxSpacing.xl),
                 Row(
                   children: [

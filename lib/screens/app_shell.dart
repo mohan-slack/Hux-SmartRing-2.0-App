@@ -43,6 +43,7 @@ import '../theme/hux_ui.dart';
 import 'hubs/plans_hub.dart';
 import 'hubs/progress_hub.dart';
 import 'air_heat_screen.dart';
+import 'briefing_screen.dart';
 import 'coach/coach_screen.dart';
 import 'legal/privacy_account_screen.dart';
 import 'food/food_screen.dart';
@@ -92,6 +93,10 @@ class AppShell extends StatefulWidget {
   /// Air & heat outlooks; null = "coming soon".
   final EnvironmentService? environmentService;
 
+  /// Home syncs on open/resume (see TodayScreen.autoSync). The app
+  /// turns this on; widget tests leave it off.
+  final bool autoSync;
+
   const AppShell({
     super.key,
     required this.store,
@@ -107,6 +112,7 @@ class AppShell extends StatefulWidget {
     this.onLocalDataDeleted,
     this.nudgeService,
     this.environmentService,
+    this.autoSync = false,
   });
 
   @override
@@ -151,6 +157,11 @@ class _AppShellState extends State<AppShell> {
   /// of silently showing what it looked like when it was last built.
   final _todayRefresh = ValueNotifier<int>(0);
 
+  /// Pinged when the Coach / Progress tabs become visible again, so
+  /// IndexedStack-kept screens don't go stale.
+  final _coachRefresh = ValueNotifier<int>(0);
+  final _progressRefresh = ValueNotifier<int>(0);
+
   /// Which part of the Progress tab is showing (Trends / Story / Streaks).
   final _progressSection = ValueNotifier<ProgressSection>(ProgressSection.trends);
 
@@ -161,6 +172,8 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _todayRefresh.dispose();
+    _coachRefresh.dispose();
+    _progressRefresh.dispose();
     _progressSection.dispose();
     super.dispose();
   }
@@ -175,8 +188,11 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _onDestinationSelected(int index) {
+    final changed = index != _index;
     setState(() => _index = index);
     if (index == 0) _todayRefresh.value++;
+    if (changed && index == _coachTab) _coachRefresh.value++;
+    if (changed && index == _progressTab) _progressRefresh.value++;
   }
 
   /// Opens Life modes (no longer a tab: it lives under Plans).
@@ -385,8 +401,8 @@ class _AppShellState extends State<AppShell> {
                   'Type it or snap a photo'),
               tile(FeatureId.indianJournal, Icons.edit_note_rounded, HuxColors.ringHabit, 'Journal today',
                   'Chai, late dinner, sweets…'),
-              tile(FeatureId.beginnerWalkPlan, Icons.directions_walk_rounded, HuxColors.ringSteps, 'Start a walk',
-                  'Guided sessions with voice cues'),
+              tile(FeatureId.beginnerWalkPlan, Icons.directions_walk_rounded, HuxColors.ringSteps, 'Walking plans',
+                  'Pick a guided session with voice cues'),
               tile(FeatureId.aiCoach, Icons.auto_awesome, HuxColors.ringCharge, 'Ask the coach',
                   'Anything about sleep, energy or food'),
               const SizedBox(height: HuxSpacing.sm),
@@ -415,6 +431,12 @@ class _AppShellState extends State<AppShell> {
                 subtitle: Text(email),
               ),
             const Divider(height: 1),
+            if (widget.nudgeService != null)
+              ListTile(
+                leading: const Icon(Icons.wb_sunny_outlined),
+                title: const Text('Morning briefing'),
+                onTap: () => Navigator.pop(c, 'briefing'),
+              ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
               title: const Text('Privacy & account'),
@@ -445,6 +467,10 @@ class _AppShellState extends State<AppShell> {
     );
     if (!mounted) return;
     switch (action) {
+      case 'briefing':
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => BriefingScreen(nudges: widget.nudgeService!),
+        ));
       case 'privacy':
         await _openPrivacy();
       case 'answers':
@@ -497,8 +523,14 @@ class _AppShellState extends State<AppShell> {
                         onOpenProfile: _openMe,
                         onAsk: () => _onDestinationSelected(_coachTab),
                         extrasLoader: _homeExtras.load,
+                        autoSync: widget.autoSync,
                       ),
-                      CoachScreen(coach: _coach, embedded: true),
+                      CoachScreen(
+                        coach: _coach,
+                        embedded: true,
+                        refreshSignal: _coachRefresh,
+                        onNotNow: () => _onDestinationSelected(0),
+                      ),
                       PlansHub(
                         onOpenFeature: _openFeature,
                         onOpenModes: _openModes,
@@ -509,6 +541,7 @@ class _AppShellState extends State<AppShell> {
                         storyService: widget.storyService,
                         progress: _progress,
                         section: _progressSection,
+                        refreshSignal: _progressRefresh,
                       ),
                       ].indexed)
                         // Hidden tabs keep their state but stop animating
@@ -541,10 +574,7 @@ class _AppShellState extends State<AppShell> {
 /// Unmissable — screenshots of this build must never be mistaken for
 /// real ring data, on any tab. Text and color both follow [source]
 /// truthfully: mock stays the original amber "DEMO" banner; the
-/// health-store dev adapter gets a visually distinct blue-grey "DEV"
-/// banner; the real-but-unofficial AIZO BLE adapter gets a third, equally
-/// distinct deep-teal treatment — genuinely real device data, but via an
-/// unofficial protocol, which is neither of the other two categories.
+/// health-app source shows no banner in v1 (see AppShell).
 class _SourceBanner extends StatelessWidget {
   final RingDataSource source;
 
@@ -553,14 +583,12 @@ class _SourceBanner extends StatelessWidget {
   Color get _background => switch (source) {
         RingDataSource.mock => HuxColors.demoAmber,
         RingDataSource.health => HuxColors.devBlueGrey,
-        RingDataSource.aizoBle => HuxColors.accentPurple,
       };
 
   // Amber is light: dark ink. Blue-grey and purple are dark: white text.
   Color get _foreground => switch (source) {
         RingDataSource.mock => HuxColors.ink,
         RingDataSource.health => HuxColors.onVivid,
-        RingDataSource.aizoBle => HuxColors.onVivid,
       };
 
   @override
