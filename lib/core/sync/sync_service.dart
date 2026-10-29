@@ -7,7 +7,8 @@
 /// Design decisions, recorded:
 ///
 /// - OVERLAP: every sync re-fetches a window BEFORE the watermark
-///   (default 1 hour). Clocks drift, BLE writes get interrupted, rings
+///   (default 24 hours — a whole night, so a sleep first synced
+///   mid-night is re-fetched complete and replaces the partial one). Clocks drift, BLE writes get interrupted, rings
 ///   recompute values. Re-fetching overlap costs a little battery;
 ///   a gap costs a user's night of sleep data. The store's idempotent
 ///   writes make the overlap harmless.
@@ -99,7 +100,7 @@ class SyncService {
   SyncService(
     this._ring,
     this._store, {
-    this.overlap = const Duration(hours: 1),
+    this.overlap = const Duration(hours: 24),
     this.firstSyncWindow = const Duration(days: 7),
     this.maxAttempts = 3,
     this.baseBackoff = const Duration(seconds: 2),
@@ -136,6 +137,16 @@ class SyncService {
           // Exponential backoff: 2s, 4s, 8s...
           await Future.delayed(baseBackoff * (1 << (attempt - 1)));
         }
+      } catch (e) {
+        // Anything else (storage error, plugin error) is not a flaky-BLE
+        // problem, so retrying won't help. Fail now, but ALWAYS report it:
+        // an escaped exception would leave the UI stuck on "Syncing…".
+        _status.add(SyncStatus(SyncPhase.failed, attempt: attempt));
+        return SyncOutcome(
+          success: false,
+          attemptsUsed: attempt,
+          error: e.toString(),
+        );
       }
     }
     _status.add(SyncStatus(SyncPhase.failed, attempt: maxAttempts));

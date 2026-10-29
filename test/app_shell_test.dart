@@ -1,5 +1,5 @@
 /// Tests for [AppShell]: the demo banner must stay visible on every
-/// tab, and switching tabs must not lose a tab's state (IndexedStack).
+/// tab (Home, Coach, Plans, Progress), and switching tabs must not lose a tab's state (IndexedStack).
 /// Run with: flutter test
 ///
 /// See today_screen_test.dart for why real async DB work here goes
@@ -16,6 +16,10 @@ import 'package:hux_app/core/ring/mock_ring_adapter.dart';
 import 'package:hux_app/core/storage/sqlite_health_store.dart';
 import 'package:hux_app/core/sync/sync_service.dart';
 import 'package:hux_app/screens/app_shell.dart';
+import 'package:hux_app/screens/hubs/plans_hub.dart';
+import 'package:hux_app/screens/modes_screen.dart';
+import 'package:hux_app/screens/today_screen.dart';
+import 'package:hux_app/theme/hux_ui.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -26,8 +30,31 @@ void main() {
     await tester.pump();
   }
 
+  /// Like pumpAndSettle, but bounded: pumps ~2 s of frames (enough for
+  /// route/dialog transitions) without failing on a stray spinner.
+  Future<void> settleUi(WidgetTester tester) async {
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  /// Unmounts the shell and lets in-flight sqflite queries (Home extras,
+  /// weekly story) finish so no fake-async timer outlives the test.
+  Future<void> drain(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox());
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 600)));
+    await tester.pump(const Duration(seconds: 1));
+  }
+
+  /// Taps a tab in the floating nav bar (not a same-named title on screen).
+  Future<void> tapTab(WidgetTester tester, String label) async {
+    await tester.tap(find.descendant(of: find.byType(HuxPillNavBar), matching: find.text(label)));
+    await settle(tester);
+  }
+
   testWidgets(
-      'the demo banner stays visible across Today, Trends, Story, and Modes',
+      'the demo banner stays visible across Home, Coach, Plans and Progress',
       (tester) async {
     late SqliteHealthStore store;
     late MockRingAdapter ring;
@@ -66,23 +93,22 @@ void main() {
 
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
 
-    await tester.tap(find.text('Trends'));
-    await settle(tester);
+    await tapTab(tester, 'Progress');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
     expect(find.text('Sleep duration'), findsOneWidget);
 
     await tester.tap(find.text('Story'));
     await settle(tester);
-    expect(find.text('DEMO — simulated ring data'), findsOneWidget);
     expect(find.text('Your week, in plain words'), findsOneWidget);
 
-    await tester.tap(find.text('Modes'));
-    await settle(tester);
+    await tapTab(tester, 'Plans');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
-    expect(find.text('Modes'), findsWidgets);
+    expect(find.text('ACTIVITY PLAN'), findsOneWidget);
 
-    await tester.tap(find.text('Today'));
-    await settle(tester);
+    await tapTab(tester, 'Coach');
+    expect(find.text('DEMO — simulated ring data'), findsOneWidget);
+
+    await tapTab(tester, 'Home');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
   });
 
@@ -125,25 +151,22 @@ void main() {
     // Move Trends to the 30-day range, then wander to another tab and
     // back — IndexedStack must keep Trends' widget (and its selection)
     // alive instead of tearing it down and rebuilding at the default.
-    await tester.tap(find.text('Trends'));
-    await settle(tester);
+    await tapTab(tester, 'Progress');
     await tester.tap(find.text('30 days'));
     await settle(tester);
 
-    await tester.tap(find.text('Story'));
-    await settle(tester);
-    await tester.tap(find.text('Trends'));
-    await settle(tester);
+    await tapTab(tester, 'Home');
+    await tapTab(tester, 'Progress');
 
     // TrendsScreen's range enum is private, so inspect the selection
     // dynamically rather than importing it: a fresh (non-preserved)
     // TrendsScreen would default back to "7 days" ("sevenDays"). Seeing
     // "thirtyDays" here proves IndexedStack kept the tab's State alive
     // rather than disposing and rebuilding it on tab switch.
-    final segmented =
-        tester.widget(find.byWidgetPredicate((w) => w is SegmentedButton));
-    final selected = (segmented as dynamic).selected as Set;
-    expect(selected.first.toString(), contains('thirtyDays'));
+    final selections = tester
+        .widgetList(find.byWidgetPredicate((w) => w is SegmentedButton))
+        .map((w) => ((w as dynamic).selected as Set).first.toString());
+    expect(selections.any((s) => s.contains('thirtyDays')), isTrue);
   });
 
   testWidgets(
@@ -188,9 +211,25 @@ void main() {
     // No mode active yet: Today must not show a ModeStrip card.
     expect(find.textContaining('days to go'), findsNothing);
 
-    // Start Big Day from the Modes tab.
-    await tester.tap(find.text('Modes'));
+    // Start Big Day from Plans -> Life modes.
+    await tapTab(tester, 'Plans');
+    await tester.scrollUntilVisible(find.text('Choose a mode'), 200,
+        scrollable: find
+            .descendant(of: find.byType(PlansHub), matching: find.byType(Scrollable))
+            .first);
+    await tester.pump();
+    await tester.tap(find.text('Choose a mode'));
+    // Let the route transition build ModesScreen first, THEN give its
+    // FutureBuilder real time for the sqflite read (runAsync), then
+    // pump the result in.
+    await settleUi(tester);
     await settle(tester);
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('Big Day'), 200,
+        scrollable: find
+            .descendant(of: find.byType(ModesScreen), matching: find.byType(Scrollable))
+            .first);
+    await tester.pump();
 
     // Each mode tile is now a full 16:9 photo card whose title sits at
     // the card's bottom edge — on the default (small) test viewport
@@ -198,29 +237,45 @@ void main() {
     // nav bar (which overlaps the bottom of the content by design).
     // Tap the card's AspectRatio box instead: its CENTER lands well
     // clear of the nav bar, unlike the bottom-anchored title text.
-    await tester.tap(find
+    final bigDayCard = find
         .ancestor(of: find.text('Big Day'), matching: find.byType(AspectRatio))
-        .first);
+        .first;
+    // scrollUntilVisible only guarantees the title text is on screen;
+    // bring the whole card (and so its centre) into the viewport.
+    await tester.ensureVisible(bigDayCard);
+    await tester.pump();
+    await tester.tap(bigDayCard);
     await settle(tester);
-    await tester.pumpAndSettle();
+    await settleUi(tester);
 
     await tester.tap(find.text('Choose a date'));
-    await tester.pumpAndSettle();
+    await settleUi(tester);
     await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
+    await settleUi(tester);
 
     await tester.tap(find.text('Start mode'));
     await settle(tester);
-    await tester.pumpAndSettle();
+    await settleUi(tester);
 
     expect(find.textContaining('Active: Big Day'), findsOneWidget);
 
-    // Switch back to Today: it must reflect the mode that was started
-    // while this tab's State sat alive in the background.
-    await tester.tap(find.text('Today'));
+    // Back to Home: it must reflect the mode that was started while
+    // Home's State sat alive in the background.
+    await tester.tap(find.byTooltip('Back'));
+    await settleUi(tester);
+    await tapTab(tester, 'Home');
+    // Switching to Home pings its refresh signal; the reload (store +
+    // Home extras) is real sqflite I/O, so give it real time AFTER the
+    // frame that triggered it, then pump the result in.
+    await settleUi(tester);
     await settle(tester);
+    await settle(tester);
+    await settleUi(tester);
 
-    await tester.scrollUntilVisible(find.textContaining('d to go'), 300);
+    await tester.scrollUntilVisible(find.textContaining('d to go'), 300,
+        scrollable: find
+            .descendant(of: find.byType(TodayScreen), matching: find.byType(Scrollable))
+            .first);
     await tester.pump();
     expect(find.textContaining('d to go'), findsOneWidget);
   });
@@ -268,10 +323,11 @@ void main() {
 
       expect(find.text('DEMO — simulated ring data'), findsOneWidget);
       expect(
-          find.text('DEV — your health app data (not a HUX ring)'), findsNothing);
+          find.text('From your health app'), findsNothing);
+      await drain(tester);
     });
 
-    testWidgets('shows the distinct DEV banner for RingDataSource.health',
+    testWidgets('no banner for RingDataSource.health (the real launch source)',
         (tester) async {
       late SqliteHealthStore store;
       late MockRingAdapter ring;
@@ -302,9 +358,9 @@ void main() {
       ));
       await settle(tester);
 
-      expect(
-          find.text('DEV — your health app data (not a HUX ring)'), findsOneWidget);
+      expect(find.text('From your health app'), findsNothing);
       expect(find.text('DEMO — simulated ring data'), findsNothing);
+      await drain(tester);
     });
   });
 }

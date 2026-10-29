@@ -20,11 +20,19 @@ void main() {
       SqliteHealthStore.open(inMemoryDatabasePath,
           factory: databaseFactoryFfi);
 
+  /// Polls until the loading spinner is gone (a single fixed wait was
+  /// flaky with the full suite running in parallel).
   Future<void> settle(WidgetTester tester) async {
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
-    await tester.pump();
+    for (var i = 0; i < 50; i++) {
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+      if (i >= 2 && find.byType(CircularProgressIndicator).evaluate().isEmpty) return;
+    }
   }
+
+  /// The test data is fixed in July 2026; pin the screen's "now" to it so
+  /// the test doesn't depend on today's date.
+  DateTime fixedNow() => DateTime.utc(2026, 7, 20, 8, 0);
 
   testWidgets('empty store shows the friendly placeholder, never crashes',
       (tester) async {
@@ -34,7 +42,7 @@ void main() {
     });
     addTearDown(() => store.close());
 
-    await tester.pumpWidget(MaterialApp(home: TrendsScreen(store: store)));
+    await tester.pumpWidget(MaterialApp(home: TrendsScreen(store: store, now: fixedNow)));
     await settle(tester);
 
     expect(find.text('Not enough data to show trends yet'), findsOneWidget);
@@ -66,7 +74,7 @@ void main() {
     });
     addTearDown(() => store.close());
 
-    await tester.pumpWidget(MaterialApp(home: TrendsScreen(store: store)));
+    await tester.pumpWidget(MaterialApp(home: TrendsScreen(store: store, now: fixedNow)));
     await settle(tester);
 
     expect(find.text('Not enough data to show trends yet'), findsNothing);

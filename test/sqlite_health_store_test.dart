@@ -76,6 +76,24 @@ void main() {
           reason: 'the ring is the source of truth for its readings');
       await store.close();
     });
+
+    test('a re-fetch missing a metric never blanks a stored value',
+        () async {
+      final store = await openStore();
+      final t = DateTime.utc(2026, 7, 15, 8, 0);
+
+      await store.saveSnapshots(
+          [HealthSnapshot(timestamp: t, heartRateBpm: 60, hrvMs: 48)]);
+      // Overlap bucket re-fetched with fewer samples: HR only.
+      await store.saveSnapshots(
+          [HealthSnapshot(timestamp: t, heartRateBpm: 62)]);
+
+      final all = await store.snapshotsBetween(
+          t, t.add(const Duration(minutes: 1)));
+      expect(all.single.heartRateBpm, 62);
+      expect(all.single.hrvMs, 48);
+      await store.close();
+    });
   });
 
   group('Range queries', () {
@@ -161,6 +179,50 @@ void main() {
           bedtime.add(const Duration(days: 1)));
       expect(sessions.length, 1);
       expect(sessions.single.avgHeartRateBpm, 56);
+      await store.close();
+    });
+
+    test('a partial night synced mid-sleep is replaced by the full night, '
+        'even with a different bedtime', () async {
+      final store = await openStore();
+      final fullBedtime = DateTime.utc(2026, 7, 14, 17, 30);
+      final partialStart = fullBedtime.add(const Duration(hours: 1));
+
+      // Partial: synced at 02:00 — only part of the night was available.
+      await store.saveSleepSessions([
+        SleepSession(
+          bedtime: partialStart,
+          wakeTime: partialStart.add(const Duration(hours: 2)),
+          segments: [
+            SleepSegment(
+                start: partialStart,
+                end: partialStart.add(const Duration(hours: 2)),
+                stage: SleepStage.light),
+          ],
+        ),
+      ]);
+      // Full night re-fetched later.
+      await store.saveSleepSessions([night(fullBedtime, avgHr: 57)]);
+
+      final sessions = await store.sleepSessionsBetween(
+          fullBedtime.subtract(const Duration(days: 1)),
+          fullBedtime.add(const Duration(days: 1)));
+      expect(sessions.length, 1);
+      expect(sessions.single.bedtime, fullBedtime);
+      await store.close();
+    });
+
+    test('back-to-back, non-overlapping sessions are both kept', () async {
+      final store = await openStore();
+      final first = DateTime.utc(2026, 7, 14, 17, 30);
+      await store.saveSleepSessions([night(first)]);
+      await store.saveSleepSessions(
+          [night(first.add(const Duration(days: 1)))]);
+
+      final sessions = await store.sleepSessionsBetween(
+          first.subtract(const Duration(days: 1)),
+          first.add(const Duration(days: 3)));
+      expect(sessions.length, 2);
       await store.close();
     });
   });

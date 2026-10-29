@@ -1,4 +1,9 @@
-/// Supabase project connection — the ONE place these two values live.
+/// Supabase project connection — the ONE place these values are read.
+///
+/// Values come from `.env` at BUILD time:
+///   flutter run --dart-define-from-file=.env
+/// (see `.env.example`). Nothing is hard-coded, so switching Supabase
+/// projects/accounts = edit `.env`, rebuild. `.env` is git-ignored.
 ///
 /// The anon/publishable key below is NOT a secret: Supabase's own model
 /// is that this key is safe to ship inside a client app (unlike a
@@ -10,8 +15,12 @@ library;
 class SupabaseConfig {
   const SupabaseConfig._();
 
-  static const url = 'https://zhidrdwrrohifhqarpkb.supabase.co';
-  static const anonKey = 'sb_publishable_mmes93MDNRsidfnKT6QhQg_Drgy6gfa';
+  static const url = String.fromEnvironment('SUPABASE_URL');
+  static const anonKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+
+  /// True when the build was given a Supabase project (see main.dart,
+  /// which shows a clear setup error instead of crashing when false).
+  static bool get isConfigured => url.startsWith('https://') && anonKey.isNotEmpty;
 
   /// Google Sign-In's WEB client ID (not the iOS/Android one) — passed
   /// as `serverClientId` so the ID token's audience is something
@@ -35,5 +44,8 @@ class SupabaseConfig {
   /// https://pub.dev/packages/google_sign_in#android-integration.
   /// Neither is done here — this repo has no Google Cloud project
   /// credentials to add them with.
-  static const googleWebClientId = '';
+  static const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+
+  /// Optional Open-Meteo commercial key (free tier is non-commercial).
+  static const openMeteoApiKey = String.fromEnvironment('OPEN_METEO_API_KEY');
 }

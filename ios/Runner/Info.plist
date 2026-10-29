@@ -4,8 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleDisplayName</key>
-	<string>Hux App</string>
+	<string>HUX</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>hux_app</string>
+	<string>HUX</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -28,6 +30,27 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneDelegateClassName</key>
+					<string>FlutterSceneDelegate</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -51,13 +74,17 @@
 	     writes to Apple Health, so no update-usage prompt is shown, but
 	     the key is still required by HealthKit if it's ever linked in. -->
 	<key>NSHealthShareUsageDescription</key>
-	<string>HUX can read your existing Health data (heart rate, HRV, sleep, steps) as a stand-in for ring data during development. This is read-only and never leaves your phone.</string>
+	<string>HUX reads your steps, heart rate, HRV, sleep, blood oxygen, breathing rate, temperature and active energy from Health to show your daily charge, sleep trends, step goals and plans. Your Health data stays on this iPhone unless you turn on the HUX coach, and is never used for ads.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>HUX does not write any data to Health.</string>
+	<string>HUX only reads from Health. It never writes or changes your Health data.</string>
 	<!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
 	     the PROVISIONAL, reverse-engineered protocol in
 	     lib/core/ring/aizo_ble/aizo_protocol.dart. -->
+	<key>NSCameraUsageDescription</key>
+	<string>HUX uses the camera only when you choose to photograph a meal, to estimate its protein and calories.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>HUX opens your photos only when you choose a meal picture to log.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>HUX uses Bluetooth to connect to your ring and read its battery level and send vibration alerts.</string>
+	<string>HUX uses Bluetooth only to connect to your HUX ring, when you choose to pair one.</string>
 </dict>
 </plist>

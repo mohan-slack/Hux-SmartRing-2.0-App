@@ -9,6 +9,9 @@ import '../modes/mode_service.dart';
 import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
 import 'baseline.dart';
+import 'day_plan.dart';
+import 'hux_charge.dart';
+import 'step_target.dart';
 import 'content/fasting_content.dart';
 import 'daily_readout.dart';
 import 'meaning_engine.dart';
@@ -54,8 +57,11 @@ class ReadoutService {
 
     final lastNight = await this.lastNight(now: reference);
 
+    // "Today" is the user's LOCAL day: in IST, UTC midnight is 05:30 AM,
+    // which used to drop everything from local midnight to 05:30.
+    final localNow = reference.toLocal();
     final todayStart =
-        DateTime.utc(reference.year, reference.month, reference.day);
+        DateTime(localNow.year, localNow.month, localNow.day).toUtc();
     final todaySnapshots =
         await _store.snapshotsBetween(todayStart, reference);
 
@@ -64,8 +70,32 @@ class ReadoutService {
         : await _modeService.activeContext(now: reference);
     final fastingToday = context.fastingActiveOn(reference);
 
+    final charge = const HuxChargeCalculator().calculate(
+      baseline: baseline,
+      lastNight: lastNight,
+      todaySnapshots: todaySnapshots,
+      now: reference,
+    );
+    final basePlan = const DayPlanner().plan(
+      charge: charge,
+      baseline: baseline,
+      lastNight: lastNight,
+      now: reference,
+    );
+    // Steps: the last week of days plus today (cumulative per day).
+    final stepSnapshots = await _store.snapshotsBetween(
+      todayStart.subtract(
+          const Duration(days: StepTargetCalculator.historyDays)),
+      reference,
+    );
+    final plan = basePlan.withSteps(const StepTargetCalculator().calculate(
+      snapshots: stepSnapshots,
+      now: reference,
+      effort: basePlan.effort?.level,
+    ));
+
     final readout = _engine.evaluate(
-      date: DateTime(reference.year, reference.month, reference.day),
+      date: DateTime(localNow.year, localNow.month, localNow.day),
       baseline: baseline,
       lastNight: lastNight,
       todaySnapshots: todaySnapshots,
@@ -74,7 +104,7 @@ class ReadoutService {
     );
 
     if (!fastingToday || readout.state == RecoveryState.learning) {
-      return readout;
+      return readout.withCharge(charge, plan: plan);
     }
 
     // Layer in ONE fasting-specific action, the same way the engine
@@ -106,6 +136,8 @@ class ReadoutService {
       stressIndex: readout.stressIndex,
       activeEnergyKcal: readout.activeEnergyKcal,
       currentHeartRateBpm: readout.currentHeartRateBpm,
+      charge: charge,
+      plan: plan,
     );
   }
 

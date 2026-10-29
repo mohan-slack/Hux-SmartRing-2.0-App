@@ -10,11 +10,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/home/home_extras.dart';
 import '../core/meaning/daily_readout.dart';
+import '../core/meaning/day_plan.dart';
+import '../core/meaning/step_target.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/modes/event_mode_engine.dart';
 import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
+import '../core/profile/feature_catalog.dart';
+import '../core/profile/profile_service.dart';
 import '../core/ring/ring_models.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
@@ -22,7 +27,9 @@ import '../theme/hux_cards.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
-import '../theme/hux_vivid_cards.dart';
+import '../theme/hux_ui.dart';
+import 'for_you.dart';
+import '../widgets/wellness_note.dart';
 
 /// One line combining whichever lifestyle modes are active, or null if
 /// none are. Deliberately just concatenation, not a wall of chips —
@@ -59,6 +66,22 @@ class TodayScreen extends StatefulWidget {
   /// TodayScreen on its own don't need one.
   final Listenable? refreshSignal;
 
+  /// Personalisation — all optional so tests that mount TodayScreen on
+  /// its own are unaffected (no "For you" section without them).
+  final ProfileService? profileService;
+  final FeatureTap? onOpenFeature;
+  final VoidCallback? onSeeAllFeatures;
+
+  /// Home header: first name / initial, and taps.
+  final String? greetingName;
+  final VoidCallback? onOpenProfile;
+
+  /// The "Ask HUX anything" bar (opens the Coach tab); null hides it.
+  final VoidCallback? onAsk;
+
+  /// Agenda, food and mini trends for the richer Home; null = none.
+  final Future<HomeExtras> Function()? extrasLoader;
+
   const TodayScreen({
     super.key,
     required this.store,
@@ -66,6 +89,13 @@ class TodayScreen extends StatefulWidget {
     required this.readoutService,
     required this.modeService,
     this.refreshSignal,
+    this.profileService,
+    this.onOpenFeature,
+    this.onSeeAllFeatures,
+    this.greetingName,
+    this.onOpenProfile,
+    this.onAsk,
+    this.extrasLoader,
   });
 
   @override
@@ -78,6 +108,8 @@ class _TodayScreenState extends State<TodayScreen> {
   SleepSession? _lastNight;
   ModeStrip? _modeStrip;
   ActiveContext _activeContext = const ActiveContext();
+  List<FeatureId> _featured = const [];
+  HomeExtras _extras = HomeExtras.empty;
   String? _errorMessage;
 
   /// Seeded from `syncService.lastRingInfo` right after each sync/load
@@ -86,7 +118,7 @@ class _TodayScreenState extends State<TodayScreen> {
   int? _batteryPercent;
   StreamSubscription<int>? _batterySub;
 
-  /// Live instantaneous heart rate for [VividHeartRateCard] — a genuine
+  /// Live instantaneous heart rate for the Home heart-rate stat — a genuine
   /// point reading, not last night's stored average (that comes from
   /// [_lastNight] instead). Null between readings is normal.
   double? _heartRateBpm;
@@ -131,37 +163,76 @@ class _TodayScreenState extends State<TodayScreen> {
       _errorMessage = null;
     });
 
-    final everSynced = await widget.store.lastSyncedUpTo() != null;
-    if (!mounted) return;
-
-    if (!everSynced) {
-      setState(() => _phase = _Phase.syncing);
-      final outcome = await widget.syncService.syncNow();
+    try {
+      final everSynced = await widget.store.lastSyncedUpTo() != null;
       if (!mounted) return;
-      if (!outcome.success) {
-        setState(() {
-          _phase = _Phase.error;
-          _errorMessage = outcome.error;
-        });
-        return;
+
+      if (!everSynced) {
+        setState(() => _phase = _Phase.syncing);
+        final outcome = await widget.syncService.syncNow();
+        if (!mounted) return;
+        if (!outcome.success) {
+          _showError(outcome.error);
+          return;
+        }
       }
+    } catch (e) {
+      _showError(e.toString());
+      return;
     }
 
     await _loadReadout();
   }
 
-  Future<void> _loadReadout() async {
-    if (mounted) setState(() => _phase = _Phase.loadingReadout);
-    final readout = await widget.readoutService.today();
-    final lastNight = await widget.readoutService.lastNight();
-    final modeStrip = await widget.modeService.currentStrip(readout: readout);
-    final activeContext = await widget.modeService.activeContext();
+  /// Any failure lands on the error view (with Retry) — never an endless
+  /// "Loading…"/"Syncing…" spinner.
+  void _showError(String? message) {
     if (!mounted) return;
     setState(() {
+      _phase = _Phase.error;
+      _errorMessage = message;
+    });
+  }
+
+  Future<void> _loadReadout() async {
+    if (mounted) setState(() => _phase = _Phase.loadingReadout);
+    final DailyReadout readout;
+    final SleepSession? lastNight;
+    final ModeStrip? modeStrip;
+    final ActiveContext activeContext;
+    List<FeatureId> featured = const [];
+    try {
+      readout = await widget.readoutService.today();
+      lastNight = await widget.readoutService.lastNight();
+      modeStrip = await widget.modeService.currentStrip(readout: readout);
+      activeContext = await widget.modeService.activeContext();
+      final profileService = widget.profileService;
+      if (profileService != null) {
+        try {
+          featured = await profileService.featured();
+        } catch (_) {
+          // Personalisation is a bonus: if it fails, Today still shows.
+          featured = const [];
+        }
+      }
+    } catch (e) {
+      _showError(e.toString());
+      return;
+    }
+    var extras = HomeExtras.empty;
+    try {
+      extras = await widget.extrasLoader?.call() ?? HomeExtras.empty;
+    } catch (_) {
+      // Extras are a bonus: Home still shows the readout without them.
+    }
+    if (!mounted) return;
+    setState(() {
+      _extras = extras;
       _readout = readout;
       _lastNight = lastNight;
       _modeStrip = modeStrip;
       _activeContext = activeContext;
+      _featured = featured;
       // Immediate, correct reading right after a sync — see the field's
       // doc comment. Only overwrites when we actually have one; a
       // subsequent live update from _batterySub can still refine it.
@@ -216,6 +287,13 @@ class _TodayScreenState extends State<TodayScreen> {
             batteryPercent: _batteryPercent,
             heartRateBpm: _heartRateBpm,
             sendTestBuzz: widget.syncService.sendTestBuzz,
+            featured: _featured,
+            onOpenFeature: widget.onOpenFeature,
+            onSeeAllFeatures: widget.onSeeAllFeatures,
+            greetingName: widget.greetingName,
+            onOpenProfile: widget.onOpenProfile,
+            onAsk: widget.onAsk,
+            extras: _extras,
           ),
         );
     }
@@ -287,6 +365,9 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
+/// Home (OxeAI-style): greeting + avatar, "Ask HUX" bar, three score
+/// rings, today's insight, today's plan as an agenda, featured cards,
+/// last night, body today, ring (when one is paired).
 class _ReadoutBody extends StatelessWidget {
   final DailyReadout readout;
   final SleepSession? lastNight;
@@ -295,6 +376,13 @@ class _ReadoutBody extends StatelessWidget {
   final int? batteryPercent;
   final double? heartRateBpm;
   final Future<void> Function() sendTestBuzz;
+  final List<FeatureId> featured;
+  final FeatureTap? onOpenFeature;
+  final VoidCallback? onSeeAllFeatures;
+  final String? greetingName;
+  final VoidCallback? onOpenProfile;
+  final VoidCallback? onAsk;
+  final HomeExtras extras;
 
   const _ReadoutBody({
     required this.readout,
@@ -304,475 +392,690 @@ class _ReadoutBody extends StatelessWidget {
     required this.batteryPercent,
     required this.heartRateBpm,
     required this.sendTestBuzz,
+    this.featured = const [],
+    this.onOpenFeature,
+    this.onSeeAllFeatures,
+    this.greetingName,
+    this.onOpenProfile,
+    this.onAsk,
+    this.extras = HomeExtras.empty,
   });
 
   @override
   Widget build(BuildContext context) {
     final chipText = _lifestyleChipText(activeContext);
+    final plan = readout.plan;
     return ListView(
-      // Bottom clearance: the body extends behind the glass nav bar
-      // (AppShell extendBody), so the last card needs room to scroll
-      // fully clear of it.
+      // Bottom clearance: content scrolls behind the floating nav bar.
       padding: const EdgeInsets.fromLTRB(
-          HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
+          HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
-        HuxEntrance(
-          child: _TodayHeaderCard(
-            state: readout.state,
-            headline: readout.headline,
-            meaning: readout.meaning,
-            chipText: chipText,
+        _HomeHeader(name: greetingName, onOpenProfile: onOpenProfile),
+        if (chipText != null) ...[
+          const SizedBox(height: HuxSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Chip(
+              avatar: const Icon(Icons.nightlight_round, size: 16, color: HuxColors.accentPurple),
+              label: Text(chipText),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
-        ),
+        ],
+        if (onAsk != null) ...[
+          const SizedBox(height: HuxSpacing.md),
+          HuxAskBar(onTap: onAsk!),
+        ],
         const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 1,
-          child: _ActionsList(actions: readout.actions, state: readout.state),
-        ),
-        const SizedBox(height: HuxSpacing.md),
-        HuxEntrance(
-          index: 2,
-          child: _DataQualityCaption(quality: readout.dataQuality),
-        ),
+        HuxEntrance(child: _ScoresCard(readout: readout, lastNight: lastNight)),
         const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 3,
-          child: _TodayCardGrid(
-            readout: readout,
-            lastNight: lastNight,
-            heartRateBpm: heartRateBpm,
-            batteryPercent: batteryPercent,
-            sendTestBuzz: sendTestBuzz,
+        HuxEntrance(index: 1, child: _InsightCard(readout: readout)),
+        if ((plan != null && !plan.isEmpty) || extras.agenda.isNotEmpty) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(
+            index: 2,
+            child: _AgendaCard(plan: plan, entries: extras.agenda, onOpenFeature: onOpenFeature),
           ),
-        ),
+        ],
+        if (extras.food != null) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(
+            index: 2,
+            child: _FoodCard(
+              food: extras.food!,
+              activeKcal: readout.activeEnergyKcal,
+              onOpen: onOpenFeature == null ? null : () => onOpenFeature!(FeatureId.proteinGap),
+            ),
+          ),
+        ],
         if (modeStrip != null) ...[
           const SizedBox(height: HuxSpacing.lg),
-          HuxEntrance(index: 4, child: _ModeStripCard(strip: modeStrip!)),
+          HuxEntrance(index: 2, child: _ModeStripCard(strip: modeStrip!)),
         ],
+        if (featured.isNotEmpty && onOpenFeature != null && onSeeAllFeatures != null) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(
+            index: 3,
+            child: ForYouSection(
+              featured: featured,
+              onOpen: onOpenFeature!,
+              onSeeAll: onSeeAllFeatures!,
+            ),
+          ),
+        ],
+        if (extras.sleep7.any((v) => v != null) || extras.steps7.any((v) => v != null)) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(
+            index: 3,
+            child: _WeekCard(
+              sleep7: extras.sleep7,
+              steps7: extras.steps7,
+              onOpen: onOpenFeature == null ? null : () => onOpenFeature!(FeatureId.sleepRegularity),
+            ),
+          ),
+        ],
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(index: 3, child: _SleepCard(night: lastNight)),
+        const SizedBox(height: HuxSpacing.lg),
+        HuxEntrance(
+          index: 4,
+          child: _BodyCard(readout: readout, night: lastNight, heartRateBpm: heartRateBpm),
+        ),
+        if (batteryPercent != null) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          _RingCard(batteryPercent: batteryPercent!, sendTestBuzz: sendTestBuzz),
+        ],
+        const SizedBox(height: HuxSpacing.md),
+        Center(child: _DataQualityCaption(quality: readout.dataQuality)),
+        const WellnessNote(),
       ],
     );
   }
 }
 
-/// The Today screen's full metric grid — exactly the ten cards the
-/// product spec calls for (Stress, Resp. rate, Active cal, Heart Rate,
-/// Calories, Sleep Scores, Battery, Test Ring, Min SpO2, Stage
-/// breakdown), each individually null-safe: a missing reading renders
-/// that ONE card's own documented null convention (em-dash, grey stub,
-/// omitted marker — never a fabricated zero), rather than hiding the
-/// card or gating the whole grid behind "do we have a night yet."
-///
-/// This replaces three earlier, overlapping sections — the vitals row,
-/// the ring-status row, and Last Night's flat grid + a duplicate
-/// sleep-stage-split ring (Sleep Scores' segmented bar already shows
-/// that breakdown) — with one consistent set. The three "hero" cards
-/// (Heart Rate, Test Ring, Calories) sit in a big-card-plus-two-small
-/// block, matching the reference layout; Sleep Scores gets its own
-/// full-width row since its segmented bar needs the space; the
-/// remaining six are paired two-up except the two that need width for
-/// their own bars (Min SpO2, Stage breakdown).
-class _TodayCardGrid extends StatelessWidget {
+class _HomeHeader extends StatelessWidget {
+  final String? name;
+  final VoidCallback? onOpenProfile;
+
+  const _HomeHeader({required this.name, required this.onOpenProfile});
+
+  static String _greeting(int hour) => hour < 5
+      ? 'Good night'
+      : hour < 12
+          ? 'Good morning'
+          : hour < 17
+              ? 'Good afternoon'
+              : 'Good evening';
+
+  static const _days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final now = DateTime.now();
+    final n = (name ?? '').trim();
+    return Row(
+      children: [
+        if (onOpenProfile != null) ...[
+          HuxAvatar(initial: n.isEmpty ? 'H' : n[0].toUpperCase(), onTap: onOpenProfile),
+          const SizedBox(width: HuxSpacing.md),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${_days[now.weekday - 1]}, ${now.day} ${_months[now.month - 1]}', style: text.labelMedium),
+              Text(
+                n.isEmpty ? _greeting(now.hour) : '${_greeting(now.hour)}, $n',
+                style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Three rings: HUX Charge, Sleep, Steps.
+class _ScoresCard extends StatelessWidget {
   final DailyReadout readout;
   final SleepSession? lastNight;
-  final double? heartRateBpm;
-  final int? batteryPercent;
-  final Future<void> Function() sendTestBuzz;
 
-  const _TodayCardGrid({
-    required this.readout,
-    required this.lastNight,
-    required this.heartRateBpm,
-    required this.batteryPercent,
-    required this.sendTestBuzz,
-  });
+  const _ScoresCard({required this.readout, required this.lastNight});
 
-  /// Stress at or below this reads as "Calm", above as "Elevated" — a
-  /// plain-language qualifier alongside the number, not a new score.
-  static const _stressElevatedThreshold = 50;
+  static String _hours(int minutes) => '${minutes ~/ 60}h ${(minutes % 60).toString().padLeft(2, '0')}';
 
-  static String _formatInt(double v) => v.round().toString();
+  static String _compactSteps(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}k' : '$n';
 
   @override
   Widget build(BuildContext context) {
-    final night = lastNight;
-    final totalSleepMinutes = night?.totalSleep.inMinutes.toDouble() ?? 0;
-    final timeInBedMinutes = night?.totalTimeInBed.inMinutes.toDouble() ?? 0;
-    // Sleep efficiency — time asleep / time in bed, a standard sleep-
-    // tracking metric computed from real segment data, never a
-    // fabricated "quality score." Null with no night, or a degenerate
-    // (zero-length) time-in-bed.
-    final efficiencyPercent =
-        (night == null || timeInBedMinutes <= 0) ? null : (totalSleepMinutes / timeInBedMinutes * 100).clamp(0.0, 100.0);
-    final segments = night == null || totalSleepMinutes <= 0
-        ? const <VividSleepSegment>[]
-        : [
-            VividSleepSegment(
-              label: 'Light',
-              percentOfSleep: night.stageTotal(SleepStage.light).inMinutes / totalSleepMinutes,
-              color: HuxColors.vividSleepLight,
+    final charge = readout.charge;
+    final steps = readout.plan?.steps;
+    final goal = readout.plan?.bedtime?.sleepGoal ?? const Duration(hours: 8);
+    final asleep = lastNight?.totalSleep.inMinutes;
+    return GlassPanel(
+      padding: const EdgeInsets.symmetric(vertical: HuxSpacing.md, horizontal: HuxSpacing.sm),
+      child: Row(
+        children: [
+          Expanded(
+            child: HuxRingTile(
+              label: 'Charge',
+              value: charge?.value == null ? '—' : '${charge!.value}',
+              caption: charge?.label,
+              progress: charge?.value == null ? null : charge!.value! / 100,
+              color: HuxColors.ringCharge,
             ),
-            VividSleepSegment(
-              label: 'REM',
-              percentOfSleep: night.stageTotal(SleepStage.rem).inMinutes / totalSleepMinutes,
-              color: HuxColors.vividSleepRem,
-            ),
-            VividSleepSegment(
-              label: 'Deep',
-              percentOfSleep: night.stageTotal(SleepStage.deep).inMinutes / totalSleepMinutes,
-              color: HuxColors.vividSleepDeep,
-            ),
-          ];
-    final stressQualifier = readout.stressIndex == null
-        ? null
-        : (readout.stressIndex! > _stressElevatedThreshold ? 'Elevated' : 'Calm');
-
-    return Column(
-      children: [
-        // Hero block: Heart Rate (big, left) | Test Ring + Calories
-        // (stacked, right) — the reference's "big card + pill + small
-        // card" grid, used once for the most device/vital-flavored trio.
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: VividHeartRateCard(
-                  bpm: heartRateBpm,
-                  averageBpm: night?.avgHeartRateBpm?.toDouble(),
-                ),
-              ),
-              const SizedBox(width: HuxSpacing.sm),
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: HuxTapScale(
-                        child: GestureDetector(
-                          onTap: () => NudgeModal.show(
-                            context,
-                            title: 'Test your ring',
-                            message: 'Send one vibration to confirm it\'s connected.',
-                            icon: Icons.vibration,
-                            primaryLabel: 'Buzz now',
-                            onPrimary: sendTestBuzz,
-                          ),
-                          child: HuxHoverLift(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(HuxRadii.vividCard),
-                              child: Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  color: Color.alphaBlend(HuxColors.accentIndigo.withValues(alpha: 0.55), HuxColors.card),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(Icons.vibration, color: HuxColors.ink, size: 28),
-                                        const SizedBox(height: HuxSpacing.xs),
-                                        Text('Test ring', style: Theme.of(context).textTheme.bodyMedium),
-                                      ],
-                                    ),
-                                    const HuxGlassCorner(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: HuxSpacing.sm),
-                    Expanded(
-                      child: VividCaloriesCard(kcal: readout.activeEnergyKcal?.toDouble()),
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ),
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        VividSleepScoreCard(efficiencyPercent: efficiencyPercent, segments: segments),
-        const SizedBox(height: HuxSpacing.sm),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: HeroGaugeCard(
-                  label: 'Battery',
-                  value: batteryPercent?.toDouble(),
-                  unit: '%',
-                  size: 96,
-                  strokeWidth: 10,
-                  cardTint: HuxColors.accentIndigo,
-                ),
-              ),
-              const SizedBox(width: HuxSpacing.sm),
-              Expanded(
-                child: _DisplayStatTile(
-                  label: 'Stress',
-                  value: readout.stressIndex?.toDouble(),
-                  format: _formatInt,
-                  unit: '/100',
-                  qualifier: stressQualifier,
-                ),
-              ),
-            ],
+          Expanded(
+            child: HuxRingTile(
+              label: 'Sleep',
+              value: asleep == null ? '—' : _hours(asleep),
+              caption: 'goal ${DayPlanner.duration(goal)}',
+              progress: asleep == null ? null : asleep / goal.inMinutes,
+              color: HuxColors.ringSleep,
+            ),
           ),
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _DisplayStatTile(
-                label: 'Resp. rate',
-                value: night?.avgRespiratoryRateBrpm,
-                format: _formatInt,
-                unit: 'brpm',
-              ),
+          Expanded(
+            child: HuxRingTile(
+              label: 'Steps',
+              value: steps == null ? '—' : _compactSteps(steps.today),
+              caption: steps == null ? null : 'of ${StepTargetCalculator.formatSteps(steps.target)}',
+              progress: steps?.progress,
+              color: HuxColors.ringSteps,
             ),
-            const SizedBox(width: HuxSpacing.sm),
-            Expanded(
-              child: _DisplayStatTile(
-                label: 'Active cal',
-                value: readout.activeEnergyKcal?.toDouble(),
-                format: _formatInt,
-                unit: 'kcal',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        SliderRangeCard(
-          label: 'Min SpO2',
-          value: night?.minSpo2Percent?.toDouble(),
-          unit: '%',
-          normalRangeMin: 90,
-          normalRangeMax: 100,
-        ),
-        const SizedBox(height: HuxSpacing.sm),
-        BarVisualizerCard(
-          title: 'Stage breakdown',
-          value: night?.totalSleep.inMinutes.toDouble(),
-          unit: 'min asleep',
-          format: _formatInt,
-          bars: [
-            BarVisualizerDatum(
-              label: 'Awake',
-              value: night?.stageTotal(SleepStage.awake).inMinutes.toDouble(),
-              color: HuxColors.mutedText,
-            ),
-            BarVisualizerDatum(
-              label: 'Light',
-              value: night?.stageTotal(SleepStage.light).inMinutes.toDouble(),
-              color: HuxColors.accentCherry,
-            ),
-            BarVisualizerDatum(
-              label: 'Deep',
-              value: night?.stageTotal(SleepStage.deep).inMinutes.toDouble(),
-              color: HuxColors.accentPurple,
-            ),
-            BarVisualizerDatum(
-              label: 'REM',
-              value: night?.stageTotal(SleepStage.rem).inMinutes.toDouble(),
-              color: HuxColors.accentPink,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// Like [_StatTile], but for values that may not exist yet: renders a
-/// plain em-dash instead of a counting numeral when [value] is null,
-/// so an unavailable metric reads as "no reading", never as "0".
-class _DisplayStatTile extends StatelessWidget {
-  final String label;
-  final double? value;
-  final String Function(double) format;
-  final String unit;
-  final String? qualifier;
-
-  const _DisplayStatTile({
-    required this.label,
-    required this.value,
-    required this.format,
-    required this.unit,
-    this.qualifier,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final numeralStyle = textTheme.titleLarge?.copyWith(
-      fontSize: HuxType.numeral,
-      fontWeight: FontWeight.w700,
-    );
-
-    // Solid near-black tile — the "Daily Streak" card family (see
-    // hux_tokens.dart's file header): plain dark cards for the simpler
-    // metrics, reserving the saturated gradients for the hero/vivid
-    // cards above.
-    return HuxHoverLift(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(HuxRadii.vividCard),
-        child: Container(
-          padding: const EdgeInsets.all(HuxSpacing.md),
-          decoration: const BoxDecoration(color: HuxColors.card),
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: textTheme.bodySmall),
-                  const SizedBox(height: HuxSpacing.xs),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (value == null)
-                        Text('—', style: numeralStyle)
-                      else ...[
-                        HuxCountUp(value: value!, format: format, style: numeralStyle),
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: HuxSpacing.xs, bottom: HuxSpacing.xs / 2),
-                          child: Text(unit, style: textTheme.bodySmall),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (qualifier != null) ...[
-                    const SizedBox(height: HuxSpacing.xs / 2),
-                    Text(qualifier!, style: textTheme.bodySmall),
-                  ],
-                ],
-              ),
-              const HuxGlassCorner(),
-            ],
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-/// The hero block: headline, a soft state-tinted glass panel with a
-/// matching outer glow, the "why" sentence, and the lifestyle-mode
-/// chip if one's active — all one visually contained unit so the
-/// readout reads as the centerpiece of the screen, lit from within by
-/// today's recovery state.
-class _TodayHeaderCard extends StatelessWidget {
-  final RecoveryState state;
-  final String headline;
-  final String meaning;
-  final String? chipText;
+/// Today's headline, what it means, and the suggested actions.
+class _InsightCard extends StatelessWidget {
+  final DailyReadout readout;
 
-  const _TodayHeaderCard({
-    required this.state,
-    required this.headline,
-    required this.meaning,
-    required this.chipText,
-  });
+  const _InsightCard({required this.readout});
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final color = readout.state.huxColor;
+    final reason = readout.charge?.reason;
     return GlassPanel(
-      frosted: true,
-      tint: state.huxColor.withValues(alpha: HuxOpacity.headerWash),
-      glow: state.huxColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _RecoveryHeader(state: state, headline: headline),
-          if (chipText != null) ...[
+          Row(
+            children: [
+              HuxPulseDot(color: color),
+              const SizedBox(width: HuxSpacing.sm),
+              Text("TODAY'S READ", style: text.labelMedium?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: HuxSpacing.sm),
+          Text(readout.headline, style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: HuxSpacing.sm),
+          Text(readout.meaning, style: text.bodyMedium?.copyWith(height: 1.4)),
+          if (reason != null) ...[
             const SizedBox(height: HuxSpacing.sm),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Chip(
-                label: Text(chipText!),
-                backgroundColor: HuxModeAccent.background
-                    .withValues(alpha: HuxOpacity.iconChip),
-                labelStyle: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(color: HuxModeAccent.background),
-                side: const BorderSide(color: HuxColors.glassStroke),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
+            Text(reason, style: text.bodySmall),
           ],
-          const SizedBox(height: HuxSpacing.md),
-          Text(meaning, style: Theme.of(context).textTheme.bodyMedium),
+          if (readout.actions.isNotEmpty) ...[
+            const SizedBox(height: HuxSpacing.md),
+            for (final action in readout.actions)
+              Padding(
+                padding: const EdgeInsets.only(bottom: HuxSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded, size: 18, color: color),
+                    const SizedBox(width: HuxSpacing.sm),
+                    Expanded(child: Text(action, style: text.bodyMedium)),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _RecoveryHeader extends StatelessWidget {
-  final RecoveryState state;
-  final String headline;
+/// Today's agenda: effort and steps for the day, then timed items
+/// (best walk time, walks after meals, plan session, journal, bedtime).
+class _AgendaCard extends StatelessWidget {
+  final DayPlan? plan;
+  final List<AgendaEntry> entries;
+  final FeatureTap? onOpenFeature;
 
-  const _RecoveryHeader({required this.state, required this.headline});
+  const _AgendaCard({required this.plan, required this.entries, required this.onOpenFeature});
+
+  static (IconData, Color) _style(AgendaKind k) => switch (k) {
+        AgendaKind.air => (Icons.air_rounded, HuxColors.steady),
+        AgendaKind.walk => (Icons.directions_walk_rounded, HuxColors.ringFood),
+        AgendaKind.plan => (Icons.directions_run_rounded, HuxColors.ringSteps),
+        AgendaKind.journal => (Icons.edit_note_rounded, HuxColors.ringHabit),
+      };
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final effort = plan?.effort;
+    final steps = plan?.steps;
+    final bedtime = plan?.bedtime;
+    final now = DateTime.now();
+    final nowMin = now.hour * 60 + now.minute;
+
+    final timed = <({int minute, Widget row})>[
+      for (final e in entries)
+        (
+          minute: e.minuteOfDay,
+          row: HuxAgendaItem(
+            time: e.time,
+            icon: _style(e.kind).$1,
+            color: _style(e.kind).$2,
+            title: e.title,
+            detail: e.detail,
+            done: e.done,
+            past: e.minuteOfDay + 60 < nowMin,
+            onTap: e.feature == null || onOpenFeature == null ? null : () => onOpenFeature!(e.feature!),
+          ),
+        ),
+      if (bedtime != null)
+        (
+          minute: () {
+            final b = bedtime.bedtime.toLocal();
+            final m = b.hour * 60 + b.minute;
+            return m < 12 * 60 ? m + 24 * 60 : m; // after midnight sorts last
+          }(),
+          row: HuxAgendaItem(
+            time: DayPlanner.clock(bedtime.bedtime),
+            icon: Icons.bedtime_rounded,
+            color: HuxColors.ringSleep,
+            title: 'Sleep by ${DayPlanner.clock(bedtime.bedtime)}',
+            detail: 'Aim for ${DayPlanner.duration(bedtime.sleepGoal)}. ${bedtime.reason}',
+          ),
+        ),
+    ]..sort((a, b) => a.minute.compareTo(b.minute));
+
+    return GlassPanel(
+      padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const HuxSectionTitle("Today's agenda", icon: Icons.event_note_rounded, iconColor: HuxColors.accentPurple),
+          if (effort != null)
+            HuxAgendaItem(
+              time: 'Today',
+              icon: Icons.bolt_rounded,
+              color: HuxColors.ringCharge,
+              title: 'Effort: ${effort.label} (${effort.range} of 10)',
+              detail: effort.suggestion,
+            ),
+          if (steps != null)
+            HuxAgendaItem(
+              time: 'Today',
+              icon: Icons.directions_walk_rounded,
+              color: HuxColors.ringSteps,
+              done: steps.done,
+              title: steps.done
+                  ? 'Step goal reached: ${StepTargetCalculator.formatSteps(steps.today)}'
+                  : 'Walk ${steps.minutesToGo} more min',
+              detail: steps.done
+                  ? steps.reason
+                  : '${StepTargetCalculator.formatSteps(steps.today)} of '
+                      '${StepTargetCalculator.formatSteps(steps.target)} steps. ${steps.reason}',
+            ),
+          if ((effort != null || steps != null) && timed.isNotEmpty)
+            const Divider(height: HuxSpacing.lg, color: HuxColors.hairline),
+          for (final t in timed) t.row,
+        ],
+      ),
+    );
+  }
+}
+
+/// Calories and macros eaten today, plus the eaten-vs-burned balance.
+class _FoodCard extends StatelessWidget {
+  final FoodToday food;
+  final int? activeKcal;
+  final VoidCallback? onOpen;
+
+  const _FoodCard({required this.food, required this.activeKcal, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final proteinPct = food.proteinGoalG <= 0 ? 0.0 : (food.proteinG / food.proteinGoalG).clamp(0.0, 1.0);
+    final burned = activeKcal;
+    final balance = burned == null ? null : food.kcal.round() - burned;
+
+    Widget macro(String label, double grams, Color color, {double? goal}) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: text.labelMedium),
+              const SizedBox(height: 2),
+              Text(goal == null ? '${grams.round()} g' : '${grams.round()} / ${goal.round()} g',
+                  style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: goal == null ? (grams > 0 ? 1 : 0) : proteinPct,
+                  minHeight: 5,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.14),
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return GestureDetector(
+      onTap: onOpen,
+      child: GlassPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const HuxIconBadge(icon: Icons.restaurant_rounded, color: HuxColors.ringFood),
+                const SizedBox(width: HuxSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Calories & macros', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(food.meals == 0 ? 'No meals logged yet' : '${food.meals} meal${food.meals == 1 ? '' : 's'} today',
+                          style: text.bodySmall),
+                    ],
+                  ),
+                ),
+                Text.rich(TextSpan(children: [
+                  TextSpan(text: '${food.kcal.round()}', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  TextSpan(text: ' kcal', style: text.labelSmall),
+                ])),
+              ],
+            ),
+            const SizedBox(height: HuxSpacing.md),
+            Row(
+              children: [
+                macro('Protein', food.proteinG, HuxColors.ringFood, goal: food.proteinGoalG),
+                const SizedBox(width: HuxSpacing.md),
+                macro('Carbs', food.carbsG, HuxColors.ringSteps),
+                const SizedBox(width: HuxSpacing.md),
+                macro('Fat', food.fatG, HuxColors.ringCharge),
+              ],
+            ),
+            if (balance != null) ...[
+              const SizedBox(height: HuxSpacing.md),
+              const Divider(height: 1, color: HuxColors.hairline),
+              const SizedBox(height: HuxSpacing.sm),
+              Row(
+                children: [
+                  _BalanceSide(label: 'Eaten', value: food.kcal.round(), color: HuxColors.ringFood),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Icon(Icons.balance_rounded, color: HuxColors.mutedText.withValues(alpha: 0.8)),
+                        Text(
+                          balance >= 0 ? '+$balance kcal' : '$balance kcal',
+                          style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _BalanceSide(label: 'Burned (active)', value: burned!, color: HuxColors.ringSteps, end: true),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text('Burned counts movement only, not your resting energy.', style: text.labelSmall),
+            ],
+            if (food.meals == 0 && onOpen != null) ...[
+              const SizedBox(height: HuxSpacing.sm),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Log a meal'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BalanceSide extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+  final bool end;
+
+  const _BalanceSide({required this.label, required this.value, required this.color, this.end = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: HuxSpacing.sm),
-          // Breathes twice on arrival, then settles — the light source
-          // of the header's glow (finite, so pumpAndSettle stays happy).
-          child: HuxPulseDot(color: state.huxColor),
-        ),
-        const SizedBox(width: HuxSpacing.sm),
-        Expanded(
-          child:
-              Text(headline, style: Theme.of(context).textTheme.displaySmall),
-        ),
+        Text(label, style: text.labelMedium),
+        Text('$value kcal', style: text.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
       ],
     );
   }
 }
 
-class _ActionsList extends StatelessWidget {
-  final List<String> actions;
-  final RecoveryState state;
+/// Last 7 days: sleep and steps as mini bar charts.
+class _WeekCard extends StatelessWidget {
+  final List<int?> sleep7;
+  final List<int?> steps7;
+  final VoidCallback? onOpen;
 
-  const _ActionsList({required this.actions, required this.state});
+  const _WeekCard({required this.sleep7, required this.steps7, required this.onOpen});
+
+  static int? _avg(List<int?> v) {
+    final x = v.whereType<int>().toList();
+    return x.isEmpty ? null : (x.reduce((a, b) => a + b) / x.length).round();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (actions.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final action in actions)
-          Padding(
-            padding: const EdgeInsets.only(bottom: HuxSpacing.sm),
-            child: Row(
+    final text = Theme.of(context).textTheme;
+    final sleepAvg = _avg(sleep7);
+    final stepsAvg = _avg(steps7);
+
+    Widget column(String label, String value, List<int?> values, Color color) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: text.labelMedium),
+              Text(value, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: HuxSpacing.sm),
+              HuxMiniBars(values: [for (final v in values) v?.toDouble()], color: color),
+            ],
+          ),
+        );
+
+    return GestureDetector(
+      onTap: onOpen,
+      child: GlassPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HuxSectionTitle('Your week',
+                icon: Icons.insights_rounded,
+                iconColor: HuxColors.accentPurple,
+                actionLabel: onOpen == null ? null : 'Trends',
+                onAction: onOpen),
+            Row(
+              children: [
+                column('Sleep · avg', sleepAvg == null ? '—' : '${sleepAvg ~/ 60}h ${(sleepAvg % 60).toString().padLeft(2, '0')}m',
+                    sleep7, HuxColors.ringSleep),
+                const SizedBox(width: HuxSpacing.lg),
+                column('Steps · avg', stepsAvg == null ? '—' : StepTargetCalculator.formatSteps(stepsAvg), steps7,
+                    HuxColors.ringSteps),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Last night: total, efficiency, stages, breathing and oxygen.
+class _SleepCard extends StatelessWidget {
+  final SleepSession? night;
+
+  const _SleepCard({required this.night});
+
+  static String _hm(Duration d) => '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final n = night;
+    final text = Theme.of(context).textTheme;
+    final inBed = n?.totalTimeInBed.inMinutes ?? 0;
+    final eff = (n == null || inBed <= 0) ? null : (n.totalSleep.inMinutes / inBed * 100).clamp(0, 100).round();
+    return GlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              HuxScoreRing(
+                progress: eff == null ? null : eff / 100,
+                centerText: eff == null ? '—' : '$eff',
+                color: HuxColors.ringSleep,
+                size: 52,
+                stroke: 6,
+              ),
+              const SizedBox(width: HuxSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Last night', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      n == null ? 'No sleep recorded yet' : '${_hm(n.totalSleep)} asleep · sleep efficiency ${eff ?? '—'}%',
+                      style: text.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (n != null) ...[
+            const SizedBox(height: HuxSpacing.sm),
+            HuxStatGrid(stats: [
+              HuxStat('Deep sleep', _hm(n.stageTotal(SleepStage.deep))),
+              HuxStat('REM sleep', _hm(n.stageTotal(SleepStage.rem))),
+              HuxStat('Light sleep', _hm(n.stageTotal(SleepStage.light))),
+              HuxStat('Awake time', _hm(n.stageTotal(SleepStage.awake))),
+              HuxStat('Resp. rate', n.avgRespiratoryRateBrpm == null ? '—' : n.avgRespiratoryRateBrpm!.round().toString(),
+                  unit: 'brpm'),
+              HuxStat('Min SpO2', n.minSpo2Percent == null ? '—' : '${n.minSpo2Percent}', unit: '%'),
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Heart rate now / resting, stress and active energy.
+class _BodyCard extends StatelessWidget {
+  final DailyReadout readout;
+  final SleepSession? night;
+  final double? heartRateBpm;
+
+  const _BodyCard({required this.readout, required this.night, required this.heartRateBpm});
+
+  static const _stressElevatedThreshold = 50;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final stress = readout.stressIndex;
+    return GlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const HuxIconBadge(icon: Icons.favorite_rounded, color: HuxColors.ringHeart),
+              const SizedBox(width: HuxSpacing.md),
+              Text('Body today', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: HuxSpacing.sm),
+          HuxStatGrid(stats: [
+            HuxStat('Heart rate', heartRateBpm == null ? '—' : heartRateBpm!.round().toString(), unit: 'bpm'),
+            HuxStat('Night avg HR', night?.avgHeartRateBpm == null ? '—' : '${night!.avgHeartRateBpm}', unit: 'bpm'),
+            HuxStat('Stress', stress == null ? '—' : '$stress',
+                unit: stress == null ? null : (stress > _stressElevatedThreshold ? '/100 · Elevated' : '/100 · Calm')),
+            HuxStat('Active cal', readout.activeEnergyKcal == null ? '—' : '${readout.activeEnergyKcal}', unit: 'kcal'),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// Only when a ring is connected: battery and a test buzz.
+class _RingCard extends StatelessWidget {
+  final int batteryPercent;
+  final Future<void> Function() sendTestBuzz;
+
+  const _RingCard({required this.batteryPercent, required this.sendTestBuzz});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return GlassPanel(
+      child: Row(
+        children: [
+          HuxScoreRing(
+            progress: batteryPercent / 100,
+            centerText: '$batteryPercent%',
+            color: HuxColors.accentIndigo,
+            size: 52,
+            stroke: 6,
+          ),
+          const SizedBox(width: HuxSpacing.md),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Icon(Icons.circle, size: 6, color: state.huxColor),
-                ),
-                const SizedBox(width: HuxSpacing.sm),
-                Expanded(
-                  child: Text(action,
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ),
+                Text('Your ring', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                Text('Battery', style: text.bodySmall),
               ],
             ),
           ),
-      ],
+          OutlinedButton.icon(
+            onPressed: () => NudgeModal.show(
+              context,
+              title: 'Test your ring',
+              message: "Send one vibration to confirm it's connected.",
+              icon: Icons.vibration,
+              primaryLabel: 'Buzz now',
+              onPrimary: sendTestBuzz,
+            ),
+            icon: const Icon(Icons.vibration, size: 18),
+            label: const Text('Test ring'),
+          ),
+        ],
+      ),
     );
   }
 }

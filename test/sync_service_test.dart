@@ -50,6 +50,18 @@ class _FakeBatteryRingAdapter implements RingAdapter {
   }
 }
 
+/// Connects fine but blows up with a NON-ring error during sync — stands
+/// in for a storage/plugin failure that must not leave the UI hanging.
+class _ExplodingSyncRingAdapter extends _FakeBatteryRingAdapter {
+  int syncCalls = 0;
+
+  @override
+  Future<SyncResult> syncSince(DateTime since) async {
+    syncCalls++;
+    throw StateError('simulated plugin failure');
+  }
+}
+
 void main() {
   sqfliteFfiInit();
 
@@ -207,6 +219,34 @@ void main() {
     await sync.syncNow();
     await sync.sendTestBuzz(); // connected now: should complete cleanly
 
+    await sync.dispose();
+    await ring.dispose();
+    await store.close();
+  });
+
+  test('a non-ring exception fails fast, reports failed, and does not wedge syncNow',
+      () async {
+    final ring = _ExplodingSyncRingAdapter();
+    final store = await openStore();
+    final sync = SyncService(ring, store,
+        maxAttempts: 3, baseBackoff: const Duration(milliseconds: 10));
+    final phases = <SyncPhase>[];
+    final sub = sync.status.listen((s) => phases.add(s.phase));
+
+    final outcome = await sync.syncNow();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(outcome.success, isFalse);
+    expect(outcome.attemptsUsed, 1); // not retried: retry can't fix it
+    expect(outcome.error, contains('simulated plugin failure'));
+    expect(phases.last, SyncPhase.failed);
+    expect(ring.syncCalls, 1);
+
+    // Not stuck "in progress": a second call runs again.
+    final again = await sync.syncNow();
+    expect(again.error, isNot(contains('already in progress')));
+
+    await sub.cancel();
     await sync.dispose();
     await ring.dispose();
     await store.close();

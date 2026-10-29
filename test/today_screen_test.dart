@@ -33,9 +33,19 @@ void main() {
   /// Lets the screen's own real async work (DB reads kicked off from
   /// initState) actually finish, then rebuilds. Not `pumpAndSettle()`:
   /// the loading spinner animates forever, so it would just time out.
+  ///
+  /// Polls instead of one fixed wait: Today's readout now does more DB
+  /// work (charge, plan, steps), and with the whole suite running in
+  /// parallel a single 300 ms wait was sometimes too short.
   Future<void> settle(WidgetTester tester) async {
-    await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
-    await tester.pump();
+    bool loading() =>
+        find.text('Loading your readout…').evaluate().isNotEmpty ||
+        find.text('Syncing your ring…').evaluate().isNotEmpty;
+    for (var i = 0; i < 50; i++) {
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+      if (i >= 2 && !loading()) return;
+    }
   }
 
   testWidgets(
@@ -328,7 +338,7 @@ void main() {
   });
 
   testWidgets(
-      'ring status row and enriched Last Night cards render, and Test '
+      'ring card and Home cards render, and Test '
       'ring completes a real vibrate() without crashing',
       (tester) async {
     late SqliteHealthStore store;
@@ -369,7 +379,11 @@ void main() {
     ));
     await settle(tester);
 
-    // Ring status row: verify it renders, and exercise the real
+    // Score rings at the top of Home.
+    expect(find.text('Charge'), findsOneWidget);
+    expect(find.text('Steps'), findsOneWidget);
+
+    // Ring card: verify it renders, and exercise the real
     // Test ring -> NudgeModal -> sendTestBuzz() -> vibrate() path
     // BEFORE scrolling further down (scrolling past it would leave
     // nothing at this position to tap afterwards).
@@ -388,18 +402,19 @@ void main() {
     expect(find.text('Buzz now'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // The rest of the ten-card grid, further down the screen.
-    expect(find.text('Heart Rate'), findsOneWidget);
-    expect(find.text('Calories'), findsOneWidget);
-    expect(find.text('Sleep Scores'), findsOneWidget);
-    expect(find.text('Stress'), findsOneWidget);
-
-    await tester.scrollUntilVisible(find.text('Stage breakdown'), 300);
+    // Home cards: score rings, last night, body today.
+    await tester.scrollUntilVisible(find.text('Last night'), -300);
     await tester.pump();
+    expect(find.text('Last night'), findsOneWidget);
+    expect(find.text('Deep sleep'), findsOneWidget);
     expect(find.text('Resp. rate'), findsOneWidget);
-    expect(find.text('Active cal'), findsOneWidget);
     expect(find.text('Min SpO2'), findsOneWidget);
-    expect(find.text('Stage breakdown'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Body today'), 300);
+    await tester.pump();
+    expect(find.text('Heart rate'), findsOneWidget);
+    expect(find.text('Stress'), findsOneWidget);
+    expect(find.text('Active cal'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

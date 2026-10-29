@@ -36,5 +36,19 @@ abstract class AuthService {
     required String newPassword,
   });
 
+  /// Confirms a new email/password account with the code from the
+  /// "Confirm signup" email (needs `{{ .Token }}` in that Supabase
+  /// template). Signs the user in on success.
+  Future<void> verifySignUpCode({required String email, required String code});
+
+  /// Sends the sign-up confirmation code again.
+  Future<void> resendSignUpCode(String email);
+
   Future<void> signOut();
+
+  /// Permanently deletes the account and everything linked to it on
+  /// HUX's servers (Apple 5.1.1(v), Google Play account deletion, DPDP
+  /// erasure). Throws [AuthException] with a user-safe message on
+  /// failure; the user stays signed in so they can retry.
+  Future<void> deleteAccount();
 }

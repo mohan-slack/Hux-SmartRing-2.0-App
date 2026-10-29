@@ -1,6 +1,7 @@
 /// Trends screen — 7-day / 30-day sleep duration, HRV, and resting HR,
-/// each night plotted from the user's own history. Deliberately
-/// undesigned; a later design phase restyles this.
+/// each night plotted from the user's own history: an at-a-glance row,
+/// then one card per metric with its own colour, a vs-average chip,
+/// a dashed average line and tap-for-value tooltips.
 ///
 /// Talks only to [HealthStore.sleepSessionsBetween] — no snapshots, no
 /// other services. Per-night rows come from the pure helper in
@@ -12,9 +13,11 @@ import 'package:flutter/material.dart';
 import '../core/meaning/baseline.dart';
 import '../core/storage/health_store.dart';
 import '../core/trends/night_row.dart';
-import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
+import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
+import '../theme/hux_ui.dart';
+import '../widgets/wellness_note.dart';
 
 /// Single-letter weekday labels, [DateTime.weekday]-indexed (1 = Mon).
 const _weekdayInitials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -63,7 +66,10 @@ extension on _Range {
 class TrendsScreen extends StatefulWidget {
   final HealthStore store;
 
-  const TrendsScreen({super.key, required this.store});
+  /// Clock override for tests; null = the real time.
+  final DateTime Function()? now;
+
+  const TrendsScreen({super.key, required this.store, this.now});
 
   @override
   State<TrendsScreen> createState() => _TrendsScreenState();
@@ -93,7 +99,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
   }
 
   Future<_TrendsData> _fetch(_Range range) async {
-    final now = DateTime.now().toUtc();
+    final now = (widget.now ?? DateTime.now)().toUtc();
     final baselineStart = now.subtract(_baselineWindow);
     final displayStart = now.subtract(Duration(days: range.days));
     final queryStart =
@@ -139,6 +145,21 @@ class _TrendsScreenState extends State<TrendsScreen> {
                 child: FutureBuilder<_TrendsData>(
                   future: _future,
                   builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      // Never an endless spinner: say so, offer a retry.
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text("Couldn't load your trends."),
+                            TextButton(
+                              onPressed: () => _onRangeChanged(_range),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
@@ -170,6 +191,7 @@ class _RangeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SegmentedButton<_Range>(
+      showSelectedIcon: false,
       segments: const [
         ButtonSegment(value: _Range.sevenDays, label: Text('7 days')),
         ButtonSegment(value: _Range.thirtyDays, label: Text('30 days')),
@@ -184,29 +206,49 @@ class _EmptyPlaceholder extends StatelessWidget {
   const _EmptyPlaceholder();
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(HuxSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.show_chart, size: 40, color: HuxColors.mutedText),
-            const SizedBox(height: HuxSpacing.md),
-            Text('Not enough data to show trends yet',
-                style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: HuxSpacing.xs),
-            Text(
-              'Keep wearing your ring — charts fill in as nights sync.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+  Widget build(BuildContext context) => const Center(
+        child: HuxEmptyState(
+          icon: Icons.show_chart_rounded,
+          color: HuxColors.ringSleep,
+          title: 'Not enough data to show trends yet',
+          body: 'Charts fill in as nights sync from your health app or ring.',
         ),
-      ),
-    );
-  }
+      );
 }
+
+/// Which way is "better" for a metric — colours the vs-average chip.
+enum _Better { higher, lower, neither }
+
+/// Everything a metric card needs besides the rows.
+class _Metric {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final String unit;
+  final _Better better;
+  final double? Function(NightRow) valueOf;
+
+  const _Metric(this.title, this.icon, this.color, this.unit, this.better, this.valueOf);
+}
+
+double? _avgOf(List<NightRow> rows, double? Function(NightRow) valueOf) {
+  final v = rows.map(valueOf).whereType<double>().toList();
+  if (v.isEmpty) return null;
+  return v.reduce((a, b) => a + b) / v.length;
+}
+
+/// Latest reading vs the range average, as a whole percent (null when
+/// there's only one reading — nothing to compare against).
+int? _vsAvgPct(List<NightRow> rows, double? Function(NightRow) valueOf) {
+  final v = rows.map(valueOf).whereType<double>().toList();
+  if (v.length < 2) return null;
+  final avg = v.reduce((a, b) => a + b) / v.length;
+  if (avg == 0) return null;
+  return (((v.last - avg) / avg) * 100).round();
+}
+
+const _weekdayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+String _dayLabel(DateTime d) => '${_weekdayShort[d.weekday - 1]} ${d.day}';
 
 class _TrendsCharts extends StatelessWidget {
   final List<NightRow> rows;
@@ -214,143 +256,156 @@ class _TrendsCharts extends StatelessWidget {
 
   const _TrendsCharts({required this.rows, required this.baseline});
 
+  static final _metrics = <_Metric>[
+    _Metric('Avg HRV', Icons.monitor_heart_outlined, HuxColors.accentPurple, 'ms', _Better.higher,
+        (r) => r.avgHrvMs),
+    _Metric('Avg resting heart rate', Icons.favorite_border_rounded, HuxColors.ringHeart, 'bpm', _Better.lower,
+        (r) => r.avgHeartRateBpm),
+    _Metric('Avg respiratory rate', Icons.air_rounded, HuxColors.steady, 'brpm', _Better.neither,
+        (r) => r.avgRespiratoryRateBrpm),
+    _Metric('Stress', Icons.spa_outlined, HuxColors.stretched, '/100', _Better.lower, (r) => r.avgStressIndex),
+    _Metric('Active calories', Icons.local_fire_department_outlined, HuxColors.ringSteps, 'kcal', _Better.higher,
+        (r) => r.activeEnergyKcal),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final latestSleep =
-        _latestOf(rows, (r) => r.sleepDuration?.inMinutes.toDouble());
-    final latestHrv = _latestOf(rows, (r) => r.avgHrvMs);
-    final latestHr = _latestOf(rows, (r) => r.avgHeartRateBpm);
-    final latestRespRate = _latestOf(rows, (r) => r.avgRespiratoryRateBrpm);
-    final latestStress = _latestOf(rows, (r) => r.avgStressIndex);
-    final latestActiveKcal = _latestOf(rows, (r) => r.activeEnergyKcal);
+    final latestSleep = _latestOf(rows, (r) => r.sleepDuration?.inMinutes.toDouble());
 
-    // The sleep delta chip, reference-style: latest night vs the
-    // user's own baseline median — never a population number.
+    // The sleep delta chip: latest night vs the user's own baseline
+    // median — never a population number.
     final medianMinutes = baseline.medianTotalSleep?.inMinutes.toDouble();
     int? sleepDeltaPct;
     if (latestSleep != null && medianMinutes != null && medianMinutes > 0) {
-      sleepDeltaPct =
-          (((latestSleep - medianMinutes) / medianMinutes) * 100).round();
+      sleepDeltaPct = (((latestSleep - medianMinutes) / medianMinutes) * 100).round();
     }
 
+    final avgSleep = _avgOf(rows, (r) => r.sleepDuration?.inMinutes.toDouble());
+    final avgHrv = _avgOf(rows, (r) => r.avgHrvMs);
+    final avgHr = _avgOf(rows, (r) => r.avgHeartRateBpm);
+    final nights = rows.where((r) => r.sleepDuration != null).length;
+
     return ListView(
-      // Clearance so the last chart scrolls clear of the glass nav bar.
+      // Clearance so the last chart scrolls clear of the floating nav bar.
       padding: const EdgeInsets.only(bottom: HuxGlass.navClearance),
       children: [
+        // ---- at a glance: one compact row (keeps the charts high up) ----
         HuxEntrance(
-          child: _ChartCard(
-            title: 'Sleep duration',
-            numeralValue: latestSleep,
-            numeralFormat: (v) => _formatHours(Duration(minutes: v.round())),
-            unit: 'hrs',
-            delta: sleepDeltaPct == null
-                ? null
-                : _DeltaChip(percent: sleepDeltaPct),
-            child: _SleepBarChart(rows: rows, baseline: baseline),
+          child: HuxCard(
+            padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.sm, vertical: HuxSpacing.md),
+            child: Row(
+              children: [
+                _Glance(
+                    label: 'Sleep',
+                    value: avgSleep == null ? '—' : _formatHours(Duration(minutes: avgSleep.round())),
+                    color: HuxColors.ringSleep),
+                _Glance(label: 'HRV', value: avgHrv == null ? '—' : '${avgHrv.round()}', color: HuxColors.accentPurple),
+                _Glance(label: 'Rest HR', value: avgHr == null ? '—' : '${avgHr.round()}', color: HuxColors.ringHeart),
+                _Glance(label: 'Nights', value: '$nights/${rows.length}', color: HuxColors.ringFood),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: HuxSpacing.lg),
         HuxEntrance(
           index: 1,
           child: _ChartCard(
-            title: 'Avg HRV',
-            numeralValue: latestHrv,
-            numeralFormat: (v) => v.round().toString(),
-            unit: 'ms',
-            hint: _minMaxHint(rows, (r) => r.avgHrvMs, 'ms'),
-            child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgHrvMs),
+            title: 'Sleep duration',
+            icon: Icons.bedtime_outlined,
+            color: HuxColors.ringSleep,
+            numeralValue: latestSleep,
+            numeralFormat: (v) => _formatHours(Duration(minutes: v.round())),
+            unit: 'hrs',
+            delta: sleepDeltaPct == null
+                ? null
+                : _DeltaChip(percent: sleepDeltaPct, better: _Better.higher, suffix: 'vs usual'),
+            child: _SleepBarChart(rows: rows, baseline: baseline),
           ),
         ),
-        const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 2,
-          child: _ChartCard(
-            title: 'Avg resting heart rate',
-            numeralValue: latestHr,
-            numeralFormat: (v) => v.round().toString(),
-            unit: 'bpm',
-            hint: _minMaxHint(rows, (r) => r.avgHeartRateBpm, 'bpm'),
-            child:
-                _MetricLineChart(rows: rows, valueOf: (r) => r.avgHeartRateBpm),
+        for (final (i, m) in _metrics.indexed) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(
+            index: 2 + i,
+            child: _ChartCard(
+              title: m.title,
+              icon: m.icon,
+              color: m.color,
+              numeralValue: _latestOf(rows, m.valueOf),
+              numeralFormat: (v) => v.round().toString(),
+              unit: m.unit,
+              hint: _minMaxHint(rows, m.valueOf, m.unit),
+              delta: switch (_vsAvgPct(rows, m.valueOf)) {
+                null => null,
+                final pct => _DeltaChip(percent: pct, better: m.better, suffix: 'vs avg'),
+              },
+              child: _MetricLineChart(rows: rows, valueOf: m.valueOf, color: m.color, unit: m.unit),
+            ),
           ),
-        ),
-        const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 3,
-          child: _ChartCard(
-            title: 'Avg respiratory rate',
-            numeralValue: latestRespRate,
-            numeralFormat: (v) => v.round().toString(),
-            unit: 'brpm',
-            hint: _minMaxHint(rows, (r) => r.avgRespiratoryRateBrpm, 'brpm'),
-            child: _MetricLineChart(
-                rows: rows, valueOf: (r) => r.avgRespiratoryRateBrpm),
-          ),
-        ),
-        const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 4,
-          child: _ChartCard(
-            title: 'Stress',
-            numeralValue: latestStress,
-            numeralFormat: (v) => v.round().toString(),
-            unit: '/100',
-            hint: _minMaxHint(rows, (r) => r.avgStressIndex, '/100'),
-            child: _MetricLineChart(rows: rows, valueOf: (r) => r.avgStressIndex),
-          ),
-        ),
-        const SizedBox(height: HuxSpacing.lg),
-        HuxEntrance(
-          index: 5,
-          child: _ChartCard(
-            title: 'Active calories',
-            numeralValue: latestActiveKcal,
-            numeralFormat: (v) => v.round().toString(),
-            unit: 'kcal',
-            hint: _minMaxHint(rows, (r) => r.activeEnergyKcal, 'kcal'),
-            child:
-                _MetricLineChart(rows: rows, valueOf: (r) => r.activeEnergyKcal),
-          ),
-        ),
+        ],
+        const WellnessNote(),
       ],
     );
   }
 }
 
-/// The little "↑ 6% vs usual" pill beside the sleep hero numeral —
-/// mint when at/above the user's own median, amber below. Wellness
-/// register: it compares to "your usual", it never judges.
-class _DeltaChip extends StatelessWidget {
-  final int percent;
+/// One averaged number in the at-a-glance row.
+class _Glance extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
 
-  const _DeltaChip({required this.percent});
+  const _Glance({required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final up = percent >= 0;
-    final color = up ? HuxColors.accentPink : HuxColors.stretched;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: HuxSpacing.sm, vertical: HuxSpacing.xs / 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: HuxOpacity.iconChip),
-        borderRadius: BorderRadius.circular(HuxRadii.chip),
-      ),
-      child: Text(
-        '${up ? '↑' : '↓'} ${percent.abs()}% vs usual',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+    final text = Theme.of(context).textTheme;
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: text.labelSmall?.copyWith(color: HuxColors.mutedText)),
+        ],
       ),
     );
   }
 }
 
-/// One glass chart panel, reference-card style: muted title (with an
-/// optional min–max hint), a big Space Grotesk hero numeral that
-/// counts up to the most recent reading (plus an optional delta chip
-/// beside it), then the chart itself. Chart cards are this screen's
-/// hero panels, so they carry the real frosted backdrop blur.
+/// "↑ 6% vs usual" — green when the change is the good direction for
+/// this metric, amber when not, grey for metrics with no better side.
+/// Wellness register: it compares to "your usual", it never judges.
+class _DeltaChip extends StatelessWidget {
+  final int percent;
+  final _Better better;
+  final String suffix;
+
+  const _DeltaChip({required this.percent, required this.better, required this.suffix});
+
+  @override
+  Widget build(BuildContext context) {
+    final up = percent >= 0;
+    final good = switch (better) {
+      _Better.higher => up,
+      _Better.lower => !up,
+      _Better.neither => null,
+    };
+    final color = percent == 0 || good == null
+        ? HuxColors.mutedText
+        : (good ? HuxColors.recharged : HuxColors.stretched);
+    return HuxPill(
+      label: '${up ? '↑' : '↓'} ${percent.abs()}% $suffix',
+      color: color,
+    );
+  }
+}
+
+/// One chart card: coloured icon + title (with min–max hint), a big
+/// numeral counting up to the most recent reading plus a vs-average
+/// chip, then the chart itself.
 class _ChartCard extends StatelessWidget {
   final String title;
+  final IconData icon;
+  final Color color;
   final double? numeralValue;
   final String Function(double) numeralFormat;
   final String unit;
@@ -360,6 +415,8 @@ class _ChartCard extends StatelessWidget {
 
   const _ChartCard({
     required this.title,
+    required this.icon,
+    required this.color,
     required this.numeralValue,
     required this.numeralFormat,
     required this.unit,
@@ -376,47 +433,45 @@ class _ChartCard extends StatelessWidget {
       fontWeight: FontWeight.w700,
     );
 
-    return GlassPanel(
-      frosted: true,
+    return HuxCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(title, style: textTheme.bodySmall),
-              if (hint != null) ...[
-                const Spacer(),
-                Text(hint!, style: textTheme.bodySmall),
-              ],
+              HuxIconBadge(icon: icon, color: color, size: 32),
+              const SizedBox(width: HuxSpacing.sm),
+              Expanded(
+                child: Text(title, style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              ),
+              if (hint != null) Text(hint!, style: textTheme.labelSmall?.copyWith(color: HuxColors.mutedText)),
             ],
           ),
           if (numeralValue != null) ...[
-            const SizedBox(height: HuxSpacing.xs),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            const SizedBox(height: HuxSpacing.sm),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: HuxSpacing.sm,
+              runSpacing: HuxSpacing.xs,
               children: [
-                HuxCountUp(
-                  value: numeralValue!,
-                  format: numeralFormat,
-                  style: numeralStyle,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    HuxCountUp(value: numeralValue!, format: numeralFormat, style: numeralStyle),
+                    Padding(
+                      padding: const EdgeInsets.only(left: HuxSpacing.xs, bottom: HuxSpacing.xs),
+                      child: Text(unit, style: textTheme.bodySmall?.copyWith(color: HuxColors.mutedText)),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(
-                      left: HuxSpacing.xs, bottom: HuxSpacing.xs),
-                  child: Text(unit, style: textTheme.bodySmall),
-                ),
-                if (delta != null) ...[
-                  const SizedBox(width: HuxSpacing.sm),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: HuxSpacing.xs),
-                    child: delta!,
-                  ),
-                ],
+                if (delta != null)
+                  Padding(padding: const EdgeInsets.only(bottom: HuxSpacing.xs), child: delta!),
               ],
             ),
           ],
           const SizedBox(height: HuxSpacing.md),
-          SizedBox(height: 160, child: child),
+          SizedBox(height: 170, child: child),
         ],
       ),
     );
@@ -450,11 +505,15 @@ class _SleepBarChart extends StatelessWidget {
     final highlightLabelStyle = Theme.of(context)
         .textTheme
         .labelSmall
-        ?.copyWith(color: HuxColors.accentPink, fontWeight: FontWeight.w700);
+        ?.copyWith(color: HuxColors.ringSleep, fontWeight: FontWeight.w700);
     final targetStyle = Theme.of(context)
         .textTheme
         .labelSmall
-        ?.copyWith(color: HuxColors.accentPink);
+        ?.copyWith(color: HuxColors.ringSleep, fontWeight: FontWeight.w600);
+    final tooltipStyle = Theme.of(context)
+        .textTheme
+        .labelMedium
+        ?.copyWith(color: HuxColors.onVivid, fontWeight: FontWeight.w600);
     final interval = _weekdayLabelInterval(rows.length);
     final latestIndex = _latestIndex;
     final median = baseline.medianTotalSleep;
@@ -473,10 +532,10 @@ class _SleepBarChart extends StatelessWidget {
       end: Alignment.topCenter,
       colors: [HuxColors.chartBarGreyBottom, HuxColors.chartBarGreyTop],
     );
-    const mintBar = LinearGradient(
+    final mintBar = LinearGradient(
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
-      colors: [HuxColors.accentPurple, HuxColors.accentPink],
+      colors: [HuxColors.ringSleep.withValues(alpha: 0.7), HuxColors.ringSleep],
     );
 
     // Grow-in: tracks + target line appear immediately; the pills rise
@@ -488,6 +547,23 @@ class _SleepBarChart extends StatelessWidget {
         swapAnimationCurve: HuxMotion.easeSwap,
         BarChartData(
           maxY: maxY,
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              tooltipBgColor: HuxColors.ink,
+              tooltipRoundedRadius: HuxSpacing.sm,
+              fitInsideHorizontally: true,
+              fitInsideVertically: true,
+              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                final row = rows[group.x];
+                final d = row.sleepDuration;
+                if (d == null) return null;
+                return BarTooltipItem(
+                  '${_dayLabel(row.night)}\n${_formatHours(d)} h',
+                  tooltipStyle ?? const TextStyle(),
+                );
+              },
+            ),
+          ),
           barGroups: [
             for (var i = 0; i < rows.length; i++)
               BarChartGroupData(x: i, barRods: [
@@ -555,7 +631,7 @@ class _SleepBarChart extends StatelessWidget {
               : ExtraLinesData(horizontalLines: [
                   HorizontalLine(
                     y: median.inMinutes / 60.0,
-                    color: HuxColors.accentPink
+                    color: HuxColors.ringSleep
                         .withValues(alpha: HuxOpacity.targetLine),
                     strokeWidth: 1,
                     dashArray: HuxGlass.dashArray,
@@ -573,7 +649,7 @@ class _SleepBarChart extends StatelessWidget {
                   HorizontalRangeAnnotation(
                     y1: band.low.inMinutes / 60.0,
                     y2: band.high.inMinutes / 60.0,
-                    color: HuxColors.accentPink
+                    color: HuxColors.ringSleep
                         .withValues(alpha: HuxOpacity.targetBand),
                   ),
                 ]),
@@ -593,14 +669,19 @@ class _SleepBarChart extends StatelessWidget {
 class _MetricLineChart extends StatelessWidget {
   final List<NightRow> rows;
   final double? Function(NightRow) valueOf;
+  final Color color;
+  final String unit;
 
-  const _MetricLineChart({required this.rows, required this.valueOf});
+  const _MetricLineChart({required this.rows, required this.valueOf, required this.color, required this.unit});
 
   @override
   Widget build(BuildContext context) {
     final runs = contiguousRuns(rows.map(valueOf).toList());
     if (runs.isEmpty) {
-      return const Center(child: Text('No data in this range yet'));
+      return Center(
+        child: Text('No data in this range yet',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: HuxColors.mutedText)),
+      );
     }
 
     // Grow-in: the line fades in while drifting up into place — data
@@ -610,62 +691,127 @@ class _MetricLineChart extends StatelessWidget {
         opacity: t,
         child: Transform.translate(
           offset: Offset(0, HuxMotion.slideDistance * (1 - t)),
-          child: _chart(),
+          child: _chart(context, runs),
         ),
       ),
     );
   }
 
-  Widget _chart() {
-    final runs = contiguousRuns(rows.map(valueOf).toList());
+  Widget _chart(BuildContext context, List<List<MapEntry<int, double>>> runs) {
+    final text = Theme.of(context).textTheme;
+    final labelStyle = text.labelSmall?.copyWith(color: HuxColors.mutedText);
+    final tooltipStyle = text.labelMedium?.copyWith(color: HuxColors.onVivid, fontWeight: FontWeight.w600);
+    final interval = _weekdayLabelInterval(rows.length);
+    final avg = _avgOf(rows, valueOf);
+
     return LineChart(
         duration: HuxMotion.base,
         curve: HuxMotion.easeSwap,
         LineChartData(
           minX: 0,
           maxX: (rows.length - 1).clamp(0, double.infinity).toDouble(),
-          gridData: const FlGridData(show: false),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (_) => const FlLine(color: HuxColors.hairline, strokeWidth: 1),
+          ),
           borderData: FlBorderData(show: false),
-          titlesData: const FlTitlesData(show: false),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 20,
+                interval: 1,
+                getTitlesWidget: (value, meta) {
+                  final i = value.round();
+                  if (value != i.toDouble() || i < 0 || i >= rows.length) return const SizedBox.shrink();
+                  final isLast = i == rows.length - 1;
+                  if (!isLast && i % interval != 0) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: HuxSpacing.xs),
+                    child: Text(_weekdayInitial(rows[i].night),
+                        style: isLast ? labelStyle?.copyWith(color: color, fontWeight: FontWeight.w700) : labelStyle),
+                  );
+                },
+              ),
+            ),
+          ),
+          // Your average for this range, as a faint dashed reference.
+          extraLinesData: avg == null
+              ? const ExtraLinesData()
+              : ExtraLinesData(horizontalLines: [
+                  HorizontalLine(
+                    y: avg,
+                    color: color.withValues(alpha: 0.45),
+                    strokeWidth: 1,
+                    dashArray: HuxGlass.dashArray,
+                    label: HorizontalLineLabel(
+                      show: true,
+                      alignment: Alignment.topRight,
+                      style: labelStyle?.copyWith(color: color, fontWeight: FontWeight.w600),
+                      labelResolver: (_) => 'Avg ${avg.round()}',
+                    ),
+                  ),
+                ]),
+          lineTouchData: LineTouchData(
+            getTouchedSpotIndicator: (barData, indexes) => [
+              for (final _ in indexes)
+                TouchedSpotIndicatorData(
+                  FlLine(color: color.withValues(alpha: 0.35), strokeWidth: 1, dashArray: HuxGlass.dashArray),
+                  FlDotData(
+                    getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                      radius: 5,
+                      color: HuxColors.card,
+                      strokeWidth: 3,
+                      strokeColor: color,
+                    ),
+                  ),
+                ),
+            ],
+            touchTooltipData: LineTouchTooltipData(
+              tooltipBgColor: HuxColors.ink,
+              tooltipRoundedRadius: HuxSpacing.sm,
+              fitInsideHorizontally: true,
+              fitInsideVertically: true,
+              getTooltipItems: (spots) => [
+                for (final s in spots)
+                  LineTooltipItem(
+                    '${_dayLabel(rows[s.x.round()].night)}\n${s.y.round()} $unit',
+                    tooltipStyle ?? const TextStyle(),
+                  ),
+              ],
+            ),
+          ),
           lineBarsData: [
             for (final run in runs)
               LineChartBarData(
                 spots: [for (final e in run) FlSpot(e.key.toDouble(), e.value)],
                 isCurved: true,
                 preventCurveOverShooting: true,
-                gradient: const LinearGradient(
-                  colors: [HuxColors.accentPink, HuxColors.accentCherry],
-                ),
+                gradient: LinearGradient(colors: [color.withValues(alpha: 0.55), color]),
                 barWidth: 3,
-                shadow: Shadow(
-                  color: HuxColors.accentPink
-                      .withValues(alpha: HuxOpacity.chartLineGlow),
-                  blurRadius: HuxGlass.chartGlowBlur,
-                ),
+                isStrokeCapRound: true,
                 belowBarData: BarAreaData(
                   show: true,
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      HuxColors.accentPink
-                          .withValues(alpha: HuxOpacity.chartAreaFill),
-                      Colors.transparent,
-                    ],
+                    colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0)],
                   ),
                 ),
                 // Only the latest reading of the latest run gets a dot —
-                // a glowing "you are here" marker, not a dot per night.
+                // a "you are here" marker, not a dot per night.
                 dotData: FlDotData(
                   show: identical(run, runs.last),
                   checkToShowDot: (spot, barData) => spot == barData.spots.last,
-                  getDotPainter: (spot, percent, barData, index) =>
-                      FlDotCirclePainter(
-                    radius: HuxSpacing.xs,
-                    color: HuxColors.accentPink,
-                    strokeWidth: HuxSpacing.sm,
-                    strokeColor: HuxColors.accentPink
-                        .withValues(alpha: HuxOpacity.chartDotHalo),
+                  getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                    radius: 5,
+                    color: color,
+                    strokeWidth: 3,
+                    strokeColor: HuxColors.card,
                   ),
                 ),
               ),

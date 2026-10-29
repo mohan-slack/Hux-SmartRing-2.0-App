@@ -41,6 +41,21 @@ abstract class HealthStore {
   Future<DateTime?> lastSyncedUpTo();
   Future<void> setLastSyncedUpTo(DateTime instant);
 
+  /// The account id whose health data is currently on this device, or
+  /// null if unclaimed. Lets the app wipe local data when a DIFFERENT
+  /// account signs in on a shared phone (see local_data_guard.dart).
+  Future<String?> dataOwnerId();
+  Future<void> setDataOwnerId(String userId);
+
+  /// Small key-value app settings (profile answers, feature-open
+  /// counts). Values are opaque strings (usually JSON). Wiped by
+  /// [deleteAllData] like everything else.
+  Future<String?> readSetting(String key);
+  Future<void> writeSetting(String key, String value);
+
+  /// Every setting, for "Download my data" (DPDP right to a copy).
+  Future<Map<String, String>> allSettings();
+
   /// Wipe everything. Used by "delete my data" (a DPDP requirement)
   /// and by tests. Irreversible by design.
   Future<void> deleteAllData();

@@ -7,6 +7,7 @@ import '../../core/auth/auth_models.dart';
 import '../../core/auth/auth_service.dart';
 import '../../theme/hux_tokens.dart';
 import 'auth_scaffold.dart';
+import 'confirm_signup_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   final AuthService authService;
@@ -67,13 +68,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         Navigator.of(context).popUntil((route) => route.isFirst);
         return;
       }
-      // Email confirmation IS required: no session yet, so tell the user
-      // where to look next rather than leaving this form looking like it
-      // silently did nothing.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Check your email to confirm your account, then log in.')),
-      );
-      Navigator.of(context).pop();
+      // Email confirmation IS required: no session yet. Ask for the code
+      // from the email right here (links in emails don't open the app).
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => ConfirmSignUpScreen(
+          authService: widget.authService,
+          email: _emailController.text.trim(),
+        ),
+      ));
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);

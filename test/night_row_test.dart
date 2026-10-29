@@ -32,7 +32,8 @@ void main() {
         sessionOn(DateTime.utc(2026, 7, 4, 23), avgHrv: 52, avgHr: 58),
       ];
 
-      final rows = buildNightRows(from: from, to: to, sessions: sessions);
+      final rows = buildNightRows(
+          from: from, to: to, sessions: sessions, utcOffset: Duration.zero);
 
       expect(rows.length, 5);
       expect(rows[0].night, DateTime.utc(2026, 7, 1));
@@ -57,6 +58,7 @@ void main() {
       final rows = buildNightRows(
         from: from,
         to: to,
+        utcOffset: Duration.zero,
         sessions: [
           sessionOn(DateTime.utc(2026, 7, 1, 23), avgHrv: null, avgHr: 60),
         ],
@@ -72,8 +74,70 @@ void main() {
         from: DateTime.utc(2026, 7, 1),
         to: DateTime.utc(2026, 7, 1),
         sessions: const [],
+        utcOffset: Duration.zero,
       );
       expect(rows, isEmpty);
+    });
+
+    group('India (IST, UTC+5:30) local days', () {
+      const ist = Duration(hours: 5, minutes: 30);
+
+      test('a 00:30 IST bedtime counts as the previous night', () {
+        // 00:30 IST on Jul 2 == 19:00 UTC on Jul 1.
+        final bedtime = DateTime.utc(2026, 7, 1, 19, 0);
+        final rows = buildNightRows(
+          from: DateTime.utc(2026, 6, 30, 18, 30), // Jul 1 00:00 IST
+          to: DateTime.utc(2026, 7, 2, 18, 30), // Jul 3 00:00 IST
+          sessions: [sessionOn(bedtime, avgHrv: 50)],
+          utcOffset: ist,
+        );
+        expect(rows.length, 2);
+        expect(rows[0].night, DateTime.utc(2026, 7, 1));
+        expect(rows[0].avgHrvMs, 50);
+        expect(rows[1].avgHrvMs, isNull);
+      });
+
+      test('snapshots between 00:00 and 05:30 IST land on the IST day', () {
+        // 02:00 IST on Jul 2 == 20:30 UTC on Jul 1.
+        final rows = buildNightRows(
+          from: DateTime.utc(2026, 6, 30, 18, 30), // Jul 1 00:00 IST
+          to: DateTime.utc(2026, 7, 2, 18, 30), // Jul 3 00:00 IST
+          sessions: const [],
+          snapshots: [
+            HealthSnapshot(
+                timestamp: DateTime.utc(2026, 7, 1, 20, 30), stressIndex: 40),
+          ],
+          utcOffset: ist,
+        );
+        expect(rows[0].avgStressIndex, isNull); // Jul 1
+        expect(rows[1].avgStressIndex, 40); // Jul 2
+      });
+
+      test('today is included when "to" is part-way through the day', () {
+        final rows = buildNightRows(
+          from: DateTime.utc(2026, 6, 30, 18, 30), // Jul 1 00:00 IST
+          to: DateTime.utc(2026, 7, 1, 8, 0), // Jul 1 13:30 IST ("now")
+          sessions: const [],
+          utcOffset: ist,
+        );
+        expect(rows.length, 1);
+        expect(rows.single.night, DateTime.utc(2026, 7, 1));
+      });
+
+      test('a nap does not overwrite the main night', () {
+        final main = sessionOn(DateTime.utc(2026, 7, 1, 17, 30),
+            sleepMinutes: 420, avgHrv: 50); // 23:00 IST
+        final nap = sessionOn(DateTime.utc(2026, 7, 2, 0, 0),
+            sleepMinutes: 40, avgHrv: 30); // 05:30 IST, still that night
+        final rows = buildNightRows(
+          from: DateTime.utc(2026, 6, 30, 18, 30),
+          to: DateTime.utc(2026, 7, 1, 18, 30),
+          sessions: [main, nap],
+          utcOffset: ist,
+        );
+        expect(rows.single.avgHrvMs, 50);
+        expect(rows.single.sleepDuration, const Duration(minutes: 420));
+      });
     });
   });
 

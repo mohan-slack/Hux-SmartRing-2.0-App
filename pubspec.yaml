@@ -1,11 +1,13 @@
 name: hux_app
 description: HUX Smart Ring companion app. Numbers -> Meaning -> Action.
 publish_to: none
-version: 0.1.0
+# version: <name>+<build>. Bump the build number (+N) for EVERY store upload.
+version: 1.0.0+1
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
-  flutter: ">=3.19.0"
+  # flutter_local_notifications 21+ needs Flutter 3.38.1 / Dart 3.10.
+  sdk: ">=3.10.0 <4.0.0"
+  flutter: ">=3.38.1"
 
 dependencies:
   flutter:
@@ -17,6 +19,15 @@ dependencies:
   google_fonts: ^6.3.2
   flutter_reactive_ble: ^5.4.2
   supabase_flutter: ^2.15.4
+  image_picker: ^1.1.2
+  flutter_local_notifications: ^22.3.2
+  timezone: ^0.11.2
+  flutter_timezone: ^5.1.1
+  flutter_tts: ^4.2.5
+  # Tap-to-call help numbers (112, 108, Tele-MANAS) in coach chat.
+  url_launcher: ^6.3.1
+  # "Download my data" (DPDP right to a copy): share the JSON export.
+  share_plus: ^10.1.4
   google_sign_in: ^6.2.1
   sign_in_with_apple: ^7.0.1
 
@@ -25,10 +36,40 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   sqflite_common_ffi: ^2.3.3
+  # Branding generators (build-time only, not in the app):
+  #   python3 tool/generate_brand_assets.py
+  #   dart run flutter_launcher_icons
+  #   dart run flutter_native_splash:create
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
+
+# App icon — iOS (all sizes, no alpha) + Android legacy, adaptive and
+# Android 13 themed (monochrome) icons. Masters come from
+# tool/generate_brand_assets.py. See docs/release/BRANDING.md.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
+  min_sdk_android: 26
+  adaptive_icon_background: "assets/icon/app_icon_background.png"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png"
+
+# Launch screen — light (HuxColors.bg) with the dark wordmark, on iOS,
+# Android ≤11 and the Android 12+ splash API.
+flutter_native_splash:
+  color: "#F6F4FA"
+  image: assets/splash/splash_logo.png
+  android_12:
+    color: "#F6F4FA"
+    image: assets/splash/splash_android12.png
+    icon_background_color: "#F6F4FA"
+  ios_content_mode: center
+  fullscreen: false
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/modes/
-    - assets/images/welcome/
     - assets/images/brand/

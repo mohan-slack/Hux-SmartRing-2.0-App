@@ -73,12 +73,12 @@ class _VividCardShell extends StatelessWidget {
 TextStyle? _vividLabelStyle(BuildContext context) => Theme.of(context)
     .textTheme
     .bodySmall
-    ?.copyWith(color: HuxColors.ink.withValues(alpha: HuxOpacity.vividSecondaryText));
+    ?.copyWith(color: HuxColors.onVivid.withValues(alpha: HuxOpacity.vividSecondaryText));
 
 TextStyle? _vividNumeralStyle(BuildContext context) => Theme.of(context)
     .textTheme
     .titleLarge
-    ?.copyWith(fontSize: HuxType.numeralLarge, fontWeight: FontWeight.w700, color: HuxColors.ink);
+    ?.copyWith(fontSize: HuxType.numeralLarge, fontWeight: FontWeight.w700, color: HuxColors.onVivid);
 
 /// A purely decorative double-wave squiggle — NOT a rendering of real
 /// waveform data (this app has no intra-day heart-rate time series, only
@@ -250,7 +250,7 @@ class VividSleepScoreCard extends StatelessWidget {
             Container(
               height: 10,
               decoration: BoxDecoration(
-                color: HuxColors.ink.withValues(alpha: HuxOpacity.vividEmptyTrack),
+                color: HuxColors.onVivid.withValues(alpha: HuxOpacity.vividEmptyTrack),
                 borderRadius: BorderRadius.circular(HuxSpacing.xs),
               ),
             )
@@ -364,7 +364,7 @@ class VividCaloriesCard extends StatelessWidget {
               Text('Calories', style: _vividLabelStyle(context)),
               Icon(
                 Icons.local_fire_department,
-                color: kcal == null ? HuxColors.mutedText : HuxColors.ink,
+                color: kcal == null ? HuxColors.mutedText : HuxColors.onVivid,
                 size: 22,
               ),
             ],

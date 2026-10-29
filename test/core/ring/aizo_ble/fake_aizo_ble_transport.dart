@@ -16,6 +16,14 @@ class FakeAizoBleTransport implements AizoBleTransport {
   /// Set to make [discoverServiceAndCharacteristics] throw.
   bool failDiscovery = false;
 
+  /// Set to make [writeCommand] throw, simulating a failed GATT write.
+  bool failWrite = false;
+
+  /// How many times [startScanAndConnect] / [disconnect] ran — lets tests
+  /// assert no needless rescans and that failures release the link.
+  int scanCount = 0;
+  int disconnectCount = 0;
+
   String connectedDeviceIdValue = 'FAKE-DEVICE-ID';
 
   /// Every frame handed to [writeCommand], in order — lets a test assert
@@ -53,6 +61,7 @@ class FakeAizoBleTransport implements AizoBleTransport {
 
   @override
   Future<void> startScanAndConnect({required String deviceName, required Duration timeout}) async {
+    scanCount++;
     if (failScan) {
       throw StateError('FakeAizoBleTransport: simulated scan/connect failure');
     }
@@ -73,6 +82,9 @@ class FakeAizoBleTransport implements AizoBleTransport {
 
   @override
   Future<void> writeCommand(Uint8List frame) async {
+    if (failWrite) {
+      throw StateError('FakeAizoBleTransport: simulated write failure');
+    }
     writtenFrames.add(frame);
     if (_queuedResponses.isNotEmpty) {
       final response = _queuedResponses.removeAt(0);
@@ -83,6 +95,7 @@ class FakeAizoBleTransport implements AizoBleTransport {
 
   @override
   Future<void> disconnect() async {
+    disconnectCount++;
     _connected = false;
     _connectionStateController.add(AizoTransportConnectionState.disconnected);
   }

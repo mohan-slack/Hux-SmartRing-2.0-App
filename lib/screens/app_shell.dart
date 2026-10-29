@@ -11,23 +11,49 @@
 /// tab content scroll behind it, so the blur has something genuine to
 /// refract (see hux_glass.dart for why panels elsewhere fake it).
 
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
 import '../core/auth/auth_service.dart';
+import '../core/environment/environment_service.dart';
+import '../core/food/food_log_service.dart';
+import '../core/coach/coach_context.dart';
+import '../core/coach/coach_service.dart';
+import '../core/food/meal_analyzer.dart';
+import '../core/home/home_extras.dart';
+import '../core/legal/privacy_service.dart';
+import '../core/nudges/nudge_service.dart';
+import '../core/plans/plan_library.dart';
+import '../core/plans/plan_progress.dart';
+import '../core/plans/speaker.dart';
+import '../core/plans/voice_cues.dart';
+import '../core/progress/progress_service.dart';
+import '../core/journal/journal.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/meaning/weekly_story.dart';
 import '../core/modes/mode_service.dart';
+import '../core/profile/feature_catalog.dart';
+import '../core/profile/profile_service.dart';
+import '../core/profile/user_profile.dart';
 import '../core/ring/data_source.dart';
 import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
+import '../theme/hux_ui.dart';
+import 'hubs/plans_hub.dart';
+import 'hubs/progress_hub.dart';
+import 'air_heat_screen.dart';
+import 'coach/coach_screen.dart';
+import 'legal/privacy_account_screen.dart';
+import 'food/food_screen.dart';
+import 'for_you.dart';
+import 'journal_screen.dart';
+import 'plans/plans_screen.dart';
+import 'sit_nudge_screen.dart';
+import 'walk_nudge_screen.dart';
 import 'modes_screen.dart';
-import 'story_screen.dart';
+import 'onboarding/onboarding_screen.dart';
 import 'today_screen.dart';
-import 'trends_screen.dart';
 
 class AppShell extends StatefulWidget {
   final HealthStore store;
@@ -46,6 +72,26 @@ class AppShell extends StatefulWidget {
   /// (there's no `app.dart`-level auth gate to return to).
   final AuthService? authService;
 
+  /// Optional, like [authService]: without it there's no "For you"
+  /// section and no Explore screen (every pre-personalisation test).
+  final ProfileService? profileService;
+
+  /// Photo meal analysis; null = photo logging shows "coming soon".
+  final MealAnalyzer? mealAnalyzer;
+
+  /// Backend call for the coach; null = coach shows "not set up".
+  final FunctionInvoker? coachInvoke;
+
+  /// Called after "Delete data on this phone" so first-run screens
+  /// (privacy notice, questions) show again.
+  final VoidCallback? onLocalDataDeleted;
+
+  /// Reminders; null = nudge features show "coming soon".
+  final NudgeService? nudgeService;
+
+  /// Air & heat outlooks; null = "coming soon".
+  final EnvironmentService? environmentService;
+
   const AppShell({
     super.key,
     required this.store,
@@ -55,6 +101,12 @@ class AppShell extends StatefulWidget {
     required this.modeService,
     this.dataSource = RingDataSource.mock,
     this.authService,
+    this.profileService,
+    this.mealAnalyzer,
+    this.coachInvoke,
+    this.onLocalDataDeleted,
+    this.nudgeService,
+    this.environmentService,
   });
 
   @override
@@ -64,6 +116,33 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  late final JournalService _journal = JournalService(widget.store);
+  late final FoodLogService _foodLog = FoodLogService(widget.store);
+  late final PlanProgressService _plans = PlanProgressService(widget.store);
+  late final ProgressService _progress = ProgressService(widget.store);
+  late final HomeExtrasLoader _homeExtras = HomeExtrasLoader(
+    store: widget.store,
+    foodLog: _foodLog,
+    nudges: widget.nudgeService,
+    environment: widget.environmentService,
+    plans: _plans,
+    journal: _journal,
+  );
+  late final PrivacyService _privacy = PrivacyService(
+    widget.store,
+    auth: widget.authService,
+    stopReminders: widget.nudgeService?.cancelAll,
+  );
+  late final CoachService _coach = CoachService(
+    widget.store,
+    invoke: widget.coachInvoke,
+    loadContext: CoachContextLoader(
+      store: widget.store,
+      readouts: widget.readoutService,
+      profiles: widget.profileService,
+    ).load,
+  );
+
   /// IndexedStack keeps Today's State alive when you switch away —
   /// that's the point, tab state survives. But it also means Today
   /// never re-reads the store on its own if something changed it
@@ -72,10 +151,27 @@ class _AppShellState extends State<AppShell> {
   /// of silently showing what it looked like when it was last built.
   final _todayRefresh = ValueNotifier<int>(0);
 
+  /// Which part of the Progress tab is showing (Trends / Story / Streaks).
+  final _progressSection = ValueNotifier<ProgressSection>(ProgressSection.trends);
+
+  static const _homeTab = 0;
+  static const _coachTab = 1;
+  static const _progressTab = 3;
+
   @override
   void dispose() {
     _todayRefresh.dispose();
+    _progressSection.dispose();
     super.dispose();
+  }
+
+  /// First word of the email's name part, e.g. "mohan.r@…" → "Mohan".
+  String? get _firstName {
+    final email = widget.authService?.currentUser?.email;
+    if (email == null || !email.contains('@')) return null;
+    final word = RegExp(r'[A-Za-z]+').firstMatch(email.split('@').first)?.group(0);
+    if (word == null || word.length < 2 || word.length > 12) return null;
+    return word[0].toUpperCase() + word.substring(1).toLowerCase();
   }
 
   void _onDestinationSelected(int index) {
@@ -83,13 +179,296 @@ class _AppShellState extends State<AppShell> {
     if (index == 0) _todayRefresh.value++;
   }
 
+  /// Opens Life modes (no longer a tab: it lives under Plans).
+  Future<void> _openModes() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('Life modes')),
+        body: ModesScreen(modeService: widget.modeService),
+      ),
+    ));
+    _todayRefresh.value++; // a started/ended mode changes Home
+  }
+
+  void _showProgress(ProgressSection section) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    _progressSection.value = section;
+    _onDestinationSelected(_progressTab);
+  }
+
+  /// Opens a feature, then refreshes Home (a meal, journal entry or plan
+  /// session logged there changes the agenda and food card).
+  Future<void> _openFeature(FeatureId id) async {
+    await _openFeatureInner(id);
+    _todayRefresh.value++;
+  }
+
+  Future<void> _openFeatureInner(FeatureId id) async {
+    final profiles = widget.profileService;
+    try {
+      await profiles?.recordOpen(id);
+    } catch (_) {
+      // Usage counts only re-rank cards; never block opening a feature.
+    }
+    if (!mounted) return;
+
+    final info = FeatureCatalog.of(id);
+    if (!info.isAvailable) {
+      final voted = (await profiles?.votedFeatures())?.contains(id) ?? false;
+      if (!mounted) return;
+      await showComingSoonSheet(
+        context,
+        info: info,
+        alreadyVoted: voted,
+        onVote: () async {
+          await profiles?.vote(id);
+        },
+      );
+      return;
+    }
+
+    // Features with their own screen open it on top.
+    if (id == FeatureId.indianJournal) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => JournalScreen(journal: _journal),
+      ));
+      return;
+    }
+    if (id == FeatureId.aiCoach) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      _onDestinationSelected(_coachTab);
+      return;
+    }
+    if (id == FeatureId.streaksMonthly) {
+      _showProgress(ProgressSection.streaks);
+      return;
+    }
+    if (id == FeatureId.sleepRegularity) {
+      _showProgress(ProgressSection.trends);
+      return;
+    }
+    if (id == FeatureId.weeklyStory) {
+      _showProgress(ProgressSection.story);
+      return;
+    }
+    if (id == FeatureId.shaadiMode ||
+        id == FeatureId.examMode ||
+        id == FeatureId.nightShiftMode ||
+        id == FeatureId.fastingMode) {
+      await _openModes();
+      return;
+    }
+    if (id == FeatureId.airAndHeatAlerts && widget.environmentService != null) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => AirHeatScreen(env: widget.environmentService!),
+      ));
+      return;
+    }
+    if (id == FeatureId.beginnerWalkPlan || id == FeatureId.zeroTo5k) {
+      final profile = await profiles?.loadProfile();
+      final goals = profile?.goals ?? const <Goal>[];
+      final recommended = recommendedPlanIds(
+        elder: goals.contains(Goal.activeElder) ||
+            profile?.dayType == DayType.retired ||
+            profile?.audience == Audience.parent,
+        fitGoal: goals.contains(Goal.getFit) || id == FeatureId.zeroTo5k,
+        weightOrSugar: goals.contains(Goal.loseWeight) || goals.contains(Goal.sugarBp),
+        desk: profile?.dayType == DayType.desk,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => PlansScreen(
+          progress: _plans,
+          recommended: recommended,
+          language: CueLanguageTts.fromProfile(profile?.language),
+          speakerFactory: TtsSpeaker.new,
+        ),
+      ));
+      return;
+    }
+    if (id == FeatureId.sitTooLong && widget.nudgeService != null) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => SitNudgeScreen(nudges: widget.nudgeService!),
+      ));
+      return;
+    }
+    if (id == FeatureId.walkAfterMeal && widget.nudgeService != null) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => WalkNudgeScreen(nudges: widget.nudgeService!),
+      ));
+      return;
+    }
+    if (id == FeatureId.proteinGap) {
+      final diet = (await profiles?.loadProfile())?.diet;
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => FoodScreen(
+          foodLog: _foodLog,
+          analyzer: widget.mealAnalyzer,
+          diet: diet,
+          onMealLogged: widget.nudgeService == null
+              ? null
+              : (meal) => widget.nudgeService!.onMealLogged(meal.loggedAt.toLocal()),
+        ),
+      ));
+      return;
+    }
+
+    // Anything else lives on Home.
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    _onDestinationSelected(_homeTab);
+  }
+
+  Future<void> _editAnswers() async {
+    final profiles = widget.profileService;
+    if (profiles == null) return;
+    final current = await profiles.loadProfile() ?? const UserProfile();
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (routeContext) => OnboardingScreen(
+        initial: current,
+        onDone: (profile) async {
+          await profiles.saveProfile(profile);
+          if (routeContext.mounted) Navigator.of(routeContext).pop();
+        },
+      ),
+    ));
+    // Featured cards depend on the answers: refresh Today.
+    _todayRefresh.value++;
+  }
+
+  Future<void> _openPrivacy() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => PrivacyAccountScreen(
+        privacy: _privacy,
+        coach: _coach,
+        foodLog: _foodLog,
+        onLocalDataDeleted: () {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          widget.onLocalDataDeleted?.call();
+        },
+      ),
+    ));
+  }
+
+  void _openExplore() {
+    final profiles = widget.profileService;
+    if (profiles == null) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ExploreScreen(
+        profileService: profiles,
+        onOpen: _openFeature,
+        onEditAnswers: _editAnswers,
+      ),
+    ));
+  }
+
+  // ---- sheets ------------------------------------------------------------
+
+  /// The "+" button: quick ways to log or start something.
+  Future<void> _openQuickLog() async {
+    final picked = await showModalBottomSheet<FeatureId>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) {
+        Widget tile(FeatureId id, IconData icon, Color color, String title, String sub) => ListTile(
+              leading: HuxIconBadge(icon: icon, color: color),
+              title: Text(title),
+              subtitle: Text(sub),
+              onTap: () => Navigator.pop(c, id),
+            );
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              tile(FeatureId.proteinGap, Icons.restaurant_rounded, HuxColors.ringFood, 'Log a meal',
+                  'Type it or snap a photo'),
+              tile(FeatureId.indianJournal, Icons.edit_note_rounded, HuxColors.ringHabit, 'Journal today',
+                  'Chai, late dinner, sweets…'),
+              tile(FeatureId.beginnerWalkPlan, Icons.directions_walk_rounded, HuxColors.ringSteps, 'Start a walk',
+                  'Guided sessions with voice cues'),
+              tile(FeatureId.aiCoach, Icons.auto_awesome, HuxColors.ringCharge, 'Ask the coach',
+                  'Anything about sleep, energy or food'),
+              const SizedBox(height: HuxSpacing.sm),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked != null && mounted) await _openFeature(picked);
+  }
+
+  /// The avatar on Home: account, privacy, answers, all features, sign out.
+  Future<void> _openMe() async {
+    final email = widget.authService?.currentUser?.email;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (email != null)
+              ListTile(
+                leading: HuxAvatar(initial: (_firstName ?? 'H')[0]),
+                title: Text(_firstName ?? 'Your account'),
+                subtitle: Text(email),
+              ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.shield_outlined),
+              title: const Text('Privacy & account'),
+              onTap: () => Navigator.pop(c, 'privacy'),
+            ),
+            if (widget.profileService != null) ...[
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('Edit my answers'),
+                onTap: () => Navigator.pop(c, 'answers'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.apps_rounded),
+                title: const Text('All features'),
+                onTap: () => Navigator.pop(c, 'explore'),
+              ),
+            ],
+            if (widget.authService != null)
+              ListTile(
+                leading: const Icon(Icons.logout_rounded, color: HuxColors.rundown),
+                title: const Text('Sign out', style: TextStyle(color: HuxColors.rundown)),
+                onTap: () => Navigator.pop(c, 'signout'),
+              ),
+            const SizedBox(height: HuxSpacing.sm),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'privacy':
+        await _openPrivacy();
+      case 'answers':
+        await _editAnswers();
+      case 'explore':
+        _openExplore();
+      case 'signout':
+        try {
+          await widget.authService?.signOut();
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasProfiles = widget.profileService != null;
     return Scaffold(
-      // Content scrolls behind the glass nav bar; each tab's scrollable
-      // adds HuxGlass.navClearance of bottom padding so its last card
-      // can still scroll fully clear of the bar.
+      // Content scrolls behind the floating nav bar; each tab's scrollable
+      // adds HuxGlass.navClearance of bottom padding.
       extendBody: true,
+      backgroundColor: Colors.transparent,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -98,21 +477,44 @@ class _AppShellState extends State<AppShell> {
             bottom: false,
             child: Column(
               children: [
-                _SourceBanner(source: widget.dataSource, authService: widget.authService),
+                // Only demo / unofficial-ring builds show a source strip.
+                if (widget.dataSource != RingDataSource.health) _SourceBanner(source: widget.dataSource),
                 Expanded(
                   child: IndexedStack(
                     index: _index,
                     children: [
+                      for (final (i, tab) in [
                       TodayScreen(
                         store: widget.store,
                         syncService: widget.syncService,
                         readoutService: widget.readoutService,
                         modeService: widget.modeService,
                         refreshSignal: _todayRefresh,
+                        profileService: widget.profileService,
+                        onOpenFeature: hasProfiles ? _openFeature : null,
+                        onSeeAllFeatures: hasProfiles ? _openExplore : null,
+                        greetingName: _firstName,
+                        onOpenProfile: _openMe,
+                        onAsk: () => _onDestinationSelected(_coachTab),
+                        extrasLoader: _homeExtras.load,
                       ),
-                      TrendsScreen(store: widget.store),
-                      StoryScreen(storyService: widget.storyService),
-                      ModesScreen(modeService: widget.modeService),
+                      CoachScreen(coach: _coach, embedded: true),
+                      PlansHub(
+                        onOpenFeature: _openFeature,
+                        onOpenModes: _openModes,
+                        onSeeAll: hasProfiles ? _openExplore : null,
+                      ),
+                      ProgressHub(
+                        store: widget.store,
+                        storyService: widget.storyService,
+                        progress: _progress,
+                        section: _progressSection,
+                      ),
+                      ].indexed)
+                        // Hidden tabs keep their state but stop animating
+                        // (spinners, typing dots) — saves battery and
+                        // lets widget tests settle.
+                        TickerMode(enabled: i == _index, child: tab),
                     ],
                   ),
                 ),
@@ -121,25 +523,16 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
-      bottomNavigationBar: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: HuxGlass.navBlurSigma,
-            sigmaY: HuxGlass.navBlurSigma,
-          ),
-          child: NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: _onDestinationSelected,
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
-              NavigationDestination(
-                  icon: Icon(Icons.show_chart), label: 'Trends'),
-              NavigationDestination(
-                  icon: Icon(Icons.menu_book), label: 'Story'),
-              NavigationDestination(icon: Icon(Icons.flag), label: 'Modes'),
-            ],
-          ),
-        ),
+      bottomNavigationBar: HuxPillNavBar(
+        index: _index,
+        onSelect: _onDestinationSelected,
+        onPlus: _openQuickLog,
+        items: const [
+          HuxNavItem(Icons.home_outlined, Icons.home_rounded, 'Home'),
+          HuxNavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Coach'),
+          HuxNavItem(Icons.event_note_outlined, Icons.event_note_rounded, 'Plans'),
+          HuxNavItem(Icons.insights_outlined, Icons.insights_rounded, 'Progress'),
+        ],
       ),
     );
   }
@@ -155,10 +548,7 @@ class _AppShellState extends State<AppShell> {
 class _SourceBanner extends StatelessWidget {
   final RingDataSource source;
 
-  /// Null on every pre-auth caller/test — see [AppShell.authService].
-  final AuthService? authService;
-
-  const _SourceBanner({required this.source, this.authService});
+  const _SourceBanner({required this.source});
 
   Color get _background => switch (source) {
         RingDataSource.mock => HuxColors.demoAmber,
@@ -166,14 +556,11 @@ class _SourceBanner extends StatelessWidget {
         RingDataSource.aizoBle => HuxColors.accentPurple,
       };
 
-  // Amber is light — the dedicated on-accent ink keeps ~10:1 contrast
-  // (the app's regular ink is near-white now and would vanish on it).
-  // Blue-grey and deep teal are both dark enough (see hux_tokens.dart)
-  // that white text clears the 4.5:1 floor comfortably.
+  // Amber is light: dark ink. Blue-grey and purple are dark: white text.
   Color get _foreground => switch (source) {
-        RingDataSource.mock => HuxColors.inkOnAccent,
-        RingDataSource.health => Colors.white,
-        RingDataSource.aizoBle => Colors.white,
+        RingDataSource.mock => HuxColors.ink,
+        RingDataSource.health => HuxColors.onVivid,
+        RingDataSource.aizoBle => HuxColors.onVivid,
       };
 
   @override
@@ -181,25 +568,11 @@ class _SourceBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       color: _background,
-      padding: const EdgeInsets.symmetric(vertical: HuxSpacing.sm, horizontal: HuxSpacing.lg),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Text(
-            source.bannerText,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.bold, color: _foreground),
-          ),
-          if (authService != null)
-            Positioned(
-              right: -HuxSpacing.md,
-              child: IconButton(
-                icon: Icon(Icons.logout, color: _foreground, size: 20),
-                tooltip: 'Sign out',
-                onPressed: () => authService!.signOut(),
-              ),
-            ),
-        ],
+      padding: const EdgeInsets.symmetric(vertical: HuxSpacing.xs, horizontal: HuxSpacing.lg),
+      child: Text(
+        source.bannerText,
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700, color: _foreground),
       ),
     );
   }

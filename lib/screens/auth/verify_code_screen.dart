@@ -18,7 +18,7 @@ import 'auth_scaffold.dart';
 /// project's Auth settings — purely a countdown display, since the
 /// server is what actually enforces expiry. If that dashboard setting
 /// changes, update this to match or the countdown will mislead.
-const _codeValiditySeconds = 90;
+const _codeValiditySeconds = 900; // Supabase → Auth → Email OTP Expiration (docs/release/EMAIL_SETUP.md)
 
 class VerifyCodeScreen extends StatefulWidget {
   final AuthService authService;

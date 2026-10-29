@@ -16,8 +16,6 @@
 /// keeps its own BackdropFilter in app_shell.dart, blurring genuinely
 /// scrolling content.
 
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
 import 'hux_tokens.dart';
@@ -28,18 +26,27 @@ import 'hux_tokens.dart';
 class HuxBackground extends StatelessWidget {
   const HuxBackground({super.key});
 
+  /// Light, OxeAI-style stage: soft lavender at the top fading to the
+  /// near-white page colour, with a faint pink glow top-left.
   @override
   Widget build(BuildContext context) {
     return const DecoratedBox(
-      decoration: BoxDecoration(color: HuxColors.bg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.0, 0.45],
+          colors: [HuxColors.bgTop, HuxColors.bg],
+        ),
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(-1.2, -1.1),
-                radius: 1.4,
+                center: Alignment(-1.1, -1.05),
+                radius: 1.0,
                 colors: [HuxColors.bgGlowPink, Colors.transparent],
               ),
             ),
@@ -47,8 +54,8 @@ class HuxBackground extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(1.3, 1.2),
-                radius: 1.5,
+                center: Alignment(1.2, -0.6),
+                radius: 1.1,
                 colors: [HuxColors.bgGlowPurple, Colors.transparent],
               ),
             ),
@@ -59,28 +66,23 @@ class HuxBackground extends StatelessWidget {
   }
 }
 
-/// A liquid-glass panel: translucent white gradient fill, 1px glass
-/// stroke, a subtle top-rim highlight, and an optional colored outer
-/// glow + inner tint for accented panels (Today's state-tinted header,
-/// the active mode card). Pass [frosted] for hero panels that should
-/// carry a REAL backdrop blur — see the file-level performance note.
+/// The app's standard card: white, rounded, hairline border and a soft
+/// shadow (OxeAI-style). Kept under its old name so every screen picks
+/// up the new look without changes.
 class GlassPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
 
-  /// An optional wash blended under the glass fill (e.g. a recovery
-  /// state color at [HuxOpacity.headerWash], or the active-mode mint).
+  /// Optional wash over the white (e.g. a state colour at low alpha).
   final Color? tint;
 
-  /// An optional soft outer glow in this color — the "lit from within"
-  /// look on hero/active panels. Rendered as a BoxShadow, not a blur.
+  /// Optional coloured shadow for hero/active cards.
   final Color? glow;
 
-  /// Border override for emphasized panels (defaults to the standard
-  /// glass stroke).
+  /// Border override for emphasised cards.
   final Color? strokeColor;
 
-  /// Real backdrop blur — budgeted for hero panels only.
+  /// Ignored in the light theme (kept for API compatibility).
   final bool frosted;
 
   const GlassPanel({
@@ -96,146 +98,31 @@ class GlassPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(HuxRadii.card);
-
-    Widget body = Stack(
-      children: [
-        // Tint underlay first, glass gradient over it — a Container
-        // can't have both a color and a gradient at once.
-        if (tint != null) Positioned.fill(child: ColoredBox(color: tint!)),
-        const Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [HuxColors.glassFillTop, HuxColors.glassFillBottom],
-              ),
-            ),
-          ),
-        ),
-        // The top rim highlight — the specular edge that sells
-        // "glass" more than the fill does.
-        const Positioned(
-          top: 0,
-          left: HuxSpacing.lg,
-          right: HuxSpacing.lg,
-          child: SizedBox(
-            height: 1,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    HuxColors.glassHighlight,
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.all(color: strokeColor ?? HuxColors.glassStroke),
-          ),
-          padding: padding,
-          child: child,
-        ),
-      ],
-    );
-
-    if (frosted) {
-      body = BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: HuxGlass.panelBlurSigma,
-          sigmaY: HuxGlass.panelBlurSigma,
-        ),
-        child: body,
-      );
-    }
-
     return Container(
       decoration: BoxDecoration(
+        color: tint == null ? HuxColors.card : Color.alphaBlend(tint!, HuxColors.card),
         borderRadius: radius,
-        boxShadow: glow == null
-            ? null
-            : [
-                BoxShadow(
-                  color: glow!.withValues(alpha: HuxOpacity.panelGlow),
-                  blurRadius: HuxGlass.glowBlurRadius,
-                  spreadRadius: HuxGlass.glowSpread,
-                ),
-              ],
+        border: Border.all(color: strokeColor ?? HuxColors.glassStroke),
+        boxShadow: [
+          BoxShadow(
+            color: glow == null ? HuxColors.shadow : glow!.withValues(alpha: 0.18),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: ClipRRect(borderRadius: radius, child: body),
+      padding: padding,
+      child: child,
     );
   }
 }
 
-/// A cheap, decorative "glass" sheen for the SOLID vivid cards
-/// (hux_cards.dart / hux_vivid_cards.dart / the Modes image cards) —
-/// a soft DIAGONAL highlight fading from the top-left corner, plus the
-/// same specular top-rim line [GlassPanel] uses, layered over a solid
-/// or gradient fill. Deliberately a diagonal wash rather than the
-/// first cut's tight circular spotlight — a distinct round "blob" read
-/// as an odd smudge, especially over a busy photo; a soft directional
-/// sheen reads as light catching an angled edge instead, the way real
-/// glass actually does. NOT real glass (no BackdropFilter, no actual
-/// translucency) — just enough of a cue at near-zero GPU cost.
-/// Purely decorative: wrapped in [IgnorePointer] so it never steals a
-/// tap or a hover from the card underneath.
 class HuxGlassCorner extends StatelessWidget {
   final BorderRadius borderRadius;
 
   const HuxGlassCorner({super.key, this.borderRadius = const BorderRadius.all(Radius.circular(HuxRadii.vividCard))});
 
+  /// No sheen in the light theme; kept so existing call sites compile.
   @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      stops: const [0.0, 0.32],
-                      colors: [
-                        HuxColors.glassHighlight.withValues(alpha: HuxOpacity.glassCornerSheen),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                left: HuxSpacing.lg,
-                right: HuxSpacing.lg,
-                child: SizedBox(
-                  height: 1,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          HuxColors.glassHighlight.withValues(alpha: HuxOpacity.glassCornerRim),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

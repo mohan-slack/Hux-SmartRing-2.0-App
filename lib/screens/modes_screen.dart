@@ -10,7 +10,9 @@ import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
+import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
+import '../theme/hux_ui.dart';
 
 String modeName(ModeId id) => switch (id) {
       ModeId.bigDay => 'Big Day',
@@ -275,6 +277,7 @@ class _ModesScreenState extends State<ModesScreen> {
                 children: [
                   if (data.nightShift != null)
                     InputChip(
+                      avatar: const Icon(Icons.bedtime, size: 16, color: HuxColors.accentIndigo),
                       label: const Text('Night shift'),
                       onDeleted: _endNightShift,
                     ),
@@ -287,12 +290,11 @@ class _ModesScreenState extends State<ModesScreen> {
               ),
               const SizedBox(height: HuxSpacing.xl),
             ],
-            Text('Modes', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: HuxSpacing.xs),
+            const HuxSectionTitle('Modes', icon: Icons.flag_rounded),
             Text(
               'Aim HUX at a life moment — a target date with coaching '
               'that builds toward it.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: HuxColors.mutedText),
             ),
             const SizedBox(height: HuxSpacing.lg),
             for (final (i, id) in ModeId.values.indexed)
@@ -307,12 +309,11 @@ class _ModesScreenState extends State<ModesScreen> {
                 ),
               ),
             const SizedBox(height: HuxSpacing.xl),
-            Text('Lifestyle', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: HuxSpacing.xs),
+            const HuxSectionTitle('Lifestyle', icon: Icons.self_improvement_rounded, iconColor: HuxColors.accentIndigo),
             Text(
               'How you live day to day — changes the app\'s voice and '
               'advice while active, no target date to count down to.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: HuxColors.mutedText),
             ),
             const SizedBox(height: HuxSpacing.lg),
             HuxEntrance(
@@ -369,65 +370,19 @@ class _ActiveModeCard extends StatelessWidget {
             ? "It's today"
             : 'Wrapping up';
 
-    // The active mode is the page's lit-up hero: mint-tinted glass
-    // with the mint outer glow.
-    return GlassPanel(
-      frosted: true,
-      tint: HuxColors.accentPink.withValues(alpha: HuxOpacity.activeCardWash),
-      glow: HuxColors.accentPink,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _AccentIconChip(icon: _modeIcon(config.id)),
-          const SizedBox(width: HuxSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Active: ${modeName(config.id)}'
-                  '${config.label != null ? ' — ${config.label}' : ''}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: HuxSpacing.xs),
-                Text(countdown, style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: HuxSpacing.md),
-                OutlinedButton(onPressed: onEnd, child: const Text('End mode')),
-              ],
-            ),
-          ),
-        ],
+    // The active mode is the page's lit-up hero card.
+    return HuxHeroCard(
+      icon: _modeIcon(config.id),
+      color: HuxColors.accentPink,
+      eyebrow: 'Running now',
+      title: 'Active: ${modeName(config.id)}'
+          '${config.label != null ? ' — ${config.label}' : ''}',
+      subtitle: countdown,
+      child: OutlinedButton.icon(
+        onPressed: onEnd,
+        icon: const Icon(Icons.stop_circle_outlined),
+        label: const Text('End mode'),
       ),
-    );
-  }
-}
-
-/// The shared accent treatment for a mode/lifestyle icon — one
-/// consistent brand accent (glowing mint backdrop, bright-teal glyph),
-/// not a different invented color per mode. See [HuxModeAccent].
-class _AccentIconChip extends StatelessWidget {
-  final IconData icon;
-
-  const _AccentIconChip({required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: huxMinTapTarget,
-      height: huxMinTapTarget,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: HuxModeAccent.background.withValues(alpha: HuxOpacity.iconChip),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color:
-                HuxModeAccent.background.withValues(alpha: HuxOpacity.iconChip),
-            blurRadius: HuxSpacing.lg,
-          ),
-        ],
-      ),
-      child: Icon(icon, color: HuxModeAccent.foreground),
     );
   }
 }
@@ -564,7 +519,7 @@ class _ModeImageCard extends StatelessWidget {
                           color: accentColor.withValues(alpha: HuxOpacity.modeIconChipBg),
                           border: Border.all(color: accentColor, width: 1),
                         ),
-                        child: Icon(icon, color: HuxColors.ink, size: 20),
+                        child: Icon(icon, color: HuxColors.onVivid, size: 20),
                       ),
                     ),
                     if (isActive)
@@ -601,7 +556,7 @@ class _ModeImageCard extends StatelessWidget {
                         children: [
                           Text(title,
                               style: textTheme.titleMedium?.copyWith(
-                                color: HuxColors.ink,
+                                color: HuxColors.onVivid,
                                 fontWeight: FontWeight.w600,
                               )),
                           const SizedBox(height: 2),
@@ -609,7 +564,7 @@ class _ModeImageCard extends StatelessWidget {
                             description,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: textTheme.bodySmall?.copyWith(color: HuxColors.ink.withValues(alpha: 0.85)),
+                            style: textTheme.bodySmall?.copyWith(color: HuxColors.onVivid.withValues(alpha: 0.85)),
                           ),
                         ],
                       ),
@@ -819,7 +774,8 @@ class _FastingSetupSheetState extends State<_FastingSetupSheet> {
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: HuxSpacing.lg),
             DropdownButtonFormField<FastType>(
-              value: _type,
+              // _type is set in initState and only changed by onChanged.
+              initialValue: _type,
               decoration: const InputDecoration(labelText: 'Which fast'),
               items: [
                 for (final type in FastType.values)

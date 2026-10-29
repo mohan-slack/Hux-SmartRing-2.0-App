@@ -105,11 +105,13 @@ class HealthStoreRingAdapter implements RingAdapter {
   @override
   Future<RingInfo> connect({Duration timeout = const Duration(seconds: 30)}) async {
     _setState(RingConnectionState.scanning);
-    await _health.configure();
-    _setState(RingConnectionState.connecting);
 
     bool granted;
     try {
+      // Inside the try: a configure() failure must surface as a
+      // RingConnectionException like any other "can't reach health app".
+      await _health.configure();
+      _setState(RingConnectionState.connecting);
       granted = await _health.requestAuthorization(_readTypes);
     } catch (_) {
       _setState(RingConnectionState.disconnected);

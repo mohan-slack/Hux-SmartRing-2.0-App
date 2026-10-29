@@ -7,6 +7,9 @@
 /// names a disease, or alarms. Worst-case wording is "your body is
 /// working harder than usual" — never "you might be sick."
 
+import 'day_plan.dart';
+import 'hux_charge.dart';
+
 /// How today is read, relative to the user's OWN baseline.
 /// [learning] means the baseline itself is insufficient (< 3 days of
 /// history) — there is no reading to give yet, just an honest state.
@@ -49,6 +52,13 @@ class DailyReadout {
   /// opens. Null when today has no heart-rate readings yet.
   final int? currentHeartRateBpm;
 
+  /// The 1–100 HUX Charge (see hux_charge.dart). Null only when no
+  /// calculator ran (e.g. tests building a readout by hand).
+  final HuxCharge? charge;
+
+  /// Today's effort + tonight's target bedtime (see day_plan.dart).
+  final DayPlan? plan;
+
   const DailyReadout({
     required this.date,
     required this.state,
@@ -59,7 +69,24 @@ class DailyReadout {
     this.stressIndex,
     this.activeEnergyKcal,
     this.currentHeartRateBpm,
+    this.charge,
+    this.plan,
   });
+
+  /// Same readout with [charge] (and optionally [plan]) attached.
+  DailyReadout withCharge(HuxCharge? charge, {DayPlan? plan}) => DailyReadout(
+        date: date,
+        state: state,
+        headline: headline,
+        meaning: meaning,
+        actions: actions,
+        dataQuality: dataQuality,
+        stressIndex: stressIndex,
+        activeEnergyKcal: activeEnergyKcal,
+        currentHeartRateBpm: currentHeartRateBpm,
+        charge: charge,
+        plan: plan,
+      );
 
   /// The "still learning your body" readout shown while the baseline
   /// is being established. Not an error state — a normal early-days one.

@@ -20,7 +20,7 @@ import 'hux_tokens.dart';
 ThemeData buildHuxTheme() {
   final colorScheme = ColorScheme.fromSeed(
     seedColor: HuxColors.accentPurple,
-    brightness: Brightness.dark,
+    brightness: Brightness.light,
   ).copyWith(
     primary: HuxColors.accentPink,
     onPrimary: HuxColors.inkOnAccent,
@@ -49,10 +49,19 @@ ThemeData buildHuxTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: Brightness.light,
     scaffoldBackgroundColor: HuxColors.bg,
     colorScheme: colorScheme,
     textTheme: textTheme,
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      foregroundColor: HuxColors.ink,
+      centerTitle: false,
+      titleTextStyle: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+    ),
     dividerColor: HuxColors.hairline,
     dividerTheme: const DividerThemeData(
       color: HuxColors.hairline,
@@ -63,7 +72,7 @@ ThemeData buildHuxTheme() {
     // fill + glass stroke over the dark stage. Hero panels that want
     // the highlight/glow treatment use GlassPanel instead.
     cardTheme: CardThemeData(
-      color: HuxColors.glassFillBottom,
+      color: HuxColors.card,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
@@ -72,7 +81,7 @@ ThemeData buildHuxTheme() {
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: HuxColors.glassFillTop,
+      backgroundColor: HuxColors.cardElevated,
       selectedColor: _overCard(HuxColors.accentPink, HuxOpacity.activeCardWash),
       side: const BorderSide(color: HuxColors.glassStroke),
       labelStyle: textTheme.labelLarge?.copyWith(color: HuxColors.ink),
@@ -109,7 +118,7 @@ ThemeData buildHuxTheme() {
         backgroundColor: WidgetStateProperty.resolveWith((states) {
           return states.contains(WidgetState.selected)
               ? HuxColors.accentPink
-              : HuxColors.glassFillTop;
+              : HuxColors.card;
         }),
         foregroundColor: WidgetStateProperty.resolveWith((states) {
           return states.contains(WidgetState.selected)
@@ -123,9 +132,9 @@ ThemeData buildHuxTheme() {
       ),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: HuxColors.cardElevated,
-      contentTextStyle: textTheme.bodyMedium?.copyWith(color: HuxColors.ink),
-      actionTextColor: HuxColors.accentPink,
+      backgroundColor: HuxColors.ink,
+      contentTextStyle: textTheme.bodyMedium?.copyWith(color: HuxColors.onVivid),
+      actionTextColor: HuxColors.bgTop,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HuxSpacing.sm),
@@ -145,10 +154,19 @@ ThemeData buildHuxTheme() {
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: HuxColors.card,
+      dragHandleColor: HuxColors.glassStroke,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(HuxRadii.card)),
       ),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? HuxColors.onVivid : HuxColors.mutedText),
+      trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? HuxColors.accentPurple : HuxColors.cardElevated),
+      trackOutlineColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? HuxColors.accentPurple : HuxColors.glassStroke),
     ),
     listTileTheme: const ListTileThemeData(
       textColor: HuxColors.ink,
@@ -157,18 +175,18 @@ ThemeData buildHuxTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: HuxColors.glassFillBottom,
+      fillColor: HuxColors.card,
       labelStyle: textTheme.bodyMedium?.copyWith(color: HuxColors.mutedText),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(HuxSpacing.sm),
+        borderRadius: BorderRadius.circular(HuxSpacing.md),
         borderSide: const BorderSide(color: HuxColors.glassStroke),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(HuxSpacing.sm),
+        borderRadius: BorderRadius.circular(HuxSpacing.md),
         borderSide: const BorderSide(color: HuxColors.glassStroke),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(HuxSpacing.sm),
+        borderRadius: BorderRadius.circular(HuxSpacing.md),
         borderSide: const BorderSide(color: HuxColors.accentPink),
       ),
     ),
@@ -176,7 +194,7 @@ ThemeData buildHuxTheme() {
       style: FilledButton.styleFrom(
         backgroundColor: HuxColors.accentPink,
         foregroundColor: HuxColors.inkOnAccent,
-        disabledBackgroundColor: HuxColors.glassFillTop,
+        disabledBackgroundColor: HuxColors.hairline,
         disabledForegroundColor: HuxColors.mutedText,
         minimumSize: const Size(0, huxMinTapTarget),
         shape: RoundedRectangleBorder(

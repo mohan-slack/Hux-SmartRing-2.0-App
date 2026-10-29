@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/hux_glass.dart';
 import '../../theme/hux_tokens.dart';
 
 class AuthScaffold extends StatelessWidget {
@@ -22,7 +23,14 @@ class AuthScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(), // back arrow on pushed auth screens
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const HuxBackground(),
+          SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(HuxSpacing.xl, HuxSpacing.xxl, HuxSpacing.xl, HuxSpacing.xl),
           child: Column(
@@ -32,15 +40,15 @@ class AuthScaffold extends StatelessWidget {
                 width: double.infinity,
                 child: Center(
                   child: Image.asset(
-                    'assets/images/brand/hux-wordmark-white.png',
-                    height: 22,
+                    'assets/images/brand/hux-wordmark-dark.png',
+                    height: 28,
                     fit: BoxFit.contain,
                     semanticLabel: 'HUX',
                   ),
                 ),
               ),
               const SizedBox(height: HuxSpacing.xl),
-              Text(headline, style: Theme.of(context).textTheme.headlineLarge),
+              Text(headline, style: Theme.of(context).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: HuxSpacing.sm),
               Text(subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: HuxColors.mutedText)),
               const SizedBox(height: HuxSpacing.xxl),
@@ -48,6 +56,8 @@ class AuthScaffold extends StatelessWidget {
             ],
           ),
         ),
+          ),
+        ],
       ),
     );
   }

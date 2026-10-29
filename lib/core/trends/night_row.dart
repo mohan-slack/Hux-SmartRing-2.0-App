@@ -50,6 +50,18 @@ class NightRow {
 /// bedtime date. A day with no matching session still gets a row —
 /// with every field null.
 ///
+/// Days are the user's LOCAL calendar days (an IST user's 00:00–05:30
+/// must not land on the previous UTC day). [utcOffset] overrides the
+/// device's own offset — tests pin it so they pass in any timezone.
+/// Row keys stay `DateTime.utc(y, m, d)` purely as date labels.
+///
+/// A bedtime before [nightCutoffHour] (06:00 local) belongs to the
+/// PREVIOUS night: falling asleep at 00:30 is still "Monday night".
+/// When two sessions share a night (a nap), the longest one wins.
+///
+/// If [to] is part-way through a day (e.g. "now"), that day is included,
+/// so today's row is never dropped.
+///
 /// [snapshots] is optional (defaults to none, matching every pre-
 /// existing caller) — when supplied, each row's daytime fields
 /// ([NightRow.avgStressIndex], [NightRow.activeEnergyKcal]) are
@@ -60,18 +72,22 @@ List<NightRow> buildNightRows({
   required DateTime to,
   required List<SleepSession> sessions,
   List<HealthSnapshot> snapshots = const [],
+  Duration? utcOffset,
 }) {
   final byNight = <DateTime, SleepSession>{};
   for (final session in sessions) {
-    final bedtime = session.bedtime.toUtc();
-    final night = DateTime.utc(bedtime.year, bedtime.month, bedtime.day);
-    byNight[night] = session;
+    final shifted = _toLocalWallClock(session.bedtime, utcOffset)
+        .subtract(const Duration(hours: nightCutoffHour));
+    final night = _dateKey(shifted);
+    final existing = byNight[night];
+    if (existing == null || session.totalSleep > existing.totalSleep) {
+      byNight[night] = session;
+    }
   }
 
   final byDay = <DateTime, List<HealthSnapshot>>{};
   for (final snapshot in snapshots) {
-    final ts = snapshot.timestamp.toUtc();
-    final day = DateTime.utc(ts.year, ts.month, ts.day);
+    final day = _dateKey(_toLocalWallClock(snapshot.timestamp, utcOffset));
     byDay.putIfAbsent(day, () => []).add(snapshot);
   }
 
@@ -89,8 +105,15 @@ List<NightRow> buildNightRows({
     return values.reduce((a, b) => a > b ? a : b).toDouble();
   }
 
-  final start = DateTime.utc(from.year, from.month, from.day);
-  final end = DateTime.utc(to.year, to.month, to.day);
+  final start = _dateKey(_toLocalWallClock(from, utcOffset));
+  final toLocal = _toLocalWallClock(to, utcOffset);
+  final toDay = _dateKey(toLocal);
+  final toIsMidnight = toLocal.hour == 0 &&
+      toLocal.minute == 0 &&
+      toLocal.second == 0 &&
+      toLocal.millisecond == 0 &&
+      toLocal.microsecond == 0;
+  final end = toIsMidnight ? toDay : toDay.add(const Duration(days: 1));
 
   final rows = <NightRow>[];
   for (var day = start; day.isBefore(end); day = day.add(const Duration(days: 1))) {
@@ -153,3 +176,29 @@ List<List<MapEntry<int, double>>> contiguousRuns(List<double?> values) {
   }
   return runs;
 }
+
+/// A bedtime earlier than this local hour counts toward the previous
+/// night (see [buildNightRows]).
+const nightCutoffHour = 6;
+
+/// [t] as local wall-clock fields: the device's zone, or UTC + [offset].
+/// The result is only read for its fields (year..microsecond), never
+/// compared as an instant.
+DateTime _toLocalWallClock(DateTime t, Duration? offset) =>
+    offset == null ? t.toLocal() : t.toUtc().add(offset);
+
+DateTime _dateKey(DateTime wallClock) =>
+    DateTime.utc(wallClock.year, wallClock.month, wallClock.day);
+
+/// Which night (as a `DateTime.utc(y, m, d)` date label) a sleep with
+/// this [bedtime] belongs to — same rule as [buildNightRows]: local
+/// calendar day, and a bedtime before [nightCutoffHour] counts as the
+/// previous night. Shared so the journal matches "Monday's chai" to
+/// "Monday night" exactly the way Trends does.
+DateTime nightKeyFor(DateTime bedtime, {Duration? utcOffset}) => _dateKey(
+    _toLocalWallClock(bedtime, utcOffset)
+        .subtract(const Duration(hours: nightCutoffHour)));
+
+/// The local calendar day of [t] as a `DateTime.utc(y, m, d)` label.
+DateTime localDayKey(DateTime t, {Duration? utcOffset}) =>
+    _dateKey(_toLocalWallClock(t, utcOffset));

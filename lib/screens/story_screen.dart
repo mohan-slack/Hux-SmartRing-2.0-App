@@ -7,9 +7,11 @@
 import 'package:flutter/material.dart';
 
 import '../core/meaning/weekly_story.dart';
-import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
+import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
+import '../theme/hux_ui.dart';
+import '../widgets/wellness_note.dart';
 
 class StoryScreen extends StatefulWidget {
   final WeeklyStoryService storyService;
@@ -78,24 +80,29 @@ class _StoryBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      // Bottom clearance: content scrolls behind the glass nav bar.
+      // Bottom clearance: content scrolls behind the floating nav bar.
       padding: const EdgeInsets.fromLTRB(
           HuxSpacing.lg, HuxSpacing.lg, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
         HuxEntrance(
-          child: Text(story.title,
-              style: Theme.of(context).textTheme.headlineSmall),
+          child: HuxHeroCard(
+            icon: Icons.auto_stories_rounded,
+            color: HuxColors.accentPurple,
+            eyebrow: 'Your week',
+            title: story.title,
+          ),
         ),
         const SizedBox(height: HuxSpacing.lg),
         HuxEntrance(
           index: 1,
           child: _Observations(observations: story.observations),
         ),
-        const SizedBox(height: HuxSpacing.lg),
+        const SizedBox(height: HuxSpacing.md),
         HuxEntrance(
           index: 2,
           child: _Suggestion(suggestion: story.suggestion),
         ),
+        const WellnessNote(),
       ],
     );
   }
@@ -106,54 +113,54 @@ class _Observations extends StatelessWidget {
 
   const _Observations({required this.observations});
 
+  static const _colors = [HuxColors.ringSleep, HuxColors.ringCharge, HuxColors.ringSteps, HuxColors.ringFood];
+
   @override
   Widget build(BuildContext context) {
-    final bodyStyle = Theme.of(context).textTheme.bodyLarge;
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium;
     if (observations.isEmpty) {
-      return Text(
-        "Nothing to compare yet — check back once you've logged a bit "
-        'more.',
-        style: bodyStyle,
+      return const HuxEmptyState(
+        icon: Icons.hourglass_empty_rounded,
+        color: HuxColors.accentPurple,
+        title: "Nothing to compare yet — check back once you've logged a bit more.",
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final observation in observations)
-          Padding(
-            padding: const EdgeInsets.only(bottom: HuxSpacing.md),
-            child: Text(observation, style: bodyStyle),
-          ),
-      ],
+    return HuxCard(
+      padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.md, vertical: HuxSpacing.xs),
+      child: Column(
+        children: [
+          for (var i = 0; i < observations.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: HuxColors.hairline),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: HuxSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HuxIconBadge(icon: Icons.insights_rounded, color: _colors[i % _colors.length], size: 36),
+                  const SizedBox(width: HuxSpacing.md),
+                  Expanded(child: Text(observations[i], style: bodyStyle)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-/// "For next week" — a distinct glowing glass card, not just another
-/// paragraph: this is the one concrete thing to act on, so it reads
-/// as the lit-up takeaway at the end of the story.
+/// "For next week" — the one concrete thing to act on, so it gets the
+/// tinted hero treatment rather than reading as another paragraph.
 class _Suggestion extends StatelessWidget {
   final String suggestion;
 
   const _Suggestion({required this.suggestion});
 
   @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return GlassPanel(
-      frosted: true,
-      tint: HuxColors.accentPink.withValues(alpha: HuxOpacity.activeCardWash),
-      glow: HuxColors.accentPink,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('For next week',
-              style: textTheme.labelLarge
-                  ?.copyWith(color: HuxModeAccent.background)),
-          const SizedBox(height: HuxSpacing.sm),
-          Text(suggestion, style: textTheme.bodyMedium),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => HuxHeroCard(
+        icon: Icons.lightbulb_rounded,
+        color: HuxColors.accentPink,
+        eyebrow: 'For next week',
+        title: suggestion,
+      );
 }

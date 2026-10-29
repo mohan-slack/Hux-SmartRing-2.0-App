@@ -151,8 +151,9 @@ class WeeklyStoryService {
     final maxStepsByDay = <DateTime, int>{};
     for (final s in snapshots) {
       if (s.steps == null) continue;
-      final utc = s.timestamp.toUtc();
-      final day = DateTime.utc(utc.year, utc.month, utc.day);
+      // Local day: phones reset the daily step count at LOCAL midnight.
+      final local = s.timestamp.toLocal();
+      final day = DateTime.utc(local.year, local.month, local.day);
       final current = maxStepsByDay[day] ?? 0;
       if (s.steps! > current) maxStepsByDay[day] = s.steps!;
     }

@@ -30,86 +30,86 @@ class HuxColors {
   /// App background — near-black, not charcoal-grey: the vivid cards
   /// are the light sources now, so the stage recedes further than the
   /// first (glass) pass needed it to.
-  static const bg = Color(0xFF0A0A0D);
+  static const bg = Color(0xFFF6F4FA);
 
   /// Elevated OPAQUE surface: dialogs, sheets, pickers, snackbars, and
   /// any card not yet repainted to a bespoke gradient (see
   /// [accentIndigo]'s doc comment for which Today/Modes cards use one).
-  static const card = Color(0xFF17161C);
+  static const card = Color(0xFFFFFFFF);
 
   /// A step above [card] for the snackbar, so it reads as floating.
-  static const cardElevated = Color(0xFF201F27);
+  static const cardElevated = Color(0xFFF1EEF7);
 
   // ---- text -----------------------------------------------------------
   /// Primary text — near-white with a faint warm/violet cast to match
   /// the new palette. ~17:1 on [bg].
-  static const ink = Color(0xFFF3F1F6);
+  static const ink = Color(0xFF1B1925);
 
   /// Secondary text — ~7.5:1 on [bg].
-  static const mutedText = Color(0xFF9C97A8);
+  static const mutedText = Color(0xFF6E6A7C);
 
   /// Text ON a bright accent fill (Hot Pink buttons, the amber banner):
   /// a near-black ink of its own, kept for exactly this job.
-  static const inkOnAccent = Color(0xFF1A0E17);
+  static const inkOnAccent = Color(0xFFFFFFFF);
 
   // ---- brand accents ---------------------------------------------------
   /// The hero accent — Hot Pink. Glows on dark, readable AS text on
   /// [bg] (~5.2:1 — large numerals/labels only, not fine print; see
   /// [accentCherry] for a slightly higher-contrast alternative where
   /// body-sized text needs it).
-  static const accentPink = Color(0xFFF567B5);
+  static const accentPink = Color(0xFFC93B86);
 
   /// Cherry — a saturated red-orange, the app's second bright accent
   /// (glyphs/labels/lines, ~6.8:1 on [bg]).
-  static const accentCherry = Color(0xFFFF6A4D);
+  static const accentCherry = Color(0xFFE8573B);
 
   /// Solid Purple — depth end of the Hot-Pink gradient family; fills
   /// and gradient ends only, too dim to read as text on dark.
-  static const accentPurple = Color(0xFF622585);
+  static const accentPurple = Color(0xFF6B2E9A);
 
   /// Athens Indigo — the palette's fourth color, reserved for
   /// device/connectivity-themed surfaces (Battery, Test Ring) per its
   /// literal signal-wave motif in the reference design. Fills and
   /// glows only, same too-dim-for-text role as [accentPurple].
-  static const accentIndigo = Color(0xFF182788);
+  static const accentIndigo = Color(0xFF4453D6);
 
   // ---- glass (kept for surfaces not yet repainted — see file header) -----
   /// Translucent white layers that make a surface read as glass over
   /// the dark stage. Pre-baked alphas (not `withValues` at call sites)
   /// so "how glassy" stays a single tunable per role.
-  static const glassFillTop = Color(0x1FFFFFFF); // white 12% — panel top
-  static const glassFillBottom = Color(0x0DFFFFFF); // white 5% — panel base
-  static const glassStroke = Color(0x2EFFFFFF); // white 18% — 1px border
-  static const glassHighlight = Color(0x73FFFFFF); // white 45% — top rim
+  static const glassFillTop = Color(0xFFFFFFFF);
+  static const glassFillBottom = Color(0xFFFFFFFF);
+  static const glassStroke = Color(0xFFE8E5EF);
+  static const glassHighlight = Color(0xFFFFFFFF);
 
   /// Hairline for dividers/tracks on dark — white 10%.
-  static const hairline = Color(0x1AFFFFFF);
+  static const hairline = Color(0xFFECE9F2);
 
   /// Faint full-height slot track behind chart bars — white 7%.
-  static const chartTrack = Color(0x12FFFFFF);
+  static const chartTrack = Color(0xFFECE9F2);
 
   /// The "misty" grey bars on the sleep chart (every night EXCEPT the
   /// highlighted latest one, per the analytics-card reference): lit at
   /// the top, fading toward the base.
-  static const chartBarGreyTop = Color(0x61FFFFFF); // white 38%
-  static const chartBarGreyBottom = Color(0x24FFFFFF); // white 14%
+  static const chartBarGreyTop = Color(0xFFC9C5D3);
+  static const chartBarGreyBottom = Color(0xFFE6E3EC);
 
   // ---- background glows --------------------------------------------------
   /// The two soft radial glows painted once behind the whole app
   /// (see HuxBackground) — pink top-left, purple bottom-right.
-  static const bgGlowPink = Color(0x24F567B5); // pink 14%
-  static const bgGlowPurple = Color(0x33622585); // purple 20%
+  static const bgGlowPink = Color(0x33F7B6D9); // pink 14%
+  static const bgGlowPurple = Color(0x40C9B8F5); // purple 20%
 
   // ---- recovery states (dot, header glow, chart accents) -----------------
   /// A SEPARATE semantic system from the brand accents above — these
   /// read as a wellness traffic-light (good/neutral/caution), which the
   /// brand palette doesn't attempt to encode. Unchanged across both
   /// design passes on purpose.
-  static const recharged = Color(0xFF3FBF78);
-  static const steady = Color(0xFF2DD4BF);
-  static const stretched = Color(0xFFF5A524);
-  static const rundown = Color(0xFFF0705F);
-  static const learning = Color(0xFF8A9490);
+  static const recharged = Color(0xFF1FA463);
+  static const steady = Color(0xFF0E9F9A);
+  static const stretched = Color(0xFFD98400);
+  static const rundown = Color(0xFFDE4C36);
+  static const learning = Color(0xFF8C8F99);
 
   // ---- source banners (meaning unchanged — these stay SOLID) -------------
   /// DEMO — simulated ring data. [inkOnAccent] text on this is ~10:1.
@@ -141,6 +141,24 @@ class HuxColors {
   static const vividSleepRem = Color(0xFFF567B5);
   static const vividSleepDeep = Color(0xFF9B3FA8);
 
+  // ---- light UI (OxeAI-style) additions ---------------------------------
+  /// Text/icons on dark photos and vivid gradient cards (always white).
+  static const onVivid = Color(0xFFFFFFFF);
+
+  /// Soft card shadow on the light background.
+  static const shadow = Color(0x141E1640);
+
+  /// Score-ring colours (Home): charge, sleep, steps, heart.
+  static const ringCharge = Color(0xFFC93B86);
+  static const ringSleep = Color(0xFF5B6CF0);
+  static const ringSteps = Color(0xFFF28C28);
+  static const ringHeart = Color(0xFFE5484D);
+  static const ringFood = Color(0xFF2FAE5B);
+  static const ringHabit = Color(0xFFE9B400);
+
+  /// Top of the page background gradient (soft lavender).
+  static const bgTop = Color(0xFFEDE7FB);
+
   // ---- Modes/Lifestyle image cards (modes_screen.dart) -------------------
   /// The bottom-scrim end color on a photo mode card — [bg] at ~80%,
   /// not pure black, so the scrim reads as "this app's dark" rather
@@ -151,7 +169,7 @@ class HuxColors {
 class HuxRadii {
   const HuxRadii._();
 
-  static const card = 20.0;
+  static const card = 22.0;
   static const chip = 999.0;
 
   /// The Today-screen vivid highlight cards read as bolder/chunkier than

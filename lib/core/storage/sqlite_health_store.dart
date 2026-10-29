@@ -148,26 +148,41 @@ class SqliteHealthStore implements HealthStore {
   @override
   Future<int> saveSnapshots(List<HealthSnapshot> snapshots) async {
     if (snapshots.isEmpty) return 0;
+    // Merge per column, don't replace the whole row: a re-fetched
+    // overlap bucket that is missing a metric must not blank out a value
+    // already stored. A NEW non-null value still wins (the ring is the
+    // source of truth). Two statements instead of SQLite UPSERT because
+    // UPSERT needs SQLite 3.24+, newer than Android 8-10 ship.
     final batch = _db.batch();
     for (final s in snapshots) {
-      batch.insert(
-        'snapshots',
-        {
-          'ts': s.timestamp.toUtc().millisecondsSinceEpoch,
-          'hr': s.heartRateBpm,
-          'hrv': s.hrvMs,
-          'spo2': s.spo2Percent,
-          'temp': s.skinTempCelsius,
-          'steps': s.steps,
-          'resp_rate': s.respiratoryRateBrpm,
-          'active_kcal': s.activeEnergyKcal,
-          'stress': s.stressIndex,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      final ts = s.timestamp.toUtc().millisecondsSinceEpoch;
+      batch.insert('snapshots', {'ts': ts},
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+      batch.rawUpdate('''
+        UPDATE snapshots SET
+          hr = COALESCE(?, hr),
+          hrv = COALESCE(?, hrv),
+          spo2 = COALESCE(?, spo2),
+          temp = COALESCE(?, temp),
+          steps = COALESCE(?, steps),
+          resp_rate = COALESCE(?, resp_rate),
+          active_kcal = COALESCE(?, active_kcal),
+          stress = COALESCE(?, stress)
+        WHERE ts = ?
+      ''', [
+        s.heartRateBpm,
+        s.hrvMs,
+        s.spo2Percent,
+        s.skinTempCelsius,
+        s.steps,
+        s.respiratoryRateBrpm,
+        s.activeEnergyKcal,
+        s.stressIndex,
+        ts,
+      ]);
     }
-    final results = await batch.commit(noResult: false);
-    return results.length;
+    await batch.commit(noResult: true);
+    return snapshots.length;
   }
 
   HealthSnapshot _snapshotFromRow(Map<String, Object?> r) => HealthSnapshot(
@@ -213,11 +228,16 @@ class SqliteHealthStore implements HealthStore {
     await _db.transaction((txn) async {
       for (final session in sessions) {
         final bedtimeMs = session.bedtime.toUtc().millisecondsSinceEpoch;
+        final wakeMs = session.wakeTime.toUtc().millisecondsSinceEpoch;
 
-        // Replace-by-bedtime: remove any previous version of this night.
-        // Segments cascade-delete via the foreign key.
+        // Replace any stored session that OVERLAPS this one in time, not
+        // just one with the identical bedtime: a night first synced
+        // mid-sleep is stored partially, then re-fetched whole with a
+        // different start. Matching only on bedtime kept both as two
+        // "nights". Segments cascade-delete via the foreign key.
         await txn.delete('sleep_sessions',
-            where: 'bedtime = ?', whereArgs: [bedtimeMs]);
+            where: 'bedtime = ? OR (bedtime < ? AND wake_time > ?)',
+            whereArgs: [bedtimeMs, wakeMs, bedtimeMs]);
 
         final sessionId = await txn.insert('sleep_sessions', {
           'bedtime': bedtimeMs,
@@ -330,6 +350,58 @@ class SqliteHealthStore implements HealthStore {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  // ---- data owner (shared-device privacy) ---------------------------
+
+  static const _ownerKey = 'data_owner_id';
+
+  @override
+  Future<String?> dataOwnerId() async {
+    final rows =
+        await _db.query('meta', where: 'key = ?', whereArgs: [_ownerKey]);
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String;
+  }
+
+  @override
+  Future<void> setDataOwnerId(String userId) async {
+    await _db.insert(
+      'meta',
+      {'key': _ownerKey, 'value': userId},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // ---- generic settings ---------------------------------------------
+
+  // Prefixed so a setting can never collide with the watermark/owner
+  // keys that share the meta table.
+  static String _settingKey(String key) => 'setting:$key';
+
+  @override
+  Future<String?> readSetting(String key) async {
+    final rows = await _db
+        .query('meta', where: 'key = ?', whereArgs: [_settingKey(key)]);
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String;
+  }
+
+  @override
+  Future<void> writeSetting(String key, String value) async {
+    await _db.insert(
+      'meta',
+      {'key': _settingKey(key), 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  @override
+  Future<Map<String, String>> allSettings() async {
+    final rows = await _db.query('meta', where: 'key LIKE ?', whereArgs: ['setting:%']);
+    return {
+      for (final r in rows) (r['key'] as String).substring('setting:'.length): r['value'] as String,
+    };
   }
 
   // ---- event modes ---------------------------------------------------

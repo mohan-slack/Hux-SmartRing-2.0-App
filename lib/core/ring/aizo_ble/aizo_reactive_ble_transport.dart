@@ -69,6 +69,8 @@ class AizoReactiveBleTransport implements AizoBleTransport {
     // subscribed for the ring to stay connected; cancelling it (in
     // disconnect()) is how we disconnect.
     final connected = Completer<void>();
+    // Never stack connection streams: drop any previous one first.
+    await _connectionSub?.cancel();
     _connectionSub = _ble
         .connectToDevice(id: deviceId, connectionTimeout: timeout)
         .listen(
@@ -121,6 +123,8 @@ class AizoReactiveBleTransport implements AizoBleTransport {
       deviceId: deviceId,
     );
 
+    // Never stack notify subscriptions across reconnects.
+    await _notifySub?.cancel();
     _notifySub = _ble.subscribeToCharacteristic(notifyChar).listen(
       (bytes) => _notificationsController.add(Uint8List.fromList(bytes)),
       onError: (Object _, StackTrace __) {

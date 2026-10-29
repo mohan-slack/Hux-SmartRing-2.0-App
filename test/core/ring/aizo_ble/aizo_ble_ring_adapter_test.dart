@@ -129,6 +129,55 @@ void main() {
     });
   });
 
+  group('connection lifecycle (review fixes)', () {
+    test('connect() while already connected reuses the link: no rescan, no extra writes', () async {
+      transport.queueResponse(_batteryFrame(50));
+      await adapter.connect();
+      final framesAfterFirst = transport.writtenFrames.length;
+
+      final info = await adapter.connect();
+
+      expect(transport.scanCount, 1);
+      expect(transport.writtenFrames.length, framesAfterFirst);
+      expect(info.batteryPercent, 50);
+    });
+
+    test('scan failure releases the transport (no half-open connection)', () async {
+      transport.failScan = true;
+      await expectLater(adapter.connect(), throwsA(isA<RingConnectionException>()));
+      expect(transport.disconnectCount, 1);
+    });
+
+    test('service-discovery failure releases the transport', () async {
+      transport.failDiscovery = true;
+      await expectLater(adapter.connect(), throwsA(isA<RingConnectionException>()));
+      expect(transport.disconnectCount, 1);
+    });
+
+    test('a failed write rethrows and leaves no uncaught ack timeout behind', () async {
+      transport.queueResponse(_batteryFrame(50));
+      await adapter.connect();
+
+      transport.failWrite = true;
+      await expectLater(adapter.vibrate(), throwsA(isA<StateError>()));
+
+      // Outlive ackTimeout (300ms). An orphaned timeout would surface as an
+      // uncaught async error and fail this test.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    });
+
+    test('reconnect after a drop scans again', () async {
+      transport.queueResponse(_batteryFrame(50));
+      await adapter.connect();
+      transport.simulateDrop();
+      await Future<void>.delayed(Duration.zero);
+
+      transport.queueResponse(_batteryFrame(49));
+      await adapter.connect();
+      expect(transport.scanCount, 2);
+    });
+  });
+
   group('robustness', () {
     test('garbage bytes on the notify stream do not crash the adapter or corrupt state', () async {
       transport.queueResponse(_batteryFrame(50));

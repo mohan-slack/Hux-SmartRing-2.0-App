@@ -1,0 +1,6 @@
+# Copy to android/key.properties (git-ignored) after creating the upload key.
+# storeFile is relative to android/app/.  See docs/release/SIGNING.md.
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=../../../hux-keys/hux-upload.jks

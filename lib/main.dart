@@ -10,9 +10,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
 import 'core/auth/supabase_auth_service.dart';
 import 'core/auth/supabase_config.dart';
+import 'core/food/meal_analyzer.dart';
+import 'core/environment/environment_service.dart';
+import 'core/nudges/notifier.dart';
+import 'core/nudges/nudge_service.dart';
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
+import 'core/profile/profile_service.dart';
 import 'core/ring/aizo_ble/aizo_ble_ring_adapter.dart';
 import 'core/ring/data_source.dart';
 import 'core/ring/health_adapter/health_store_ring_adapter.dart';
@@ -20,6 +25,7 @@ import 'core/ring/mock_ring_adapter.dart';
 import 'core/ring/ring_adapter.dart';
 import 'core/storage/sqlite_health_store.dart';
 import 'core/sync/sync_service.dart';
+import 'core/coach/coach_service.dart';
 
 /// Which [RingAdapter] to wire up — 'mock' (default), 'health' (dev-only
 /// Apple Health / Health Connect adapter), or 'aizo' (real BLE hardware,
@@ -29,11 +35,20 @@ import 'core/sync/sync_service.dart';
 /// `--dart-define=HUX_SOURCE=health` or `=aizo` to a `flutter run`/
 /// `flutter build` invocation to switch; the default build is untouched
 /// either way.
-const _sourceEnv = String.fromEnvironment('HUX_SOURCE', defaultValue: 'mock');
+///
+/// RELEASE builds default to 'health' (the v1 launch: real data from the
+/// user's health app, no HUX ring yet). Debug builds keep the demo.
+const _isRelease = bool.fromEnvironment('dart.vm.product');
+const _sourceEnv = String.fromEnvironment('HUX_SOURCE', defaultValue: _isRelease ? 'health' : 'mock');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (!SupabaseConfig.isConfigured) {
+    // Built without `--dart-define-from-file=.env` (or .env is empty).
+    runApp(const _SetupErrorApp());
+    return;
+  }
   await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.anonKey);
   final authService = SupabaseAuthService();
 
@@ -66,6 +81,35 @@ Future<void> main() async {
   final modeService = ModeService(store);
   final readoutService = ReadoutService(store, modeService: modeService);
   final storyService = WeeklyStoryService(store);
+  final profileService = ProfileService(store);
+  // Photo meals go through HUX's backend function (the AI key lives
+  // there, never in the app). See supabase/functions/analyze-meal.
+  Future<Object?> invokeFunction(String name, Map<String, Object?> body) async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(name, body: body);
+      return response.data;
+    } on FunctionException catch (e) {
+      // Keep the HTTP status so screens can say WHY (expired sign-in,
+      // function not deployed, server error) instead of "couldn't reach".
+      debugPrint('Edge function $name failed: ${e.status} ${e.details}');
+      throw FunctionCallException(e.status, e.details?.toString());
+    }
+  }
+
+  final mealAnalyzer = RemoteMealAnalyzer(invokeFunction);
+  final notifier = LocalNotifier();
+  final nudgeService = NudgeService(store, notifier);
+  // Air & heat (Open-Meteo). Free tier is non-commercial only — set
+  // apiKey from a paid plan before a paid launch (see the service docs).
+  final environmentService = EnvironmentService(
+    store,
+    notifier: notifier,
+    apiKey: SupabaseConfig.openMeteoApiKey.isEmpty ? null : SupabaseConfig.openMeteoApiKey,
+  );
+  environmentService.refreshAlert().catchError((Object _) {});
+  // Rebuild the reminder schedule from saved settings (it can be lost on
+  // reinstall/data clear). Never block or crash startup over it.
+  nudgeService.resync().catchError((Object _) {});
 
   runApp(HuxApp(
     authService: authService,
@@ -75,5 +119,33 @@ Future<void> main() async {
     storyService: storyService,
     modeService: modeService,
     dataSource: dataSource,
+    profileService: profileService,
+    mealAnalyzer: mealAnalyzer,
+    // Coach chat: supabase/functions/coach-chat (AI key lives there).
+    coachInvoke: invokeFunction,
+    nudgeService: nudgeService,
+    environmentService: environmentService,
   ));
+}
+
+/// Shown when the build has no Supabase config, instead of a crash.
+class _SetupErrorApp extends StatelessWidget {
+  const _SetupErrorApp();
+
+  @override
+  Widget build(BuildContext context) => const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'HUX isn\'t configured.\n\nCopy .env.example to .env, fill in SUPABASE_URL and '
+                'SUPABASE_PUBLISHABLE_KEY, then run:\n\nflutter run --dart-define-from-file=.env',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      );
 }

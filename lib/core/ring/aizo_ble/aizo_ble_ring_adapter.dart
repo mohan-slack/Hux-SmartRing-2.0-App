@@ -75,6 +75,22 @@ class AizoBleRingAdapter implements RingAdapter {
 
   @override
   Future<RingInfo> connect({Duration timeout = const Duration(seconds: 30)}) async {
+    // Already connected (SyncService calls connect() before every sync):
+    // reuse the live link. A connected ring usually stops advertising, so
+    // rescanning would time out, and re-subscribing would leak listeners.
+    if ((_state == RingConnectionState.connected || _state == RingConnectionState.syncing) &&
+        _transport.connectedDeviceId != null) {
+      return RingInfo(
+        deviceId: _transport.connectedDeviceId!,
+        name: AizoBleIds.deviceName,
+        firmwareVersion: _unknownFirmwareVersion,
+        batteryPercent: _lastBattery ?? _batteryUnavailable,
+      );
+    }
+
+    // New link, new packet sequence.
+    _framer.resetSequence();
+
     // Diagnostic logging for hardware bring-up — harmless to leave in
     // (only runs when this adapter is actually instantiated, i.e. only
     // under HUX_SOURCE=aizo; never affects the default mock build).
@@ -85,6 +101,8 @@ class AizoBleRingAdapter implements RingAdapter {
       debugPrint('[AizoBleRingAdapter] transport connected, deviceId=${_transport.connectedDeviceId}');
     } catch (e) {
       debugPrint('[AizoBleRingAdapter] scan/connect FAILED: $e');
+      // Release any half-open GATT connection / scan the transport holds.
+      await _safeTransportDisconnect();
       _setState(RingConnectionState.disconnected);
       throw RingConnectionException('Could not find ${AizoBleIds.deviceName}: $e');
     }
@@ -99,6 +117,7 @@ class AizoBleRingAdapter implements RingAdapter {
       debugPrint('[AizoBleRingAdapter] service ${AizoBleIds.serviceUuid} + characteristics discovered');
     } catch (e) {
       debugPrint('[AizoBleRingAdapter] service discovery FAILED: $e');
+      await _safeTransportDisconnect();
       _setState(RingConnectionState.disconnected);
       throw RingConnectionException('Could not discover ring services: $e');
     }
@@ -229,8 +248,24 @@ class AizoBleRingAdapter implements RingAdapter {
     // here). Casting the awaited VALUE instead is safe, since `is T` in
     // the predicate already guarantees it.
     final responseFuture = _responses.firstWhere((r) => r is T).timeout(ackTimeout).then((r) => r as T);
-    await _transport.writeCommand(_framer.frame(payload));
+    try {
+      await _transport.writeCommand(_framer.frame(payload));
+    } catch (_) {
+      // The write failed, so no response is coming. Mark the pending
+      // future as handled; otherwise its timeout surfaces later as an
+      // uncaught TimeoutException.
+      responseFuture.ignore();
+      rethrow;
+    }
     return responseFuture;
+  }
+
+  Future<void> _safeTransportDisconnect() async {
+    try {
+      await _transport.disconnect();
+    } catch (e) {
+      debugPrint('[AizoBleRingAdapter] cleanup disconnect failed: $e');
+    }
   }
 
   Future<int> _requestBattery() async {

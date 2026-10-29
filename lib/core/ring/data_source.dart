@@ -23,7 +23,7 @@ extension RingDataSourceBanner on RingDataSource {
   /// exactly the screenshot-misattribution risk it exists to prevent.
   String get bannerText => switch (this) {
         RingDataSource.mock => 'DEMO — simulated ring data',
-        RingDataSource.health => 'DEV — your health app data (not a HUX ring)',
+        RingDataSource.health => 'From your health app',
         RingDataSource.aizoBle =>
           'UNOFFICIAL — connected via reverse-engineered protocol (battery + vibration only)',
       };

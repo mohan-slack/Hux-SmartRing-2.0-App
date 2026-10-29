@@ -1,15 +1,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Dev-only Health-Store adapter (HUX_SOURCE=health): READ-ONLY
-         Health Connect permissions to exercise the pipeline against
-         real human data before the eIoT ring exists. This app never
-         requests WRITE permissions for anything. -->
+    <!-- Release builds need network for Supabase auth. Flutter only adds
+         INTERNET to the debug/profile manifests. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Walk nudges: re-create scheduled notifications after a reboot.
+         POST_NOTIFICATIONS is declared by flutter_local_notifications.
+         No exact-alarm permission: nudges are scheduled inexactly. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <!-- Health Connect, READ-ONLY (the v1 launch data source: HUX reads
+         what the user's phone/watch/ring app already saved). Every
+         permission here must be justified in Play Console → App content
+         → Health apps declaration (see docs/release/STORE_FORMS.md), and
+         must match HealthStoreRingAdapter._readTypes exactly. HUX never
+         requests WRITE permissions. -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY"/>
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
     <uses-permission android:name="android.permission.health.READ_SLEEP"/>
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
     <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE"/>
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <!-- Must match every type in HealthStoreRingAdapter._readTypes:
+         Health Connect never grants an undeclared permission, so a
+         missing one makes requestAuthorization return false. -->
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
+    <!-- No ACTIVITY_RECOGNITION: steps come from Health Connect, not the
+         phone's sensors. Don't add permissions HUX doesn't use — Play
+         review rejects unjustified sensitive permissions. -->
 
     <!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
          the PROVISIONAL, reverse-engineered protocol in
@@ -30,7 +47,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
 
     <application
-        android:label="hux_app"
+        android:label="HUX"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -54,12 +71,43 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Lets Health Connect show its permissions-rationale
-                 screen for this app (dev-only Health-Store adapter). -->
+        </activity>
+        <!-- Health Connect's "privacy policy" link for HUX (Android 13 and
+             below: ACTION_SHOW_PERMISSIONS_RATIONALE). Google requires it to
+             show the SAME privacy policy as the Play listing, so it opens
+             https://hux.co.in/privacy and closes. -->
+        <activity
+            android:name=".HealthPrivacyActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
             </intent-filter>
         </activity>
+        <!-- Android 14+ (API 34): Health Connect opens the app's privacy
+             policy through this alias. Without it Health Connect refuses
+             to show the permission screen. -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".HealthPrivacyActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE"/>
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS"/>
+            </intent-filter>
+        </activity-alias>
+        <!-- flutter_local_notifications: show scheduled notifications,
+             and reschedule them after reboot / app update. -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -76,9 +124,24 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- So the dev-only Health-Store adapter can check whether
-             Health Connect is installed before requesting permissions. -->
+        <!-- So HUX can check whether Health Connect is installed before
+             requesting permissions. -->
         <package android:name="com.google.android.apps.healthdata"/>
+        <!-- Guided plans speak cues via the phone's text-to-speech engine
+             (required for Android 11+ package visibility). -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+        <!-- Privacy policy / terms links open in the browser. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <!-- Coach chat: tap-to-call emergency / helpline numbers. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
         </intent>
