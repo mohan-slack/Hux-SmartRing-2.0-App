@@ -17,6 +17,8 @@ import '../core/auth/auth_service.dart';
 import '../core/environment/environment_service.dart';
 import '../core/food/food_log_service.dart';
 import '../core/coach/coach_context.dart';
+import '../core/cycle/cycle_health_source.dart';
+import '../core/cycle/cycle_service.dart';
 import '../core/coach/coach_service.dart';
 import '../core/food/meal_analyzer.dart';
 import '../core/home/home_extras.dart';
@@ -28,6 +30,7 @@ import '../core/plans/speaker.dart';
 import '../core/plans/voice_cues.dart';
 import '../core/progress/progress_service.dart';
 import '../core/journal/journal.dart';
+import '../core/journeys/journey_service.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/meaning/weekly_story.dart';
 import '../core/modes/mode_service.dart';
@@ -44,6 +47,9 @@ import 'hubs/plans_hub.dart';
 import 'hubs/progress_hub.dart';
 import 'air_heat_screen.dart';
 import 'briefing_screen.dart';
+import 'cycle/cycle_screen.dart';
+import 'journeys/journey_today_screen.dart';
+import 'journeys/journeys_screen.dart';
 import 'coach/coach_screen.dart';
 import 'legal/privacy_account_screen.dart';
 import 'food/food_screen.dart';
@@ -126,6 +132,8 @@ class _AppShellState extends State<AppShell> {
   late final FoodLogService _foodLog = FoodLogService(widget.store);
   late final PlanProgressService _plans = PlanProgressService(widget.store);
   late final ProgressService _progress = ProgressService(widget.store);
+  late final JourneyService _journeys = JourneyService(widget.store);
+  late final CycleService _cycle = CycleService(widget.store, source: HealthCycleSource());
   late final HomeExtrasLoader _homeExtras = HomeExtrasLoader(
     store: widget.store,
     foodLog: _foodLog,
@@ -133,6 +141,8 @@ class _AppShellState extends State<AppShell> {
     environment: widget.environmentService,
     plans: _plans,
     journal: _journal,
+    journeys: _journeys,
+    cycle: _cycle,
   );
   late final PrivacyService _privacy = PrivacyService(
     widget.store,
@@ -146,6 +156,7 @@ class _AppShellState extends State<AppShell> {
       store: widget.store,
       readouts: widget.readoutService,
       profiles: widget.profileService,
+      cycle: _cycle,
     ).load,
   );
 
@@ -193,6 +204,32 @@ class _AppShellState extends State<AppShell> {
     if (index == 0) _todayRefresh.value++;
     if (changed && index == _coachTab) _coachRefresh.value++;
     if (changed && index == _progressTab) _progressRefresh.value++;
+  }
+
+  /// Journeys: the running one's Today screen, or the picker.
+  Future<void> _openJourneys() async {
+    final diet = (await widget.profileService?.loadProfile())?.diet;
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => JourneysScreen(journeys: _journeys, nudges: widget.nudgeService, diet: diet, cycle: _cycle),
+    ));
+    _todayRefresh.value++;
+  }
+
+  /// From the Home card: straight to today's journey day.
+  Future<void> _openJourneyToday() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => JourneyTodayScreen(journeys: _journeys, nudges: widget.nudgeService, cycle: _cycle),
+    ));
+    _todayRefresh.value++;
+  }
+
+  /// Cycle (opt-in, private): intro + set-up the first time.
+  Future<void> _openCycle() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => CycleScreen(cycle: _cycle, nudges: widget.nudgeService),
+    ));
+    _todayRefresh.value++;
   }
 
   /// Opens Life modes (no longer a tab: it lives under Plans).
@@ -244,6 +281,10 @@ class _AppShellState extends State<AppShell> {
     }
 
     // Features with their own screen open it on top.
+    if (id == FeatureId.cycleTracker) {
+      await _openCycle();
+      return;
+    }
     if (id == FeatureId.indianJournal) {
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => JournalScreen(journal: _journal),
@@ -417,6 +458,13 @@ class _AppShellState extends State<AppShell> {
   /// The avatar on Home: account, privacy, answers, all features, sign out.
   Future<void> _openMe() async {
     final email = widget.authService?.currentUser?.email;
+    // Cycle shows here only for people who use it or asked for it.
+    var showCycle = false;
+    try {
+      showCycle = (await _cycle.load()).settings.enabled ||
+          ((await widget.profileService?.loadProfile())?.goals.contains(Goal.cycleHealth) ?? false);
+    } catch (_) {}
+    if (!mounted) return;
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -436,6 +484,12 @@ class _AppShellState extends State<AppShell> {
                 leading: const Icon(Icons.wb_sunny_outlined),
                 title: const Text('Morning briefing'),
                 onTap: () => Navigator.pop(c, 'briefing'),
+              ),
+            if (showCycle)
+              ListTile(
+                leading: const Icon(Icons.water_drop_outlined),
+                title: const Text('Cycle'),
+                onTap: () => Navigator.pop(c, 'cycle'),
               ),
             ListTile(
               leading: const Icon(Icons.shield_outlined),
@@ -471,6 +525,8 @@ class _AppShellState extends State<AppShell> {
         await Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => BriefingScreen(nudges: widget.nudgeService!),
         ));
+      case 'cycle':
+        await _openCycle();
       case 'privacy':
         await _openPrivacy();
       case 'answers':
@@ -524,6 +580,8 @@ class _AppShellState extends State<AppShell> {
                         onAsk: () => _onDestinationSelected(_coachTab),
                         extrasLoader: _homeExtras.load,
                         autoSync: widget.autoSync,
+                        onOpenJourney: _openJourneyToday,
+                        onOpenCycle: _openCycle,
                       ),
                       CoachScreen(
                         coach: _coach,
@@ -534,6 +592,7 @@ class _AppShellState extends State<AppShell> {
                       PlansHub(
                         onOpenFeature: _openFeature,
                         onOpenModes: _openModes,
+                        onOpenJourneys: _openJourneys,
                         onSeeAll: hasProfiles ? _openExplore : null,
                       ),
                       ProgressHub(

@@ -12,7 +12,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/cycle/cycle_service.dart';
 import '../core/home/home_extras.dart';
+import '../core/journeys/journey_service.dart';
 import '../core/meaning/daily_readout.dart';
 import '../core/meaning/day_plan.dart';
 import '../core/meaning/step_target.dart';
@@ -28,6 +30,7 @@ import '../core/sync/sync_service.dart';
 import '../theme/hux_cards.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
+import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
 import '../theme/hux_ui.dart';
 import 'for_you.dart';
@@ -84,6 +87,12 @@ class TodayScreen extends StatefulWidget {
   /// Agenda, food and mini trends for the richer Home; null = none.
   final Future<HomeExtras> Function()? extrasLoader;
 
+  /// Opens the running journey from its Home card.
+  final VoidCallback? onOpenJourney;
+
+  /// Opens Cycle from its Home card.
+  final VoidCallback? onOpenCycle;
+
   /// Sync in the background on open and whenever the app comes back to
   /// the foreground (throttled), so Home never shows yesterday's data.
   /// Off by default so widget tests stay deterministic.
@@ -104,6 +113,8 @@ class TodayScreen extends StatefulWidget {
     this.onAsk,
     this.extrasLoader,
     this.autoSync = false,
+    this.onOpenJourney,
+    this.onOpenCycle,
   });
 
   @override
@@ -355,6 +366,8 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
             onOpenProfile: widget.onOpenProfile,
             onAsk: widget.onAsk,
             extras: _extras,
+            onOpenJourney: widget.onOpenJourney,
+            onOpenCycle: widget.onOpenCycle,
           ),
         );
     }
@@ -547,6 +560,8 @@ class _ReadoutBody extends StatelessWidget {
   final VoidCallback? onOpenProfile;
   final VoidCallback? onAsk;
   final HomeExtras extras;
+  final VoidCallback? onOpenJourney;
+  final VoidCallback? onOpenCycle;
 
   const _ReadoutBody({
     required this.readout,
@@ -563,6 +578,8 @@ class _ReadoutBody extends StatelessWidget {
     this.onOpenProfile,
     this.onAsk,
     this.extras = HomeExtras.empty,
+    this.onOpenJourney,
+    this.onOpenCycle,
   });
 
   @override
@@ -593,6 +610,14 @@ class _ReadoutBody extends StatelessWidget {
         ],
         const SizedBox(height: HuxSpacing.lg),
         HuxEntrance(child: _ScoresCard(readout: readout, lastNight: lastNight)),
+        if (extras.journey != null) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(index: 1, child: _JourneyCard(summary: extras.journey!, onOpen: onOpenJourney)),
+        ],
+        if (extras.cycle != null) ...[
+          const SizedBox(height: HuxSpacing.lg),
+          HuxEntrance(index: 1, child: _CycleCard(summary: extras.cycle!, onOpen: onOpenCycle)),
+        ],
         const SizedBox(height: HuxSpacing.lg),
         HuxEntrance(index: 1, child: _InsightCard(readout: readout)),
         if ((plan != null && !plan.isEmpty) || extras.agenda.isNotEmpty) ...[
@@ -1328,3 +1353,116 @@ class _ModeStripCard extends StatelessWidget {
   }
 }
 
+/// ONE quiet line for the running journey: "Day 5 of 21 · in bed by 10:45".
+class _JourneyCard extends StatelessWidget {
+  final JourneyHomeSummary summary;
+  final VoidCallback? onOpen;
+
+  const _JourneyCard({required this.summary, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    const color = HuxColors.accentPurple;
+    return Semantics(
+      button: onOpen != null,
+      label: '${summary.title}, day ${summary.day} of ${summary.totalDays}. ${summary.line}',
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(HuxRadii.card),
+          child: GlassPanel(
+            tint: color.withValues(alpha: 0.06),
+            child: Row(
+              children: [
+                HuxScoreRing(
+                  progress: summary.doneToday ? 1 : summary.ticksDone / 3,
+                  centerText: summary.doneToday ? '✓' : '${summary.ticksDone}/3',
+                  color: summary.doneToday ? HuxColors.recharged : color,
+                  size: 52,
+                  stroke: 6,
+                ),
+                const SizedBox(width: HuxSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${summary.title} · Day ${summary.day} of ${summary.totalDays}',
+                          style: text.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(summary.line, style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                if (onOpen != null) const Icon(Icons.chevron_right, color: HuxColors.mutedText),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cycle's ONE quiet line: "Day 18 · Luteal — next period likely 12–15 Nov".
+/// Locked: no details at all.
+class _CycleCard extends StatelessWidget {
+  final CycleHomeSummary summary;
+  final VoidCallback? onOpen;
+
+  const _CycleCard({required this.summary, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    const color = HuxColors.accentPink;
+    final day = summary.day;
+    return Semantics(
+      button: onOpen != null,
+      label: '${summary.title}. ${summary.line}',
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(HuxRadii.card),
+          child: GlassPanel(
+            tint: color.withValues(alpha: 0.05),
+            child: Row(
+              children: [
+                if (summary.locked || day == null)
+                  const HuxIconBadge(icon: Icons.water_drop_rounded, color: color, size: 52)
+                else
+                  HuxScoreRing(
+                    progress: (day / summary.cycleDays).clamp(0.0, 1.0),
+                    centerText: '$day',
+                    color: color,
+                    size: 52,
+                    stroke: 6,
+                  ),
+                const SizedBox(width: HuxSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(summary.title,
+                          style: text.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(summary.line, style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                if (summary.showLogButton)
+                  const HuxPill(label: 'Log', color: color, icon: Icons.add_rounded)
+                else if (onOpen != null)
+                  const Icon(Icons.chevron_right, color: HuxColors.mutedText),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

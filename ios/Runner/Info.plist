@@ -1,88 +1,107 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>CFBundleDisplayName</key>
-	<string>HUX</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>HUX</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(FLUTTER_BUILD_NAME)</string>
-	<key>CFBundleSignature</key>
-	<string>????</string>
-	<key>CFBundleVersion</key>
-	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
-	<key>UIApplicationSceneManifest</key>
 	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
+		<key>CFBundleDevelopmentRegion</key>
+		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
-		<key>UISceneConfigurations</key>
+		<key>CFBundleDisplayName</key>
+		<string>HUX</string>
+		<key>CFBundleExecutable</key>
+		<string>$(EXECUTABLE_NAME)</string>
+		<key>CFBundleIdentifier</key>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+		<key>CFBundleInfoDictionaryVersion</key>
+		<string>6.0</string>
+		<key>CFBundleName</key>
+		<string>HUX</string>
+		<key>CFBundlePackageType</key>
+		<string>APPL</string>
+		<key>CFBundleShortVersionString</key>
+		<string>$(FLUTTER_BUILD_NAME)</string>
+		<key>CFBundleSignature</key>
+		<string>????</string>
+		<key>CFBundleVersion</key>
+		<string>$(FLUTTER_BUILD_NUMBER)</string>
+		<key>LSRequiresIPhoneOS</key>
+		<true/>
+		<key>UILaunchStoryboardName</key>
+		<string>LaunchScreen</string>
+		<key>UIMainStoryboardFile</key>
+		<string>Main</string>
+		<key>UIApplicationSceneManifest</key>
 		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneClassName</key>
-					<string>UIWindowScene</string>
-					<key>UISceneDelegateClassName</key>
-					<string>FlutterSceneDelegate</string>
-					<key>UISceneConfigurationName</key>
-					<string>flutter</string>
-					<key>UISceneStoryboardFile</key>
-					<string>Main</string>
-				</dict>
-			</array>
+			<key>UIApplicationSupportsMultipleScenes</key>
+			<false/>
+			<key>UISceneConfigurations</key>
+			<dict>
+				<key>UIWindowSceneSessionRoleApplication</key>
+				<array>
+					<dict>
+						<key>UISceneClassName</key>
+						<string>UIWindowScene</string>
+						<key>UISceneDelegateClassName</key>
+						<string>FlutterSceneDelegate</string>
+						<key>UISceneConfigurationName</key>
+						<string>flutter</string>
+						<key>UISceneStoryboardFile</key>
+						<string>Main</string>
+					</dict>
+				</array>
+			</dict>
 		</dict>
-	</dict>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<!-- Dev-only Health-Store adapter (HUX_SOURCE=health): reads
+		<key>UISupportedInterfaceOrientations</key>
+		<array>
+			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>UISupportedInterfaceOrientations~ipad</key>
+		<array>
+			<string>UIInterfaceOrientationPortrait</string>
+			<string>UIInterfaceOrientationPortraitUpsideDown</string>
+			<string>UIInterfaceOrientationLandscapeLeft</string>
+			<string>UIInterfaceOrientationLandscapeRight</string>
+		</array>
+		<key>CADisableMinimumFrameDurationOnPhone</key>
+		<true/>
+		<key>UIApplicationSupportsIndirectInputEvents</key>
+		<true/>
+		<!-- Dev-only Health-Store adapter (HUX_SOURCE=health): reads
 	     Apple Health data to exercise the pipeline against real human
 	     data before the eIoT ring exists. Read-only — this app never
 	     writes to Apple Health, so no update-usage prompt is shown, but
 	     the key is still required by HealthKit if it's ever linked in. -->
-	<key>NSHealthShareUsageDescription</key>
-	<string>HUX reads your steps, heart rate, HRV, sleep, blood oxygen, breathing rate and active energy from Health to show your daily charge, sleep trends, step goals and plans. Your Health data stays on this iPhone unless you turn on the HUX coach, and is never used for ads.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>HUX only reads from Health. It never writes or changes your Health data.</string>
-	<!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
+		<!-- Google Sign-In (iOS client id + reversed id as URL scheme).
+	     Not a secret: it ships inside every app. -->
+		<key>GIDClientID</key>
+		<string>638481685339-u5jof6t97sklhfiie9f7tqp7tj2qhenh.apps.googleusercontent.com</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.638481685339-u5jof6t97sklhfiie9f7tqp7tj2qhenh</string>
+				</array>
+			</dict>
+		</array>
+		<key>NSFaceIDUsageDescription</key>
+		<string>Face ID unlocks Cycle when you turn on the Cycle lock.</string>
+		<key>NSHealthShareUsageDescription</key>
+		<string>HUX reads your steps, heart rate, HRV, sleep, blood oxygen, breathing rate and active energy from Health to show your daily charge, sleep trends, step goals and plans. If you turn on Cycle, it also reads your period dates to estimate your cycle phase. Your Health data stays on this iPhone unless you turn on the HUX coach, and is never used for ads.</string>
+		<key>NSHealthUpdateUsageDescription</key>
+		<string>HUX only reads from Health. It never writes or changes your Health data.</string>
+		<!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
 	     the PROVISIONAL, reverse-engineered protocol in
 	     lib/core/ring/aizo_ble/aizo_protocol.dart. -->
-	<key>NSCameraUsageDescription</key>
-	<string>HUX uses the camera only when you choose to photograph a meal, to estimate its protein and calories.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HUX opens your photos only when you choose a meal picture to log.</string>
-</dict>
+		<key>NSCameraUsageDescription</key>
+		<string>HUX uses the camera only when you choose to photograph a meal, to estimate its protein and calories.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>HUX opens your photos only when you choose a meal picture to log.</string>
+		<key>UIStatusBarHidden</key>
+		<false/>
+	</dict>
 </plist>

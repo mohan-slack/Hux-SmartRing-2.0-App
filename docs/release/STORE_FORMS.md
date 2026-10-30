@@ -83,7 +83,8 @@ financial info. Health Connect data that stays on the phone is **not
 - **Medical features. Select none.** HUX is not a medical device and gives no
   clinical advice.
 
-**Health Connect permissions:** read-only, and exactly the eight in the manifest.
+**Health Connect permissions:** read-only, and exactly the eight in the manifest
+(seven core + `READ_MENSTRUATION`, which is asked for only inside Cycle).
 Paste one justification per data type.
 
 | Permission | Justification (paste) |
@@ -95,7 +96,7 @@ Paste one justification per data type.
 | `READ_SLEEP` | Sleep duration and stages power the sleep trends screen, "sleep vs your normal", the target bedtime suggestion, and journal insights (e.g. how late dinners affect the user's own sleep). Read-only, on device. |
 | `READ_OXYGEN_SATURATION` | Night-time blood oxygen is shown in the sleep summary and trends as a wellness indicator, compared only with the user's own usual range. Read-only, on device. Not used for diagnosis. |
 | `READ_RESPIRATORY_RATE` | Night-time breathing rate is shown in sleep trends and compared with the user's own baseline as part of the recovery readout. Read-only, on device. |
-| `READ_BODY_TEMPERATURE` | A night temperature far outside the user's own usual range lowers that morning's recovery readout and shows a gentle "take it easy" note. Read-only, on device. Not used for diagnosis. |
+| `READ_MENSTRUATION` | Only if the user turns on Cycle and taps Import: past period dates let HUX show her cycle phase, a likely range for the next period, and compare her recovery score with her own same-phase days. Read-only, on device, never shared. Not for contraception or diagnosis. |
 
 **Add to every justification:** "Health Connect data is never used for
 advertising, never sold, and only leaves the device as a short summary
@@ -183,7 +184,7 @@ across apps or websites.
 |---|---|---|---|
 | Contact Info → **Email Address** | **Linked** | No | App Functionality |
 | Identifiers → **User ID** | **Linked** | No | App Functionality |
-| Health & Fitness → **Health** (coach summary: sleep, charge; meal nutrition) | **Linked** (sent with your sign-in) | No | App Functionality |
+| Health & Fitness → **Health** (coach summary: sleep, charge, cycle phase if allowed; meal nutrition) | **Linked** (sent with your sign-in) | No | App Functionality |
 | Health & Fitness → **Fitness** (steps, streak) | **Linked** (sent with your sign-in) | No | App Functionality |
 | User Content → **Photos or Videos** (meal photos) | **Linked** (sent with your sign-in) | No | App Functionality |
 | User Content → **Other User Content** (coach messages, reported replies) | **Linked** (sent with your sign-in) | No | App Functionality |

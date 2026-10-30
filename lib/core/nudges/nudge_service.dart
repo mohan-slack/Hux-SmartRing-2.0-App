@@ -144,6 +144,39 @@ class NudgeService {
     ));
   }
 
+  // ---- journeys ---------------------------------------------------------
+
+  /// Replaces the journey reminders with [nudges] (max 3). Turning any on
+  /// asks for notification permission; returns false if refused.
+  Future<bool> setJourneyReminders(List<DailyNudge> nudges) async {
+    for (final id in NudgeIds.allJourney) {
+      await _notifier.cancel(id);
+    }
+    if (nudges.isEmpty) return true;
+    if (!await _notifier.requestPermission()) return false;
+    for (final n in nudges.take(3)) {
+      await _notifier.scheduleDaily(n);
+    }
+    return true;
+  }
+
+  // ---- cycle -------------------------------------------------------------
+
+  /// The ONE discreet cycle reminder at [at] (null = none). Wording never
+  /// mentions periods: lock screens are seen by others. False = refused.
+  Future<bool> setCycleHeadsUp(DateTime? at) async {
+    await _notifier.cancel(NudgeIds.cycleHeadsUp);
+    if (at == null) return true;
+    if (!await _notifier.requestPermission()) return false;
+    await _notifier.scheduleOnce(
+      id: NudgeIds.cycleHeadsUp,
+      at: at,
+      title: 'Heads-up from HUX',
+      body: 'A gentle check-in for the next few days. Open HUX when you have a moment.',
+    );
+    return true;
+  }
+
   /// Call on app start: the OS schedule can be lost (reinstall, data
   /// cleared), so rebuild it from saved settings.
   Future<void> resync() async {

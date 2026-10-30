@@ -1,35 +1,40 @@
-# Branding: app icon, splash, notification icon, store graphics
+# Branding — "Glass Charge" (brand kit v1.0)
 
-All images come from **one source**, `images/logo.png` (the HUX wordmark),
-via `tool/generate_brand_assets.py`. To change the look, edit the script or
-the logo, then run all three commands again:
+**Idea:** Know your charge. A liquid-glass ring, charge light flowing clockwise
+from 12 o'clock (pink → indigo), ending in a pearl ("now") level with the H's
+floating crossbar. Full guidelines: the HUX Brand Kit page and `HUX_Brand_Kit.zip`
+(boards, all icon themes, social, motion, generator scripts in `07_Source`).
 
-```bash
-python3 tool/generate_brand_assets.py      # masters (needs: pip3 install pillow)
-dart run flutter_launcher_icons            # writes iOS AppIcon set + Android mipmaps
-dart run flutter_native_splash:create      # writes iOS LaunchScreen + Android splash (incl. 12+)
-```
+## Where the files live (committed, not generated)
 
-Commit what these commands generate under `ios/Runner/Assets.xcassets`,
-`android/app/src/main/res` and the storyboard.
-
-| Asset | File | Notes |
+| Asset | Location | Notes |
 |---|---|---|
-| App icon (iOS, Android legacy) | `assets/icon/app_icon.png` | 1024px, no alpha. Dark glow background with a white wordmark |
-| Android adaptive icon | `assets/icon/app_icon_{background,foreground}.png` | Wordmark inside the 66dp safe zone |
-| Android 13 themed icon | `assets/icon/app_icon_monochrome.png` | Uses the alpha channel only |
-| Splash | `assets/splash/splash_logo.png`, `splash_android12.png` | Background `#0A0A0D`, the same as the app, so there's no white flash |
-| Notification icon | `android/app/src/main/res/drawable-*/ic_stat_hux.png` | White "H" on transparent, tinted pink by Android. Kept by `res/raw/keep.xml` |
-| Play feature graphic | `assets/store/play_feature_graphic.png` | 1024×500 |
-| App name | "HUX" | `Info.plist` (`CFBundleName`, `CFBundleDisplayName`) and the Android label |
+| iOS app icon | `ios/Runner/Assets.xcassets/AppIcon.appiconset` | Xcode single-size: light (no alpha), dark, tinted (grayscale) |
+| Android launcher | `android/app/src/main/res/mipmap-*/ic_launcher{,_round}.png` | Legacy + round |
+| Android adaptive | `mipmap-*/ic_launcher_{foreground,background,monochrome}.png` + `mipmap-anydpi-v26/*.xml` | Mark inside the 66 dp safe zone; monochrome for themed icons |
+| Notification icon | `drawable-*/ic_stat_hux.png` | White mono mark, tinted HUX Pink. Kept by `res/raw/keep.xml` |
+| Icon master | `assets/icon/app_icon.png` | Aurora 1024 (reference / store) |
+| Launch screen | `assets/splash/splash_bg.png`, `splash_mark.png`, `splash_android12.png` | Run `dart run flutter_native_splash:create` after changing |
+| Intro letters | `assets/images/brand/intro_u.png`, `intro_x.png` | Used by `lib/widgets/hux_intro.dart` |
 
-## Still needed (design / marketing)
+**Do not run `flutter_launcher_icons`** — it would overwrite the iOS dark/tinted
+icons. It has been removed from `pubspec.yaml`.
 
-- **Store screenshots.** Take them from a real device using demo data.
-  - Play: phone screenshots, at least 2 (aim for 4–8), 1080×1920 or more.
-  - App Store: 6.9" (1320×2868) and 6.5" (1284×2778).
-  - Show Today (HUX Charge), Trends, Coach, Food, Plans and Streaks.
-  - Leave out the DEMO banner: use `HUX_SOURCE=health` with real data, or
-    crop the banner.
-- **Register the logo.** Trademark application No. 6922267 is pending. Use
-  "HUX" without the ® mark until it is registered.
+## Intro
+`lib/widgets/hux_intro.dart` continues the launch screen: pearl pulses, ring
+releases, pearl flows into the crossbar, H glides left, U rises, X turns in,
+"Know your charge." Full (~3 s) on first launch, then a quick fade. Tap skips.
+"Reduce motion" always gets the quick fade. Ring radius 66 pt must match
+`splash_mark.png` (800 px, ring radius 0.33) — change both together.
+
+## Colours
+HUX Pink `#C93B86` · Vivid Pink `#F567B5` · Plum `#6B2E9A` · Indigo `#4453D6` ·
+Cherry `#E8573B` · Midnight `#1A0B30` · Ink `#1B1925` · Mist `#F6F4FA`.
+Charge gradient `#FF8FCB → #F567B5 → #C93B86 → #8B3FD0 → #5B6CF0`.
+
+## Still to do
+- Alternate app icons (Midnight, Daylight, Blush, Calm, Spectrum) — files are in
+  the kit (`02_iOS/alternate_icons`, `03_Android/alternate_icons`); wiring needs
+  Info.plist `CFBundleAlternateIcons` + Android `activity-alias`.
+- Store screenshots from a real device (no DEMO banner).
+- Trademark application No. 6922267 pending — use "HUX" without ®.

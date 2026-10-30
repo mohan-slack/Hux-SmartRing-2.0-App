@@ -24,6 +24,7 @@ import 'screens/auth/welcome_screen.dart';
 import 'screens/legal/privacy_consent_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'theme/hux_theme.dart';
+import 'widgets/hux_intro.dart';
 
 class HuxApp extends StatelessWidget {
   final AuthService authService;
@@ -41,6 +42,9 @@ class HuxApp extends StatelessWidget {
   final NudgeService? nudgeService;
   final EnvironmentService? environmentService;
 
+  /// Brand intro over the first screen (off in tests; main.dart decides).
+  final IntroMode introMode;
+
   const HuxApp({
     super.key,
     required this.authService,
@@ -55,6 +59,7 @@ class HuxApp extends StatelessWidget {
     this.coachInvoke,
     this.nudgeService,
     this.environmentService,
+    this.introMode = IntroMode.off,
   });
 
   @override
@@ -63,6 +68,7 @@ class HuxApp extends StatelessWidget {
       title: 'HUX',
       debugShowCheckedModeBanner: false,
       theme: buildHuxTheme(),
+      builder: (context, child) => HuxIntro(mode: introMode, child: child ?? const SizedBox.shrink()),
       home: _AuthGate(
         authService: authService,
         store: store,

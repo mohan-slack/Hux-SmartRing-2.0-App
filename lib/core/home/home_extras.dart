@@ -7,6 +7,8 @@ library;
 import '../environment/environment_service.dart';
 import '../food/food_log_service.dart';
 import '../journal/journal.dart';
+import '../cycle/cycle_service.dart';
+import '../journeys/journey_service.dart';
 import '../meaning/step_target.dart';
 import '../nudges/nudge_planner.dart';
 import '../nudges/nudge_service.dart';
@@ -68,11 +70,19 @@ class HomeExtras {
   /// Last 7 days' steps including today, oldest first.
   final List<int?> steps7;
 
+  /// The active journey's ONE line for Home (null = none running).
+  final JourneyHomeSummary? journey;
+
+  /// Cycle's ONE line for Home (null = off or hidden).
+  final CycleHomeSummary? cycle;
+
   const HomeExtras({
     this.agenda = const [],
     this.food,
     this.sleep7 = const [],
     this.steps7 = const [],
+    this.journey,
+    this.cycle,
   });
 
   static const empty = HomeExtras();
@@ -85,6 +95,8 @@ class HomeExtrasLoader {
   final EnvironmentService? environment;
   final PlanProgressService? plans;
   final JournalService? journal;
+  final JourneyService? journeys;
+  final CycleService? cycle;
   final DateTime Function() now;
 
   HomeExtrasLoader({
@@ -94,6 +106,8 @@ class HomeExtrasLoader {
     this.environment,
     this.plans,
     this.journal,
+    this.journeys,
+    this.cycle,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now;
 
@@ -254,6 +268,21 @@ class HomeExtrasLoader {
       // Optional.
     }
 
-    return HomeExtras(agenda: agenda, food: food, sleep7: sleep7, steps7: steps7);
+    JourneyHomeSummary? journey;
+    try {
+      journey = await journeys?.homeSummary();
+    } catch (_) {
+      journey = null;
+    }
+
+    CycleHomeSummary? cycleLine;
+    try {
+      cycleLine = await cycle?.homeSummary();
+    } catch (_) {
+      cycleLine = null;
+    }
+
+    return HomeExtras(
+        agenda: agenda, food: food, sleep7: sleep7, steps7: steps7, journey: journey, cycle: cycleLine);
   }
 }

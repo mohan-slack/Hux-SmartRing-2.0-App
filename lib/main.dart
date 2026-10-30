@@ -12,6 +12,8 @@ import 'core/food/meal_analyzer.dart';
 import 'core/environment/environment_service.dart';
 import 'core/nudges/notifier.dart';
 import 'core/nudges/nudge_service.dart';
+import 'core/cycle/cycle_service.dart';
+import 'core/journeys/journey_service.dart';
 import 'core/meaning/readout_service.dart';
 import 'core/meaning/weekly_story.dart';
 import 'core/modes/mode_service.dart';
@@ -24,6 +26,7 @@ import 'core/ring/ring_adapter.dart';
 import 'core/storage/db_location.dart';
 import 'core/storage/sqlite_health_store.dart';
 import 'core/sync/sync_service.dart';
+import 'widgets/hux_intro.dart';
 import 'core/coach/coach_service.dart';
 
 /// Which [RingAdapter] to wire up — 'mock' (simulated demo data) or
@@ -83,7 +86,9 @@ Future<void> main() async {
     alignToDayStart: true,
   );
   final modeService = ModeService(store);
-  final readoutService = ReadoutService(store, modeService: modeService);
+  // Cycle (opt-in): phase-matched baselines + one discreet reminder.
+  final cycleService = CycleService(store);
+  final readoutService = ReadoutService(store, modeService: modeService, cycle: cycleService);
   final storyService = WeeklyStoryService(store);
   final profileService = ProfileService(store);
   // Photo meals go through HUX's backend function (the AI key lives
@@ -114,6 +119,18 @@ Future<void> main() async {
   // Rebuild the reminder schedule from saved settings (it can be lost on
   // reinstall/data clear). Never block or crash startup over it.
   nudgeService.resync().catchError((Object _) {});
+  // Cycle heads-up moves with every logged period.
+  cycleService.applyHeadsUp(nudgeService).catchError((Object _) {});
+  // Journey reminders: the wind-down time moves as the bedtime shifts.
+  () async {
+    try {
+      final journeys = JourneyService(store);
+      final active = await journeys.active();
+      if (active != null) await nudgeService.setJourneyReminders(journeys.reminders(active));
+    } catch (_) {
+      // Bonus only.
+    }
+  }();
   // Morning briefing text mentions the current streak (if it's on).
   () async {
     try {
@@ -123,6 +140,18 @@ Future<void> main() async {
       // Bonus only.
     }
   }();
+
+  // Brand intro: the full ~3 s version once (first launch, or after
+  // "delete my data"); afterwards a quick fade from the launch screen.
+  var introMode = IntroMode.quick;
+  try {
+    if (await store.readSetting('intro_seen_v1') == null) {
+      introMode = IntroMode.full;
+      await store.writeSetting('intro_seen_v1', '1');
+    }
+  } catch (_) {
+    // Never block start-up over the intro.
+  }
 
   runApp(HuxApp(
     authService: authService,
@@ -138,6 +167,7 @@ Future<void> main() async {
     coachInvoke: invokeFunction,
     nudgeService: nudgeService,
     environmentService: environmentService,
+    introMode: introMode,
   ));
 }
 

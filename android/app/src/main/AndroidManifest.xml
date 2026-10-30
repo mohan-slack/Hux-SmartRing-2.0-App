@@ -23,6 +23,8 @@
          missing one makes requestAuthorization return false. -->
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE"/>
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
+    <!-- Cycle (opt-in): read past period days, asked only from Cycle → Import. -->
+    <uses-permission android:name="android.permission.health.READ_MENSTRUATION"/>
     <!-- No ACTIVITY_RECOGNITION: steps come from Health Connect, not the
          phone's sensors. Don't add permissions HUX doesn't use — Play
          review rejects unjustified sensitive permissions. -->
@@ -35,6 +37,7 @@
         android:label="HUX"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules">

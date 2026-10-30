@@ -29,7 +29,8 @@ treat or prevent any disease.
 | Email address and sign-in details (email/password, Google or Apple sign-in) | Create and secure your account | HUX account service, hosted on Supabase | Yes |
 | Health readings you allow: steps, heart rate, heart-rate variability, sleep and sleep stages, blood oxygen, active calories, breathing rate | HUX Charge, sleep, trends, streaks, plans | Read from Apple Health (HealthKit) or Android Health Connect; stored **only on your phone** | Yes, for the core features |
 | Your onboarding answers, journal tags, meals, plan progress, settings | Personalise the app | **Only on your phone** | No |
-| AI coach: your messages plus a short summary (goals, diet, HUX Charge, steps vs goal, sleep duration, streak, protein, time of day) | Answer your questions | Sent to HUX's server and to our AI provider (Groq) to write a reply. **Not stored by HUX.** Your chat history stays on your phone. | No — only after you agree in the coach |
+| Cycle (only if you turn it on): period dates, flow and symptoms you log, and past period dates you choose to import from Apple Health / Health Connect | Show your cycle phase, a likely range for your next period, phase tips, and compare your scores with your own same-phase days | **Only on your phone.** Never in share cards. If you allow it in Cycle settings, the coach receives only the phase name (e.g. "Luteal") — never dates or symptoms | No |
+| AI coach: your messages plus a short summary (goals, diet, HUX Charge, steps vs goal, sleep duration, streak, protein, time of day, and your cycle phase only if you allow it) | Answer your questions | Sent to HUX's server and to our AI provider (Groq) to write a reply. **Not stored by HUX.** Your chat history stays on your phone. | No — only after you agree in the coach |
 | Meal photos you choose to analyse, plus an optional description | Estimate calories and protein | Location and other hidden photo details (EXIF) are removed on your phone first. Sent to HUX's server and to our AI provider (Groq Inc., USA). **Not stored by HUX.** | No — only after you agree |
 | The city you pick (not GPS) | Air-quality and heat alerts | Its coordinates go to Open-Meteo (weather service) | No |
 | A daily count of coach messages, linked to your account ID | Fair-use limit | HUX server; deleted after 7 days | Only if you use the coach |
@@ -37,7 +38,9 @@ treat or prevent any disease.
 
 We do **not** collect GPS location, contacts, microphone audio, or advertising IDs.
 
-Health readings, meals and your journal are stored **on your phone only**, in app storage that is excluded from iCloud and Google backups.
+Cycle estimates are for general wellness. They are **not** a method of contraception or a diagnosis.
+
+Health readings, cycle data, meals and your journal are stored **on your phone only**, in app storage that is excluded from iCloud and Google backups.
 
 ## 3. Apple Health and Health Connect
 

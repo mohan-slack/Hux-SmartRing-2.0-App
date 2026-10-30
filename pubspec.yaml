@@ -29,6 +29,8 @@ dependencies:
   url_launcher: ^6.3.1
   # "Download my data" (DPDP right to a copy): share the JSON export.
   share_plus: ^10.1.4
+  # Cycle lock: Face ID / fingerprint / phone PIN (Cycle settings).
+  local_auth: ^2.3.0
   google_sign_in: ^6.2.1
   sign_in_with_apple: ^7.0.1
 
@@ -37,35 +39,23 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   sqflite_common_ffi: ^2.3.3
-  # Branding generators (build-time only, not in the app):
-  #   python3 tool/generate_brand_assets.py
-  #   dart run flutter_launcher_icons
+  # Launch screen generator (build-time only):
   #   dart run flutter_native_splash:create
-  flutter_launcher_icons: ^0.14.4
+  # App icons are NOT generated: they come from the brand kit and live
+  # directly in ios/ and android/ (iOS light/dark/tinted need that).
+  # See docs/release/BRANDING.md.
   flutter_native_splash: ^2.4.6
 
-# App icon — iOS (all sizes, no alpha) + Android legacy, adaptive and
-# Android 13 themed (monochrome) icons. Masters come from
-# tool/generate_brand_assets.py. See docs/release/BRANDING.md.
-flutter_launcher_icons:
-  android: "ic_launcher"
-  ios: true
-  image_path: "assets/icon/app_icon.png"
-  remove_alpha_ios: true
-  min_sdk_android: 26
-  adaptive_icon_background: "assets/icon/app_icon_background.png"
-  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
-  adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png"
-
-# Launch screen — light (HuxColors.bg) with the dark wordmark, on iOS,
-# Android ≤11 and the Android 12+ splash API.
+# Launch screen — the aurora with the glass-charge mark, centred. The
+# Flutter intro (lib/widgets/hux_intro.dart) starts from exactly this
+# frame, so the hand-over is invisible.
 flutter_native_splash:
-  color: "#F6F4FA"
-  image: assets/splash/splash_logo.png
+  color: "#1A0B30"
+  background_image: assets/splash/splash_bg.png
+  image: assets/splash/splash_mark.png
   android_12:
-    color: "#F6F4FA"
+    color: "#1A0B30"
     image: assets/splash/splash_android12.png
-    icon_background_color: "#F6F4FA"
   ios_content_mode: center
   fullscreen: false
 
@@ -74,3 +64,4 @@ flutter:
   assets:
     - assets/images/modes/
     - assets/images/brand/
+    - assets/splash/splash_bg.png

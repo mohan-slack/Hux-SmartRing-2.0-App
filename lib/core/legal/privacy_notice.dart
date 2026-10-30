@@ -48,7 +48,8 @@ class PrivacyNotice {
 
   /// Change this when the notice's meaning changes (forces re-consent).
   // v2: names the AI provider (Groq, USA) and its retention.
-  static const noticeVersion = '2026-11-v2';
+  // v3: adds Cycle (period data, on this phone only).
+  static const noticeVersion = '2026-11-v3';
 
   static const uses = <DataUse>[
     DataUse(
@@ -65,6 +66,12 @@ class PrivacyNotice {
       what: 'Your answers, journal, meals, plans and settings',
       why: 'To personalise the app',
       where: 'On this phone only',
+    ),
+    DataUse(
+      what: 'Period dates, flow and symptoms — only if you turn on Cycle',
+      why: 'To show your cycle phase, a likely range for your next period, and scores that compare you with your own same-phase days',
+      where: 'On this phone only. The coach gets only the phase word, and only if you allow it in Cycle',
+      optional: true,
     ),
     DataUse(
       what: 'A short summary of your numbers + your coach messages',

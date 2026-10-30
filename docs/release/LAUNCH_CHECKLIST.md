@@ -11,7 +11,7 @@ the stores.
 ## A. Code & build (M)
 
 - [ ] Re-run `flutter analyze && flutter test` after the latest changes (Today, Trends, Story footers).
-- [ ] Run `dart run flutter_launcher_icons` and `dart run flutter_native_splash:create`, then commit the files they generate.
+- [ ] Run `dart run flutter_native_splash:create` and commit what it generates (app icons are already committed — see BRANDING.md).
 - [ ] `flutter run --dart-define-from-file=.env` on a **real iPhone** and a **real Android phone** (Health data, notifications and voice cues behave differently on simulators). Walk through:
   - [ ] Privacy notice (18+), onboarding, featured cards
   - [ ] Health permissions are granted, and Today / Trends / Story fill in

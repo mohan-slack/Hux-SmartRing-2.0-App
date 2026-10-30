@@ -4,6 +4,8 @@
 /// import storage. Loads what [MeaningEngine] needs, calls it, hands
 /// back a [DailyReadout]. Contains no scoring logic itself.
 
+import '../cycle/cycle_models.dart';
+import '../cycle/cycle_service.dart';
 import '../modes/mode.dart';
 import '../modes/mode_service.dart';
 import '../ring/ring_models.dart';
@@ -21,6 +23,14 @@ class ReadoutService {
   final HealthStore _store;
   final ModeService? _modeService;
   final MeaningEngine _engine;
+
+  /// Optional: when Cycle is on, the baseline compares the user with her
+  /// OWN same-phase days (luteal vs the rest), so a normal pre-period
+  /// rise in resting heart rate isn't read as "run down".
+  final CycleService? _cycle;
+
+  /// How far back to look for same-phase nights.
+  static const cycleBaselineWindow = Duration(days: 90);
 
   /// Baseline window: how many days of history feed the personal
   /// baseline. Matches the wiki's "14 days is enough, 7 is thin" call.
@@ -42,8 +52,10 @@ class ReadoutService {
     this._store, {
     ModeService? modeService,
     MeaningEngine engine = const MeaningEngine(),
+    CycleService? cycle,
   })  : _modeService = modeService,
-        _engine = engine;
+        _engine = engine,
+        _cycle = cycle;
 
   /// Builds today's readout from whatever is currently in the store.
   /// [now] is injectable for tests; defaults to the real clock.
@@ -54,7 +66,7 @@ class ReadoutService {
       reference.subtract(baselineWindow),
       reference,
     );
-    final baseline = PersonalBaseline.fromSleepSessions(history);
+    final baseline = await _cycleBaseline(reference) ?? PersonalBaseline.fromSleepSessions(history);
 
     final lastNight = await this.lastNight(now: reference);
 
@@ -161,6 +173,30 @@ class ReadoutService {
       charge: charge,
       plan: plan,
     );
+  }
+
+  /// Same-phase baseline, or null to use the normal one (Cycle off, no
+  /// phase today, or fewer than [PersonalBaseline.minDaysRequired] nights).
+  Future<PersonalBaseline?> _cycleBaseline(DateTime reference) async {
+    final cycle = _cycle;
+    if (cycle == null) return null;
+    try {
+      final resolver = await cycle.resolver();
+      if (resolver == null) return null;
+      final todayPhase = resolver.phaseOn(reference.toLocal());
+      if (todayPhase == null) return null;
+      final luteal = todayPhase == CyclePhase.luteal;
+      final longer = await _store.sleepSessionsBetween(reference.subtract(cycleBaselineWindow), reference);
+      final matched = PersonalBaseline.mainSleepPerDay(longer).where((s) {
+        final p = resolver.phaseOn(s.wakeTime.toLocal());
+        return p != null && (p == CyclePhase.luteal) == luteal;
+      }).toList();
+      final recent = matched.length > 14 ? matched.sublist(matched.length - 14) : matched;
+      final b = PersonalBaseline.fromSleepSessions(recent);
+      return b.insufficient ? null : b;
+    } catch (_) {
+      return null; // never block the readout
+    }
   }
 
   /// The most recent sleep session, if it's recent enough to honestly

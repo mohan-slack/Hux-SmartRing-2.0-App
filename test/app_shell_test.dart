@@ -42,9 +42,13 @@ void main() {
   /// weekly story) finish so no fake-async timer outlives the test.
   Future<void> drain(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 600)));
-    await tester.pump(const Duration(seconds: 1));
+    // A few rounds: Home loads (readout, extras, journey, cycle) run in
+    // sequence, and each sqflite call can schedule a fake-async timer.
+    for (var i = 0; i < 3; i++) {
+      await tester
+          .runAsync(() => Future.delayed(const Duration(milliseconds: 500)));
+      await tester.pump(const Duration(seconds: 1));
+    }
   }
 
   /// Taps a tab in the floating nav bar (not a same-named title on screen).
@@ -110,6 +114,7 @@ void main() {
 
     await tapTab(tester, 'Home');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
+    await drain(tester);
   });
 
   testWidgets('switching tabs preserves each tab\'s state (IndexedStack)',

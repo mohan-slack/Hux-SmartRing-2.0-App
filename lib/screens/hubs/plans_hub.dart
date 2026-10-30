@@ -13,7 +13,10 @@ class PlansHub extends StatelessWidget {
   final VoidCallback onOpenModes;
   final VoidCallback? onSeeAll;
 
-  const PlansHub({super.key, required this.onOpenFeature, required this.onOpenModes, this.onSeeAll});
+  /// Guided multi-day programs (sleep, food, movement); null hides it.
+  final VoidCallback? onOpenJourneys;
+
+  const PlansHub({super.key, required this.onOpenFeature, required this.onOpenModes, this.onSeeAll, this.onOpenJourneys});
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +27,15 @@ class PlansHub extends StatelessWidget {
         Text('Plans', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
         Text('Built around your goals. Change them anytime.', style: text.bodySmall),
         const SizedBox(height: HuxSpacing.lg),
+        if (onOpenJourneys != null)
+          _PlanCard(
+            color: HuxColors.accentPurple,
+            icon: Icons.route_rounded,
+            title: 'Journeys',
+            body: 'Guided programs: Sleep Reset 21 and Fit in 30 — sleep, food and home workouts, '
+                'one quiet card a day.',
+            actions: [_PlanAction('Open journeys', onOpenJourneys!)],
+          ),
         _PlanCard(
           color: HuxColors.ringSteps,
           icon: Icons.directions_run_rounded,

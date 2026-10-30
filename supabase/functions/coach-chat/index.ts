@@ -91,6 +91,8 @@ Safety (always):
 - If they mention suicide, self-harm, or wanting to die: respond with warmth, no lecture, encourage them to call
   Tele-MANAS 14416 (free, 24x7, Indian languages) or 112 if in immediate danger, and to reach someone they trust.
 - No extreme diets, crash fasting, very low calories, or weight-loss pills. No supplement or brand promotion.
+- cyclePhase (only if present): an ESTIMATED menstrual phase the user chose to share. Use it to normalise how she
+  feels and to tune food/movement tips. Never give fertility, contraception or pregnancy-timing advice from it.
 - Never ask for or repeat personal identifiers. If asked about things outside health and wellness, briefly steer back.`;
 }
 
@@ -125,6 +127,7 @@ function num(v: unknown, min: number, max: number): number | undefined {
 }
 
 const PARTS_OF_DAY = ["morning", "afternoon", "evening", "night"];
+const CYCLE_PHASES = ["Period", "Follicular", "Ovulatory", "Luteal"];
 
 /**
  * Rebuilds the user summary from KNOWN keys only (see CoachContext.toJson
@@ -155,6 +158,7 @@ function safeContext(raw: unknown): string {
     moveDaysThisWeek: num(c.moveDaysThisWeek, 0, 7),
     proteinTodayG: num(c.proteinTodayG, 0, 1000),
     proteinGoalG: num(c.proteinGoalG, 0, 1000),
+    cyclePhase: CYCLE_PHASES.includes(String(c.cyclePhase)) ? c.cyclePhase : undefined,
   };
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   return JSON.stringify(out).slice(0, MAX_CONTEXT_CHARS).replaceAll("<", "‹");

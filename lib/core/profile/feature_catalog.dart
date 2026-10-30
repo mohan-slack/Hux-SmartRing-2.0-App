@@ -243,10 +243,10 @@ const _all = <FeatureInfo>[
   ),
   FeatureInfo(
     id: FeatureId.cycleTracker,
-    title: 'Cycle tracker',
-    blurb: 'Energy and workout tips by cycle phase.',
+    title: 'Cycle',
+    blurb: 'Your phase explains your energy, sleep and scores. Private, on this phone.',
     category: FeatureCategory.recovery,
-    status: FeatureStatus.comingSoon,
+    status: FeatureStatus.available,
     sensitive: true,
   ),
   FeatureInfo(

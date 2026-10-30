@@ -4,6 +4,7 @@
 /// agreeing, and can turn sharing off at any time.
 library;
 
+import '../cycle/cycle_service.dart';
 import '../food/food_log_service.dart';
 import '../meaning/readout_service.dart';
 import '../profile/profile_service.dart';
@@ -37,6 +38,9 @@ class CoachContext {
   final int? proteinTodayG;
   final int? proteinGoalG;
 
+  /// ONE word ("Luteal"), only if the user turned it on in Cycle.
+  final String? cyclePhase;
+
   const CoachContext({
     this.goals = const [],
     this.audience,
@@ -58,6 +62,7 @@ class CoachContext {
     this.moveDaysThisWeek,
     this.proteinTodayG,
     this.proteinGoalG,
+    this.cyclePhase,
   });
 
   /// Sent to the backend. Only filled fields; flat and small.
@@ -81,6 +86,7 @@ class CoachContext {
       'moveDaysThisWeek': moveDaysThisWeek,
       'proteinTodayG': proteinTodayG,
       'proteinGoalG': proteinGoalG,
+      'cyclePhase': cyclePhase,
     };
     m.removeWhere((_, v) => v == null);
     return m;
@@ -104,6 +110,7 @@ class CoachContext {
       if (streakDays != null) 'Streak: $streakDays days',
       if (moveDaysThisWeek != null) 'Move days this week: $moveDaysThisWeek',
       if (proteinTodayG != null) 'Protein today: $proteinTodayG g${proteinGoalG != null ? ' of $proteinGoalG g' : ''}',
+      if (cyclePhase != null) 'Cycle phase: $cyclePhase',
       'Time of day: $partOfDay',
     ];
   }
@@ -125,9 +132,10 @@ class CoachContextLoader {
   final HealthStore store;
   final ReadoutService? readouts;
   final ProfileService? profiles;
+  final CycleService? cycle;
   final DateTime Function() now;
 
-  CoachContextLoader({required this.store, this.readouts, this.profiles, DateTime Function()? now})
+  CoachContextLoader({required this.store, this.readouts, this.profiles, this.cycle, DateTime Function()? now})
       : now = now ?? DateTime.now;
 
   Future<CoachContext> load() async {
@@ -196,6 +204,13 @@ class CoachContextLoader {
       // Food is optional context.
     }
 
+    String? phase;
+    try {
+      phase = await cycle?.coachPhase();
+    } catch (_) {
+      // Optional, and off unless the user allowed it.
+    }
+
     return CoachContext(
       goals: [for (final g in p?.goals ?? const <Goal>[]) g.label],
       audience: p?.audience?.label,
@@ -217,6 +232,7 @@ class CoachContextLoader {
       moveDaysThisWeek: moveDays,
       proteinTodayG: protein,
       proteinGoalG: proteinGoal,
+      cyclePhase: phase,
     );
   }
 

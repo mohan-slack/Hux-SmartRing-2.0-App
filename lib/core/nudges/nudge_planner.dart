@@ -140,6 +140,13 @@ class BriefingSettings {
 class NudgeIds {
   const NudgeIds._();
   static const morningBriefing = 1201;
+  static const journeyWake = 1301;
+  static const journeyMove = 1302;
+  static const journeyWindDown = 1303;
+  static const allJourney = [journeyWake, journeyMove, journeyWindDown];
+
+  /// Cycle: one discreet heads-up (never says "period").
+  static const cycleHeadsUp = 1401;
   static const walkLunch = 1001;
   static const walkDinner = 1002;
   static const walkAfterLogged = 1003;
