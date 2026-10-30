@@ -21,6 +21,7 @@ import 'package:hux_app/core/ring/mock_ring_adapter.dart';
 import 'package:hux_app/core/ring/ring_models.dart';
 import 'package:hux_app/core/storage/sqlite_health_store.dart';
 import 'package:hux_app/core/sync/sync_service.dart';
+import 'package:hux_app/screens/home/why_sheet.dart';
 import 'package:hux_app/screens/today_screen.dart';
 
 void main() {
@@ -29,6 +30,18 @@ void main() {
   Future<SqliteHealthStore> openStore() =>
       SqliteHealthStore.open(inMemoryDatabasePath,
           factory: databaseFactoryFfi);
+
+  /// UI 2.0: actions and body numbers live in the Why sheet. Opens it.
+  Future<void> openWhy(WidgetTester tester) async {
+    await tester.tap(find.textContaining(RegExp(r'^(Why |What HUX)')).first);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> expectInWhy(WidgetTester tester, String text) async {
+    await tester.scrollUntilVisible(find.text(text), 120,
+        scrollable: find.descendant(of: find.byType(WhySheetBody), matching: find.byType(Scrollable)).first);
+    expect(find.text(text), findsOneWidget);
+  }
 
   /// Lets the screen's own real async work (DB reads kicked off from
   /// initState) actually finish, then rebuilds. Not `pumpAndSettle()`:
@@ -94,8 +107,11 @@ void main() {
     await settle(tester);
 
     expect(find.text(expectedReadout.headline), findsOneWidget);
-    for (final action in expectedReadout.actions) {
-      expect(find.text(action), findsOneWidget);
+    if (expectedReadout.actions.isNotEmpty) {
+      await openWhy(tester);
+      for (final action in expectedReadout.actions) {
+        await expectInWhy(tester, action);
+      }
     }
   });
 
@@ -330,8 +346,11 @@ void main() {
     await settle(tester);
 
     expect(find.text(expectedReadout.headline), findsOneWidget);
-    for (final action in expectedReadout.actions) {
-      expect(find.text(action), findsOneWidget);
+    if (expectedReadout.actions.isNotEmpty) {
+      await openWhy(tester);
+      for (final action in expectedReadout.actions) {
+        await expectInWhy(tester, action);
+      }
     }
     // No RenderFlex overflow or other layout exception at 1.3x scale.
     expect(tester.takeException(), isNull);
@@ -379,8 +398,11 @@ void main() {
     ));
     await settle(tester);
 
-    // Score rings at the top of Home.
+    // Charge ring in the hero, Steps tile below.
     expect(find.text('Charge'), findsOneWidget);
+    // Home is a lazy list: tiles below the fold are built when scrolled to.
+    await tester.scrollUntilVisible(find.text('Steps'), 300);
+    await tester.pump();
     expect(find.text('Steps'), findsOneWidget);
 
     // Ring card: verify it renders, and exercise the real
@@ -402,19 +424,21 @@ void main() {
     expect(find.text('Buzz now'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // Home cards: score rings, last night, body today.
+    // Last night tile (with stage chips), then the Why sheet.
     await tester.scrollUntilVisible(find.text('Last night'), -300);
     await tester.pump();
     expect(find.text('Last night'), findsOneWidget);
-    expect(find.text('Deep sleep'), findsOneWidget);
-    expect(find.text('Resp. rate'), findsOneWidget);
-    expect(find.text('Min SpO2'), findsOneWidget);
+    expect(find.textContaining('Deep '), findsOneWidget);
+    expect(find.textContaining('Breathing '), findsOneWidget);
+    expect(find.textContaining('SpO2 min'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Body today'), 300);
-    await tester.pump();
-    expect(find.text('Heart rate'), findsOneWidget);
-    expect(find.text('Stress'), findsOneWidget);
-    expect(find.text('Active cal'), findsOneWidget);
+    // Body numbers moved into the Why sheet (UI 2.0).
+    await tester.scrollUntilVisible(find.textContaining(RegExp(r'^(Why |What HUX)')), -300);
+    await openWhy(tester);
+    await expectInWhy(tester, 'Body today');
+    await expectInWhy(tester, 'Heart rate');
+    await expectInWhy(tester, 'Stress');
+    await expectInWhy(tester, 'Active cal');
     expect(tester.takeException(), isNull);
   });
 }

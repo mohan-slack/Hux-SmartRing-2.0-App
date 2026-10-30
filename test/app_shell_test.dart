@@ -107,7 +107,7 @@ void main() {
 
     await tapTab(tester, 'Plans');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
-    expect(find.text('ACTIVITY PLAN'), findsOneWidget);
+    expect(find.text('Walk & run'), findsOneWidget);
 
     await tapTab(tester, 'Coach');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);

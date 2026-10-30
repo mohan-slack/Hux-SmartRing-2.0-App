@@ -198,7 +198,9 @@ class HuxAskBar extends StatelessWidget {
   }
 }
 
-/// Small uppercase section label with an optional action on the right.
+/// Section heading (UI 2.0): sentence case, 18/800, no icon, optional
+/// action on the right. [icon] and [iconColor] stay for API
+/// compatibility and are not drawn.
 class HuxSectionTitle extends StatelessWidget {
   final String title;
   final IconData? icon;
@@ -210,18 +212,12 @@ class HuxSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: HuxSpacing.sm),
       child: Row(
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18, color: iconColor ?? HuxColors.accentPink),
-            const SizedBox(width: HuxSpacing.xs),
-          ],
           Expanded(
-            child: Text(title.toUpperCase(),
-                style: text.labelLarge?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+            child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: HuxColors.ink)),
           ),
           if (actionLabel != null && onAction != null)
             TextButton(

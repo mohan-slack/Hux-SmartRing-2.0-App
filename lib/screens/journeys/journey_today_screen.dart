@@ -13,7 +13,7 @@ import '../../core/journeys/journey_service.dart';
 import '../../core/nudges/nudge_service.dart';
 import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
-import '../../theme/hux_ui.dart';
+import '../../widgets/hux/hux_kit.dart';
 import '../../widgets/share_card.dart';
 import 'journey_visuals.dart';
 import 'journey_workout_screen.dart';
@@ -184,7 +184,6 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
   }
 
   Widget _body(BuildContext context, JourneyState s, Color color) {
-    final text = Theme.of(context).textTheme;
     final day = widget.journeys.today(s);
     final doneToday = widget.journeys.doneToday(s);
     final quiet = widget.journeys.quietDays(s);
@@ -194,169 +193,117 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
     final gentle = _gentleOffered && _useGentle && s.setup.id == JourneyId.fitIn30;
     final workout = gentle ? gentleWorkout : day.workout;
 
+    // Food tile shows the meal that's next by the clock.
+    final hour = DateTime.now().hour;
+    final wanted = hour < 11
+        ? MealSlot.breakfast
+        : hour < 16
+            ? MealSlot.lunch
+            : hour < 18
+                ? MealSlot.snack
+                : MealSlot.dinner;
+    final slot = meals.containsKey(wanted) && meals[wanted]!.isNotEmpty
+        ? wanted
+        : meals.keys.firstWhere((k) => meals[k]!.isNotEmpty, orElse: () => wanted);
+    final nextMeal = meals[slot]?.isNotEmpty == true ? meals[slot]!.first : null;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.xxl),
       children: [
-        HuxHeroCard(
-          icon: journeyIcon(s.setup.id),
-          color: color,
-          eyebrow: s.paused
+        Text(s.def.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color)),
+        Text(
+          s.paused
               ? 'Paused'
               : doneToday
                   ? 'Day ${s.daysDone} done'
-                  : 'Day ${s.currentDay} of ${s.def.days}${day.challenge ? ' · Challenge' : ''}',
-          title: day.focus,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              HuxProgressBar(value: s.daysDone / s.def.days, color: color),
-              const SizedBox(height: HuxSpacing.xs),
-              Text('${s.ticks.length} of 3 done today', style: text.labelSmall),
-            ],
-          ),
+                  : 'Day ${s.currentDay}${day.challenge ? ' · challenge' : ''}',
+          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: huxInk),
         ),
+        const SizedBox(height: 14),
+        _DayDots(total: s.def.days, done: s.daysDone, today: doneToday ? null : s.currentDay, color: color),
         if (quiet >= 2 && !doneToday && !s.paused) ...[
-          const SizedBox(height: HuxSpacing.md),
-          HuxCard(
-            child: Row(
-              children: [
-                const HuxIconBadge(icon: Icons.waving_hand_rounded, color: HuxColors.ringHabit, size: 36),
-                const SizedBox(width: HuxSpacing.md),
-                Expanded(
-                  child: Text('Welcome back! Continue from day ${s.currentDay} — nothing is lost.',
-                      style: text.bodyMedium),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 12),
+          const HuxStatChip('Welcome back · nothing is lost', tone: HuxTone.good),
         ],
         if (s.paused) ...[
-          const SizedBox(height: HuxSpacing.md),
+          const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: () => _menu(_Menu.pause),
             icon: const Icon(Icons.play_arrow_rounded),
             label: const Text('Resume journey'),
           ),
         ],
-        const SizedBox(height: HuxSpacing.lg),
+        const SizedBox(height: 18),
 
-        // ---- 1. sleep ----
-        _ItemCard(
-          icon: Icons.bedtime_rounded,
+        _ItemTile(
+          icon: Icons.bedtime_outlined,
           color: HuxColors.ringSleep,
-          title: 'Sleep',
+          label: 'Sleep',
+          value: 'In bed by ${bed.label}',
           done: s.ticks.contains(DayItem.sleep),
           locked: locked,
-          tickLabel: 'In bed on time',
           onTick: () => _toggle(DayItem.sleep),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: HuxSpacing.sm,
-                runSpacing: HuxSpacing.xs,
-                children: [
-                  HuxPill(label: 'Wake ${s.setup.wake.label}', color: HuxColors.ringSteps, icon: Icons.alarm_rounded),
-                  HuxPill(label: 'In bed by ${bed.label}', color: HuxColors.ringSleep, icon: Icons.bedtime_outlined),
-                ],
-              ),
-              const SizedBox(height: HuxSpacing.xs),
-              Text('Wind down from ${bed.plusMinutes(-30).label}: lights low, phone away.',
-                  style: text.bodySmall?.copyWith(color: HuxColors.mutedText)),
-            ],
-          ),
+          onDetails: () => _details(context, 'Sleep', [
+            _DetailRow('Wake', s.setup.wake.label),
+            _DetailRow('In bed by', bed.label),
+            _DetailRow('Wind down from', bed.plusMinutes(-30).label),
+            _DetailNote(day.focus),
+          ]),
         ),
-        const SizedBox(height: HuxSpacing.md),
-
-        // ---- 2. food ----
-        _ItemCard(
-          icon: Icons.restaurant_rounded,
+        const SizedBox(height: 12),
+        _ItemTile(
+          icon: Icons.restaurant_outlined,
           color: HuxColors.ringFood,
-          title: 'Food',
+          label: 'Food',
+          value: nextMeal == null ? 'See today\'s meals' : '${slot.label}: ${nextMeal.name}',
           done: s.ticks.contains(DayItem.food),
           locked: locked,
-          tickLabel: 'Ate one of these',
           onTick: () => _toggle(DayItem.food),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final e in meals.entries) ...[
-                Text(e.key.label.toUpperCase(),
-                    style: text.labelSmall?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
-                for (final m in e.value)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2, bottom: 2),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${m.budget.symbol}  ', style: text.labelMedium?.copyWith(color: HuxColors.ringFood)),
-                        Expanded(
-                          child: Text.rich(TextSpan(children: [
-                            TextSpan(text: m.name, style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                            TextSpan(
-                              text: '  ${m.portion} · ${m.proteinG.round()} g protein · ${m.kcal.round()} kcal'
-                                  ' · C ${m.carbsG.round()} / F ${m.fatG.round()} g',
-                              style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
-                            ),
-                          ])),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: HuxSpacing.sm),
-              ],
-              if (_periodToday) ...[
-                Text('Period days: add iron — ragi, rajma, chana with jaggery, palak. Lemon or amla helps absorb it.',
-                    style: text.bodySmall?.copyWith(color: HuxColors.ringFood)),
-                const SizedBox(height: HuxSpacing.xs),
-              ],
-              Text('Approximate home-style values. Pick one per meal.',
-                  style: text.labelSmall?.copyWith(color: HuxColors.mutedText)),
-            ],
-          ),
+          onDetails: () => _details(context, 'Today\'s meals', [
+            for (final e in meals.entries)
+              for (final m in e.value)
+                _DetailRow('${e.key.label} · ${m.budget.symbol}', m.name,
+                    sub: '${m.portion} · ${m.proteinG.round()} g protein · ${m.kcal.round()} kcal'),
+            if (_periodToday)
+              const _DetailNote('Period days: add iron — ragi, rajma, chana with jaggery, palak.'),
+            const _DetailNote('Approximate home-style values. Pick one per meal.'),
+          ]),
         ),
-        const SizedBox(height: HuxSpacing.md),
-
-        // ---- 3. move ----
-        _ItemCard(
-          icon: Icons.fitness_center_rounded,
+        const SizedBox(height: 12),
+        _ItemTile(
+          icon: Icons.fitness_center_outlined,
           color: color,
-          title: 'Move',
+          label: 'Move · ${workout.minutes} min',
+          value: workout.title,
           done: s.ticks.contains(DayItem.move),
           locked: locked,
-          tickLabel: 'Done',
           onTick: () => _toggle(DayItem.move),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          onDetails: () => _details(context, workout.title, [
+            _DetailRow('Warm-up', '${workout.warmup.length} moves'),
+            _DetailRow('Main', '${workout.main.length} moves${workout.rounds > 1 ? ' × ${workout.rounds}' : ''}'),
+            const _DetailRow('Cool-down', 'stretch + breathing'),
+          ]),
+          extra: Row(
             children: [
-              if (_gentleOffered && s.setup.id == JourneyId.fitIn30)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  value: _useGentle,
-                  onChanged: locked ? null : (v) => setState(() => _useGentle = v),
-                  title: const Text('Period day: gentle version'),
-                  subtitle: const Text('Still counts for today. Turn off if you feel strong.'),
-                ),
-              Text('${workout.title} · about ${workout.minutes} min',
-                  style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: HuxSpacing.xs),
-              Text(
-                'Warm-up ${workout.warmup.length} moves · main ${workout.main.length} moves'
-                '${workout.rounds > 1 ? ' × ${workout.rounds} rounds' : ''} · cool-down',
-                style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
-              ),
-              const SizedBox(height: HuxSpacing.sm),
               if (!locked)
                 FilledButton.icon(
                   onPressed: () => _startWorkout(workout),
+                  style: FilledButton.styleFrom(backgroundColor: huxInk, minimumSize: const Size(0, 44), shape: const StadiumBorder()),
                   icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Start workout'),
+                  label: const Text('Start'),
                 ),
+              if (_gentleOffered && s.setup.id == JourneyId.fitIn30) ...[
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('Gentle day'),
+                  selected: _useGentle,
+                  onSelected: locked ? null : (v) => setState(() => _useGentle = v),
+                ),
+              ],
             ],
           ),
         ),
-        const SizedBox(height: HuxSpacing.lg),
+        const SizedBox(height: 18),
         if (!locked)
           Center(
             child: TextButton(
@@ -364,60 +311,195 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
               child: Text(widget.journeys.restPassAvailable(s) ? 'Not today (use rest pass)' : 'Not today'),
             ),
           ),
-        const SizedBox(height: HuxSpacing.sm),
-        Text('Stop any move that hurts. Wellness program, not medical advice.',
-            textAlign: TextAlign.center, style: text.bodySmall?.copyWith(color: HuxColors.mutedText)),
+        const Text('Stop any move that hurts.',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: huxMuted)),
       ],
+    );
+  }
+
+  Future<void> _details(BuildContext context, String title, List<Widget> rows) => showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (c) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.8),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                const SizedBox(height: 12),
+                ...rows,
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+/// One dot per day: done (filled), today (ring), challenge days tinted.
+class _DayDots extends StatelessWidget {
+  final int total;
+  final int done;
+  final int? today;
+  final Color color;
+
+  const _DayDots({required this.total, required this.done, required this.today, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$done of $total days done',
+      child: LayoutBuilder(builder: (context, box) {
+        const perRow = 10, gap = 8.0;
+        final size = (box.maxWidth - gap * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (var d = 1; d <= total; d++)
+              Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: d <= done
+                      ? color
+                      : d == today
+                          ? Colors.white
+                          : (d % 7 == 0 || d == total)
+                              ? const Color(0xFFFCE8F3)
+                              : const Color(0xFFE4E0EC),
+                  border: d == today ? Border.all(color: color, width: 3) : null,
+                ),
+              ),
+          ],
+        );
+      }),
     );
   }
 }
 
-class _ItemCard extends StatelessWidget {
+class _ItemTile extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final String title;
+  final String label;
+  final String value;
   final bool done;
   final bool locked;
-  final String tickLabel;
   final VoidCallback onTick;
-  final Widget child;
+  final VoidCallback onDetails;
+  final Widget? extra;
 
-  const _ItemCard({
+  const _ItemTile({
     required this.icon,
     required this.color,
-    required this.title,
+    required this.label,
+    required this.value,
     required this.done,
     required this.locked,
-    required this.tickLabel,
     required this.onTick,
-    required this.child,
+    required this.onDetails,
+    this.extra,
   });
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return HuxCard(
+    return HuxTile(
+      onTap: onDetails,
+      padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              HuxIconBadge(icon: done ? Icons.check_rounded : icon, color: done ? HuxColors.recharged : color, size: 36),
-              const SizedBox(width: HuxSpacing.md),
-              Expanded(child: Text(title, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-              FilterChip(
-                label: Text(tickLabel),
-                selected: done,
-                onSelected: locked ? null : (_) => onTick(),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
+                    Text(value,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: huxInk)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Semantics(
+                button: true,
+                toggled: done,
+                label: done ? '$label done' : 'Mark $label done',
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: locked ? null : onTick,
+                  borderRadius: BorderRadius.circular(22),
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 64, minHeight: 44),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: done ? const Color(0xFFE7F6EE) : Colors.white,
+                      border: done ? null : Border.all(color: const Color(0xFFD9D4E2), width: 2),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Text(done ? 'Done' : 'Tick',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: done ? const Color(0xFF17804B) : huxMuted,
+                        )),
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: HuxSpacing.sm),
-          child,
+          if (extra != null) ...[const SizedBox(height: 12), extra!],
         ],
       ),
     );
   }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? sub;
+
+  const _DetailRow(this.label, this.value, {this.sub});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxMuted)),
+            Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: huxInk)),
+            if (sub != null) Text(sub!, style: const TextStyle(fontSize: 14, color: huxMuted)),
+          ],
+        ),
+      );
+}
+
+class _DetailNote extends StatelessWidget {
+  final String text;
+
+  const _DetailNote(this.text);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(text, style: const TextStyle(fontSize: 14, color: huxMuted, height: 1.4)),
+      );
 }
 
 class _Finished extends StatelessWidget {

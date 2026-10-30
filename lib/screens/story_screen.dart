@@ -10,7 +10,6 @@ import '../core/meaning/weekly_story.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
-import '../theme/hux_ui.dart';
 import '../widgets/share_card.dart';
 import '../widgets/wellness_note.dart';
 
@@ -178,7 +177,12 @@ class _Observations extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  HuxIconBadge(icon: Icons.insights_rounded, color: _colors[i % _colors.length], size: 36),
+                  Container(
+                    width: 10,
+                    height: 10,
+                    margin: const EdgeInsets.only(top: 6),
+                    decoration: BoxDecoration(color: _colors[i % _colors.length], shape: BoxShape.circle),
+                  ),
                   const SizedBox(width: HuxSpacing.md),
                   Expanded(child: Text(observations[i], style: bodyStyle)),
                 ],

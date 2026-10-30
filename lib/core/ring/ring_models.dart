@@ -133,9 +133,28 @@ class SleepSession {
 
   Duration get totalTimeInBed => wakeTime.difference(bedtime);
 
-  Duration get totalSleep => segments
-      .where((s) => s.stage != SleepStage.awake)
-      .fold(Duration.zero, (sum, s) => sum + s.duration);
+  /// Time asleep, counting overlapping segments once. Health apps often
+  /// hold the same night twice (phone + watch, or "asleep" plus stage
+  /// samples on top); summing them would report e.g. 19 h for a 7 h
+  /// night.
+  Duration get totalSleep {
+    final asleep = segments.where((s) => s.stage != SleepStage.awake && s.end.isAfter(s.start)).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    var total = Duration.zero;
+    DateTime? runStart;
+    DateTime? runEnd;
+    for (final s in asleep) {
+      if (runEnd == null || s.start.isAfter(runEnd)) {
+        if (runStart != null) total += runEnd!.difference(runStart);
+        runStart = s.start;
+        runEnd = s.end;
+      } else if (s.end.isAfter(runEnd)) {
+        runEnd = s.end;
+      }
+    }
+    if (runStart != null) total += runEnd!.difference(runStart);
+    return total;
+  }
 
   Duration stageTotal(SleepStage stage) => segments
       .where((s) => s.stage == stage)

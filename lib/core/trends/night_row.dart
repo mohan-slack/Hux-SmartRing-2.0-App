@@ -35,6 +35,10 @@ class NightRow {
   /// midnight, same shape as steps), not a sum across snapshots.
   final double? activeEnergyKcal;
 
+  /// That calendar day's step total — the highest cumulative
+  /// [HealthSnapshot.steps] reading, like [activeEnergyKcal].
+  final double? steps;
+
   const NightRow({
     required this.night,
     this.sleepDuration,
@@ -43,6 +47,7 @@ class NightRow {
     this.avgRespiratoryRateBrpm,
     this.avgStressIndex,
     this.activeEnergyKcal,
+    this.steps,
   });
 }
 
@@ -127,6 +132,7 @@ List<NightRow> buildNightRows({
       avgRespiratoryRateBrpm: session?.avgRespiratoryRateBrpm,
       avgStressIndex: averageOf(daySnapshots, (s) => s.stressIndex),
       activeEnergyKcal: maxOf(daySnapshots, (s) => s.activeEnergyKcal),
+      steps: maxOf(daySnapshots, (s) => s.steps),
     ));
   }
   return rows;

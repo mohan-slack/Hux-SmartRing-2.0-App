@@ -52,6 +52,14 @@ class CycleContent {
           ),
       };
 
+  /// Two-word versions for the tiles; the sentences above open on tap.
+  static ({String move, String food, String sleep}) short(CyclePhase p) => switch (p) {
+        CyclePhase.period => (move: 'Gentle', food: 'Iron', sleep: 'Warmth'),
+        CyclePhase.follicular => (move: 'Push a bit', food: 'Protein', sleep: 'Same wake'),
+        CyclePhase.ovulatory => (move: 'Challenge', food: 'Fibre, water', sleep: 'Steady'),
+        CyclePhase.luteal => (move: 'Steady', food: 'Seeds, banana', sleep: 'Cool room'),
+      };
+
   /// One line for Home / the hero card.
   static String statusLine(CycleForecast f) {
     if (f.mode == CycleMode.pregnant) return 'Predictions paused';

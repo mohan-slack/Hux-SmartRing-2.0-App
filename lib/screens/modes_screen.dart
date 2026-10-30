@@ -1,8 +1,11 @@
 /// Modes screen — pick an event mode (Big Day, Shaadi, Exam Season),
-/// set a target date, and see the active one's countdown. Deliberately
-/// undesigned; a later design phase restyles this.
+/// set a target date, and see the active one's countdown. Photo cards with
+/// two-word captions; the active mode is a dark countdown tile.
 ///
 /// Talks only to [ModeService].
+library;
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -10,9 +13,8 @@ import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
-import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
-import '../theme/hux_ui.dart';
+import '../widgets/hux/hux_kit.dart';
 
 String modeName(ModeId id) => switch (id) {
       ModeId.bigDay => 'Big Day',
@@ -21,14 +23,9 @@ String modeName(ModeId id) => switch (id) {
     };
 
 String _modeDescription(ModeId id) => switch (id) {
-      ModeId.bigDay =>
-        'A presentation, interview, or match — countdown coaching '
-            'for any big day.',
-      ModeId.shaadi => 'Wedding countdown — pace yourself through the season, '
-          'function by function.',
-      ModeId.examSeason =>
-        'Exam countdown — steady study blocks, honest about sleep '
-            'versus cramming.',
+      ModeId.bigDay => 'Interview, talk or match',
+      ModeId.shaadi => 'Pace the wedding season',
+      ModeId.examSeason => 'Study blocks, real sleep',
     };
 
 IconData _modeIcon(ModeId id) => switch (id) {
@@ -290,17 +287,13 @@ class _ModesScreenState extends State<ModesScreen> {
               ),
               const SizedBox(height: HuxSpacing.xl),
             ],
-            const HuxSectionTitle('Modes', icon: Icons.flag_rounded),
-            Text(
-              'Aim HUX at a life moment — a target date with coaching '
-              'that builds toward it.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: HuxColors.mutedText),
-            ),
-            const SizedBox(height: HuxSpacing.lg),
+            const _Heading('Countdowns', 'Pick a date'),
+            const SizedBox(height: HuxSpacing.md),
             for (final (i, id) in ModeId.values.indexed)
               HuxEntrance(
                 index: 1 + i,
-                child: HuxTapScale(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: HuxSpacing.md),
                   child: _ModeListTile(
                     modeId: id,
                     isActive: active?.id == id,
@@ -309,13 +302,8 @@ class _ModesScreenState extends State<ModesScreen> {
                 ),
               ),
             const SizedBox(height: HuxSpacing.xl),
-            const HuxSectionTitle('Lifestyle', icon: Icons.self_improvement_rounded, iconColor: HuxColors.accentIndigo),
-            Text(
-              'How you live day to day — changes the app\'s voice and '
-              'advice while active, no target date to count down to.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: HuxColors.mutedText),
-            ),
-            const SizedBox(height: HuxSpacing.lg),
+            const _Heading('Everyday', 'No end date'),
+            const SizedBox(height: HuxSpacing.md),
             HuxEntrance(
               index: 4,
               child: HuxTapScale(
@@ -324,9 +312,7 @@ class _ModesScreenState extends State<ModesScreen> {
                   accentColor: HuxColors.accentIndigo,
                   icon: Icons.bedtime,
                   title: 'Night Shift',
-                  description: 'Main sleep happens in the daytime — swaps '
-                      '"last night" wording for "last sleep" throughout '
-                      'the app.',
+                  description: 'Day sleep counts',
                   isActive: data.nightShift != null,
                   onTap: () => _onTapNightShift(data.nightShift),
                 ),
@@ -340,9 +326,7 @@ class _ModesScreenState extends State<ModesScreen> {
                   accentColor: HuxColors.accentCherry,
                   icon: Icons.wb_twilight,
                   title: 'Fasting Companion',
-                  description: 'A dated observance — Roza, Navratri, '
-                      'Ekadashi, Karwa Chauth, or your own — adapts food-'
-                      'timing advice while it runs.',
+                  description: 'Roza, Navratri, Ekadashi',
                   isActive: data.fasting != null,
                   onTap: () => _onTapFasting(data.fasting),
                 ),
@@ -370,21 +354,59 @@ class _ActiveModeCard extends StatelessWidget {
             ? "It's today"
             : 'Wrapping up';
 
-    // The active mode is the page's lit-up hero card.
-    return HuxHeroCard(
-      icon: _modeIcon(config.id),
-      color: HuxColors.accentPink,
-      eyebrow: 'Running now',
-      title: 'Active: ${modeName(config.id)}'
-          '${config.label != null ? ' — ${config.label}' : ''}',
-      subtitle: countdown,
-      child: OutlinedButton.icon(
-        onPressed: onEnd,
-        icon: const Icon(Icons.stop_circle_outlined),
-        label: const Text('End mode'),
+    final total = math.max(1, config.targetDate.difference(config.startedAt).inDays);
+    final left = daysToGo.clamp(0, total);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: huxNight, borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Active: ${modeName(config.id)}${config.label != null ? ' — ${config.label}' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxNightMuted)),
+          const SizedBox(height: 6),
+          Text(countdown, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: 1 - left / total,
+              minHeight: 8,
+              color: const Color(0xFFF567B5),
+              backgroundColor: huxNightTrack,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onEnd,
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              child: const Text('End mode'),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _Heading extends StatelessWidget {
+  final String title;
+  final String note;
+
+  const _Heading(this.title, this.note);
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk))),
+          Text(note, style: const TextStyle(fontSize: 14, color: huxMuted)),
+        ],
+      );
 }
 
 class _ModeListTile extends StatelessWidget {
@@ -507,21 +529,6 @@ class _ModeImageCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Positioned(
-                      top: HuxSpacing.md,
-                      left: HuxSpacing.md,
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: accentColor.withValues(alpha: HuxOpacity.modeIconChipBg),
-                          border: Border.all(color: accentColor, width: 1),
-                        ),
-                        child: Icon(icon, color: HuxColors.onVivid, size: 20),
-                      ),
-                    ),
                     if (isActive)
                       Positioned(
                         top: HuxSpacing.md,
@@ -555,16 +562,13 @@ class _ModeImageCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(title,
-                              style: textTheme.titleMedium?.copyWith(
-                                color: HuxColors.onVivid,
-                                fontWeight: FontWeight.w600,
-                              )),
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: HuxColors.onVivid)),
                           const SizedBox(height: 2),
                           Text(
                             description,
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: textTheme.bodySmall?.copyWith(color: HuxColors.onVivid.withValues(alpha: 0.85)),
+                            style: TextStyle(fontSize: 15, color: HuxColors.onVivid.withValues(alpha: 0.9)),
                           ),
                         ],
                       ),

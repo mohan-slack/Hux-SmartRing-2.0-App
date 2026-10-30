@@ -43,6 +43,8 @@ import '../core/sync/sync_service.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 import '../theme/hux_ui.dart';
+import '../widgets/hux/hux_3d.dart';
+import '../widgets/hux/hux_kit.dart';
 import 'hubs/plans_hub.dart';
 import 'hubs/progress_hub.dart';
 import 'air_heat_screen.dart';
@@ -422,32 +424,78 @@ class _AppShellState extends State<AppShell> {
 
   // ---- sheets ------------------------------------------------------------
 
-  /// The "+" button: quick ways to log or start something.
+  /// The "+" button: four quick actions as tiles.
   Future<void> _openQuickLog() async {
     final picked = await showModalBottomSheet<FeatureId>(
       context: context,
       showDragHandle: true,
+      backgroundColor: HuxColors.bg,
       builder: (c) {
-        Widget tile(FeatureId id, IconData icon, Color color, String title, String sub) => ListTile(
-              leading: HuxIconBadge(icon: icon, color: color),
-              title: Text(title),
-              subtitle: Text(sub),
-              onTap: () => Navigator.pop(c, id),
+        Widget tile(FeatureId id, Hux3D object, Color color, String title, String sub) => Expanded(
+              child: Semantics(
+                button: true,
+                label: '$title. $sub',
+                excludeSemantics: true,
+                child: Material(
+                  color: Color.alphaBlend(color.withValues(alpha: 0.13), Colors.white),
+                  borderRadius: BorderRadius.circular(22),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => Navigator.pop(c, id),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Hux3DObject(object, color: color, size: 60),
+                          const SizedBox(height: 8),
+                          Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: huxInk)),
+                          const SizedBox(height: 2),
+                          Text(sub,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 14, color: huxMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             );
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              tile(FeatureId.proteinGap, Icons.restaurant_rounded, HuxColors.ringFood, 'Log a meal',
-                  'Type it or snap a photo'),
-              tile(FeatureId.indianJournal, Icons.edit_note_rounded, HuxColors.ringHabit, 'Journal today',
-                  'Chai, late dinner, sweets…'),
-              tile(FeatureId.beginnerWalkPlan, Icons.directions_walk_rounded, HuxColors.ringSteps, 'Walking plans',
-                  'Pick a guided session with voice cues'),
-              tile(FeatureId.aiCoach, Icons.auto_awesome, HuxColors.ringCharge, 'Ask the coach',
-                  'Anything about sleep, energy or food'),
-              const SizedBox(height: HuxSpacing.sm),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, 0, HuxSpacing.lg, HuxSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 12),
+                  child: Text('Add', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                ),
+                Row(
+                  children: [
+                    tile(FeatureId.proteinGap, Hux3D.bowl, HuxColors.ringFood, 'Meal', 'Snap or type'),
+                    const SizedBox(width: 10),
+                    tile(FeatureId.indianJournal, Hux3D.book, const Color(0xFFB08800), 'Journal',
+                        'Chai, late dinner…'),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    tile(FeatureId.beginnerWalkPlan, Hux3D.steps, HuxColors.ringSteps, 'Walk',
+                        'Guided, with voice'),
+                    const SizedBox(width: 10),
+                    tile(FeatureId.aiCoach, Hux3D.bubble, HuxColors.accentPink, 'Ask coach',
+                        'Sleep, energy, food'),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -468,56 +516,103 @@ class _AppShellState extends State<AppShell> {
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (c) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (email != null)
-              ListTile(
-                leading: HuxAvatar(initial: (_firstName ?? 'H')[0]),
-                title: Text(_firstName ?? 'Your account'),
-                subtitle: Text(email),
+      isScrollControlled: true,
+      backgroundColor: HuxColors.bg,
+      builder: (c) {
+        Widget row(String key, String label, {String? detail}) => InkWell(
+              onTap: () => Navigator.pop(c, key),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
+                child: Row(
+                  children: [
+                    Expanded(
+                        child: Text(label,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: huxInk))),
+                    if (detail != null) Text(detail, style: const TextStyle(fontSize: 14, color: huxMuted)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.chevron_right_rounded, color: huxMuted, size: 20),
+                  ],
+                ),
               ),
-            const Divider(height: 1),
-            if (widget.nudgeService != null)
-              ListTile(
-                leading: const Icon(Icons.wb_sunny_outlined),
-                title: const Text('Morning briefing'),
-                onTap: () => Navigator.pop(c, 'briefing'),
-              ),
-            if (showCycle)
-              ListTile(
-                leading: const Icon(Icons.water_drop_outlined),
-                title: const Text('Cycle'),
-                onTap: () => Navigator.pop(c, 'cycle'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.shield_outlined),
-              title: const Text('Privacy & account'),
-              onTap: () => Navigator.pop(c, 'privacy'),
-            ),
-            if (widget.profileService != null) ...[
-              ListTile(
-                leading: const Icon(Icons.tune_rounded),
-                title: const Text('Edit my answers'),
-                onTap: () => Navigator.pop(c, 'answers'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.apps_rounded),
-                title: const Text('All features'),
-                onTap: () => Navigator.pop(c, 'explore'),
-              ),
-            ],
-            if (widget.authService != null)
-              ListTile(
-                leading: const Icon(Icons.logout_rounded, color: HuxColors.rundown),
-                title: const Text('Sign out', style: TextStyle(color: HuxColors.rundown)),
-                onTap: () => Navigator.pop(c, 'signout'),
-              ),
-            const SizedBox(height: HuxSpacing.sm),
+            );
+        final rows = <Widget>[
+          if (widget.nudgeService != null) row('briefing', 'Morning briefing'),
+          if (showCycle) row('cycle', 'Cycle', detail: 'Private'),
+          row('privacy', 'Privacy & account'),
+          if (widget.profileService != null) ...[
+            row('answers', 'Edit my answers'),
+            row('explore', 'All features'),
           ],
-        ),
-      ),
+        ];
+        final name = _firstName ?? 'Your account';
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, 0, HuxSpacing.lg, HuxSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(color: huxNight, shape: BoxShape.circle),
+                      child: Text(name[0].toUpperCase(),
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                          if (email != null)
+                            Text(email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14, color: huxMuted)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                HuxTile(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < rows.length; i++) ...[
+                        if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16, color: HuxColors.hairline),
+                        rows[i],
+                      ],
+                    ],
+                  ),
+                ),
+                if (widget.authService != null) ...[
+                  const SizedBox(height: 12),
+                  HuxTile(
+                    padding: EdgeInsets.zero,
+                    child: InkWell(
+                      onTap: () => Navigator.pop(c, 'signout'),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 15),
+                        child: Text('Sign out',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: HuxColors.rundown)),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
     if (!mounted) return;
     switch (action) {

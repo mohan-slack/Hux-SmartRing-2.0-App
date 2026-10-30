@@ -9,6 +9,7 @@ import '../food/food_log_service.dart';
 import '../journal/journal.dart';
 import '../cycle/cycle_service.dart';
 import '../journeys/journey_service.dart';
+import 'home_insights.dart';
 import '../meaning/step_target.dart';
 import '../nudges/nudge_planner.dart';
 import '../nudges/nudge_service.dart';
@@ -76,6 +77,10 @@ class HomeExtras {
   /// Cycle's ONE line for Home (null = off or hidden).
   final CycleHomeSummary? cycle;
 
+  /// Shapes for the UI 2.0 Home: sleep windows, resting HR, steps by
+  /// hour, and the Why factors.
+  final HomeInsights insights;
+
   const HomeExtras({
     this.agenda = const [],
     this.food,
@@ -83,6 +88,7 @@ class HomeExtras {
     this.steps7 = const [],
     this.journey,
     this.cycle,
+    this.insights = HomeInsights.empty,
   });
 
   static const empty = HomeExtras();
@@ -282,7 +288,27 @@ class HomeExtrasLoader {
       cycleLine = null;
     }
 
+    var insights = HomeInsights.empty;
+    try {
+      final utc = at.toUtc();
+      final local = at.toLocal();
+      final midnight = DateTime(local.year, local.month, local.day).toUtc();
+      insights = HomeInsights.compute(
+        sessions: await store.sleepSessionsBetween(utc.subtract(const Duration(days: 24)), utc),
+        todaySnapshots: await store.snapshotsBetween(midnight, utc.add(const Duration(minutes: 1))),
+        now: at,
+      );
+    } catch (_) {
+      // Optional: Home falls back to fewer tiles.
+    }
+
     return HomeExtras(
-        agenda: agenda, food: food, sleep7: sleep7, steps7: steps7, journey: journey, cycle: cycleLine);
+        agenda: agenda,
+        food: food,
+        sleep7: sleep7,
+        steps7: steps7,
+        journey: journey,
+        cycle: cycleLine,
+        insights: insights);
   }
 }

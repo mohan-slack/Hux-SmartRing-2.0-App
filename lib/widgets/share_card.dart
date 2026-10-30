@@ -31,7 +31,20 @@ class ShareCapture extends StatefulWidget {
 
 class _ShareCaptureState extends State<ShareCapture> {
   final _boundary = GlobalKey();
+  final _button = GlobalKey();
   bool _busy = false;
+
+  /// iPad — and iPhone since iOS 26 — needs an anchor for the share
+  /// sheet; without one the share call throws.
+  Rect? _origin() {
+    for (final key in [_button, _boundary]) {
+      final box = key.currentContext?.findRenderObject();
+      if (box is RenderBox && box.hasSize && box.size.width > 0) {
+        return box.localToGlobal(Offset.zero) & box.size;
+      }
+    }
+    return null;
+  }
 
   Future<void> _share() async {
     if (_busy) return;
@@ -46,8 +59,10 @@ class _ShareCaptureState extends State<ShareCapture> {
       await Share.shareXFiles(
         [XFile.fromData(data.buffer.asUint8List(), mimeType: 'image/png', name: widget.fileName)],
         text: widget.shareText,
+        sharePositionOrigin: _origin(),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Share card failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text("Couldn't create the image — try again.")));
@@ -86,6 +101,7 @@ class _ShareCaptureState extends State<ShareCapture> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
+            key: _button,
             onPressed: _busy ? null : _share,
             icon: const Icon(Icons.ios_share_rounded, size: 18),
             label: Text(widget.buttonLabel),

@@ -10,6 +10,7 @@ import '../../core/coach/coach_service.dart';
 import '../../core/coach/safety.dart';
 import '../../theme/hux_glass.dart';
 import '../../theme/hux_tokens.dart';
+import '../../widgets/hux/hux_kit.dart';
 
 class CoachScreen extends StatefulWidget {
   final CoachService coach;
@@ -34,14 +35,6 @@ class CoachScreen extends StatefulWidget {
 enum _Menu { shared, clear, stop }
 
 class _CoachScreenState extends State<CoachScreen> {
-  static const _quick = [
-    'What should I do today?',
-    'How can I sleep better tonight?',
-    'Easy protein ideas for my diet',
-    'Make me a simple walking plan for 2 weeks',
-    'Why is my HUX Charge low?',
-  ];
-
   final _input = TextEditingController();
   final _scroll = ScrollController();
   bool _loading = true;
@@ -76,7 +69,12 @@ class _CoachScreenState extends State<CoachScreen> {
     try {
       consent = await widget.coach.hasConsent();
       history = consent ? await widget.coach.history() : const <ChatMessage>[];
-      if (!consent) shared = (await widget.coach.previewContext()).preview();
+      try {
+        // Also when consented: the chat shows these as small context chips.
+        shared = (await widget.coach.previewContext()).preview();
+      } catch (_) {
+        shared = null;
+      }
     } catch (_) {
       // Never an endless spinner: show the consent/empty state instead.
       if (mounted) setState(() => _loading = false);
@@ -254,9 +252,31 @@ class _CoachScreenState extends State<CoachScreen> {
           : !widget.coach.hasBackend
               ? const _Message(text: 'The coach needs the HUX online service, which isn\'t set up in this build yet.')
               : !_consent
-                  ? _ConsentView(shared: _shared ?? const [], onAgree: _agree, onNotNow: widget.onNotNow)
+                  ? _ConsentView(
+                      shared: _shared ?? const [],
+                      onAgree: _agree,
+                      onNotNow: widget.onNotNow,
+                      bottomInset: widget.embedded ? HuxGlass.navClearance - 16 : 16,
+                    )
                   : _chat(context),
     );
+  }
+
+  /// "HUX Charge: 72 (Steady)" → "Charge 72": what the coach knows, as chips.
+  List<String> get _contextChips {
+    final out = <String>[];
+    for (final line in _shared ?? const <String>[]) {
+      String? after(String p) => line.startsWith(p) ? line.substring(p.length).trim() : null;
+      final charge = after('HUX Charge:');
+      final night = after('Last night:');
+      final steps = after('Steps today:');
+      final protein = after('Protein today:');
+      if (charge != null) out.add('Charge ${charge.split(' ').first}');
+      if (night != null) out.add('Sleep ${night.replaceAll(' sleep', '')}');
+      if (steps != null) out.add('Steps ${steps.split(' ').first}');
+      if (protein != null) out.add('Protein ${protein.split(' of').first}');
+    }
+    return out.take(3).toList();
   }
 
   static const _suggestions = [
@@ -275,50 +295,37 @@ class _CoachScreenState extends State<CoachScreen> {
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
             children: [
-              if (_messages.isEmpty) ...[
-                const SizedBox(height: HuxSpacing.xl),
-                const Center(child: _CoachAvatar(size: 64)),
+              if (_contextChips.isNotEmpty) ...[
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [for (final c in _contextChips) HuxStatChip(c)],
+                ),
                 const SizedBox(height: HuxSpacing.md),
-                Text('How can I help today?',
-                    textAlign: TextAlign.center,
-                    style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: HuxSpacing.xs),
-                Text('I use your HUX numbers to keep it personal.',
-                    textAlign: TextAlign.center, style: text.bodySmall),
-                const SizedBox(height: HuxSpacing.xl),
-                // Two per row, each row as tall as its tallest card — no
-                // fixed aspect ratio, so large text never overflows.
-                for (var r = 0; r < _suggestions.length; r += 2) ...[
-                  IntrinsicHeight(
+              ],
+              if (_messages.isEmpty) ...[
+                const SizedBox(height: HuxSpacing.lg),
+                Text('Ask about today',
+                    style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: huxInk)),
+                const SizedBox(height: HuxSpacing.md),
+                for (final s in _suggestions) ...[
+                  HuxTile(
+                    onTap: () => _send(s.text),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        for (var c = r; c < r + 2; c++) ...[
-                          if (c > r) const SizedBox(width: HuxSpacing.sm),
-                          Expanded(
-                            child: c < _suggestions.length
-                                ? _SuggestionCard(
-                                    icon: _suggestions[c].icon,
-                                    color: _suggestions[c].color,
-                                    text: _suggestions[c].text,
-                                    onTap: () => _send(_suggestions[c].text))
-                                : const SizedBox.shrink(),
-                          ),
-                        ],
+                        Icon(s.icon, color: s.color, size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(s.text,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                        ),
+                        const Icon(Icons.arrow_forward_rounded, color: huxMuted, size: 18),
                       ],
                     ),
                   ),
-                  const SizedBox(height: HuxSpacing.sm),
+                  const SizedBox(height: 8),
                 ],
-                const SizedBox(height: HuxSpacing.md),
-                Wrap(
-                  spacing: HuxSpacing.sm,
-                  runSpacing: HuxSpacing.sm,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    for (final q in _quick.skip(4)) ActionChip(label: Text(q), onPressed: () => _send(q)),
-                  ],
-                ),
               ],
               for (final (i, m) in _messages.indexed) ...[
                 _Bubble(message: m, onReport: m.role == ChatRole.coach && !m.reported ? () => _report(i) : null),
@@ -433,46 +440,6 @@ class _CoachAvatar extends StatelessWidget {
       );
 }
 
-class _SuggestionCard extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String text;
-  final VoidCallback onTap;
-
-  const _SuggestionCard({required this.icon, required this.color, required this.text, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: HuxColors.card,
-      borderRadius: BorderRadius.circular(HuxRadii.card),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(HuxRadii.card),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(HuxSpacing.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(HuxRadii.card),
-            border: Border.all(color: HuxColors.glassStroke),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 22),
-              const SizedBox(height: HuxSpacing.md),
-              Text(text,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SendButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
@@ -568,39 +535,155 @@ class _ConsentView extends StatelessWidget {
   final List<String> shared;
   final VoidCallback onAgree;
   final VoidCallback? onNotNow;
-  const _ConsentView({required this.shared, required this.onAgree, this.onNotNow});
+
+  /// Space under the buttons: clears the floating nav bar in the tab.
+  final double bottomInset;
+
+  const _ConsentView({required this.shared, required this.onAgree, this.onNotNow, this.bottomInset = 16});
+
+  /// "HUX Charge: 36 (Running low)" → "Charge 36".
+  static String _chip(String line) {
+    final i = line.indexOf(':');
+    if (i < 0) return line;
+    var k = line.substring(0, i).replaceFirst('HUX ', '').trim();
+    var v = line.substring(i + 1).trim();
+    final p = v.indexOf(' (');
+    if (p > 0) v = v.substring(0, p);
+    if (v.length > 18) v = '${v.substring(0, 16)}…';
+    if (k.length > 14) k = k.split(' ').first;
+    return '$k $v';
+  }
+
+  void _details(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (c) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.92,
+        builder: (c, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          children: [
+            const Text('How the coach works', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+            const SizedBox(height: 12),
+            const Text(
+              'To give advice that fits you, the coach needs a short summary of your HUX numbers. Your message and '
+              'this summary go to HUX\'s server and then to Groq Inc. (an AI provider in the USA) to write the reply. '
+              'Neither HUX nor Groq stores it (Groq\'s zero data retention is on) — your chat stays on this phone. '
+              'Don\'t share anything you wouldn\'t want an AI service to process.',
+              style: TextStyle(fontSize: 15, height: 1.45, color: Color(0xFF3A3646)),
+            ),
+            const SizedBox(height: 16),
+            _SharedList(lines: shared),
+            const SizedBox(height: 12),
+            const Text(
+              'Never shared: your name, email, phone number, location, photos, or minute-by-minute readings. '
+              'You can stop sharing any time from the menu — that also deletes the chat on this phone.',
+              style: TextStyle(fontSize: 14, height: 1.4, color: huxMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return ListView(
-      padding: const EdgeInsets.all(HuxSpacing.lg),
+    Widget fact(String value, String label) => Expanded(
+          child: HuxTile(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
+                const SizedBox(height: 2),
+                Text(label, maxLines: 1, style: const TextStyle(fontSize: 13, color: huxMuted)),
+              ],
+            ),
+          ),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Your personal coach', style: text.titleLarge),
-        const SizedBox(height: HuxSpacing.sm),
-        Text(
-          'To give advice that fits YOU, the coach needs a short summary of your HUX numbers. '
-          'Your message and this summary go to HUX\'s server and then to Groq Inc. (an AI provider in '
-          'the USA) to write the reply. Neither HUX nor Groq stores it (Groq\'s zero data retention is '
-          'on) — your chat stays on this phone. Don\'t share anything you wouldn\'t want an AI '
-          'service to process.',
-          style: text.bodyMedium,
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
+            children: [
+              const Text('Ask about your day',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.15, color: huxInk)),
+              const SizedBox(height: 8),
+              const Text(
+                'Your message and a short summary of your numbers go to Groq (USA) to write the reply. '
+                'Not stored by HUX or Groq.',
+                style: TextStyle(fontSize: 15, height: 1.4, color: huxMuted),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  fact('Not stored', 'zero retention'),
+                  const SizedBox(width: 8),
+                  fact('On phone', 'your chat'),
+                  const SizedBox(width: 8),
+                  fact('Stop', 'any time'),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const HuxTileLabel('The coach sees'),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final l in shared)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
+                      child: Text(_chip(l), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: huxInk)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text('Never: name, email, phone, location, photos.',
+                  style: TextStyle(fontSize: 14, color: huxMuted)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _details(context),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                  child: const Text('Read the details'),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: HuxSpacing.lg),
-        GlassPanel(child: _SharedList(lines: shared)),
-        const SizedBox(height: HuxSpacing.md),
-        Text(
-          'Never shared: your name, email, phone number, location, photos, or minute-by-minute readings.',
-          style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
+        Padding(
+          padding: EdgeInsets.fromLTRB(HuxSpacing.lg, 8, HuxSpacing.lg, bottomInset),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: onNotNow ?? () => Navigator.of(context).maybePop(),
+                  style: TextButton.styleFrom(minimumSize: const Size.fromHeight(52), foregroundColor: huxInk),
+                  child: const Text('Not now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: onAgree,
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), shape: const StadiumBorder()),
+                  child: const Text('Agree & start', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: HuxSpacing.sm),
-        Text(
-          'You can stop sharing any time from the menu — that also deletes the chat on this phone.',
-          style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
-        ),
-        const SizedBox(height: HuxSpacing.xl),
-        FilledButton(onPressed: onAgree, child: const Text('Agree & start')),
-        TextButton(onPressed: onNotNow ?? () => Navigator.of(context).maybePop(), child: const Text('Not now')),
       ],
     );
   }
@@ -648,7 +731,7 @@ class _Bubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.md, vertical: HuxSpacing.sm + 2),
           constraints: BoxConstraints(maxWidth: width * 0.78),
           decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [HuxColors.accentPurple, HuxColors.ringCharge]),
+            color: HuxColors.accentPink,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
               topRight: Radius.circular(20),
@@ -671,16 +754,14 @@ class _Bubble extends StatelessWidget {
           Expanded(
             child: Container(
               padding: const EdgeInsets.fromLTRB(HuxSpacing.md, HuxSpacing.md, HuxSpacing.md, HuxSpacing.xs),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: HuxColors.card,
-                borderRadius: const BorderRadius.only(
+                borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(6),
                   topRight: Radius.circular(20),
                   bottomLeft: Radius.circular(20),
                   bottomRight: Radius.circular(20),
                 ),
-                border: Border.all(color: HuxColors.glassStroke),
-                boxShadow: const [BoxShadow(color: HuxColors.shadow, blurRadius: 12, offset: Offset(0, 4))],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

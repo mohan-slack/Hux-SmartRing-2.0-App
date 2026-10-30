@@ -11,9 +11,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/journeys/journey_content.dart';
 import '../../core/journeys/journey_models.dart';
-import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
-import '../../theme/hux_ui.dart';
+import '../../widgets/hux/hux_kit.dart';
 import 'journey_visuals.dart';
 
 class JourneyWorkoutScreen extends StatefulWidget {
@@ -158,13 +157,42 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
     return 'Cool-down';
   }
 
+  void _tips(Move move) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(move.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+              const SizedBox(height: 12),
+              _Line(icon: Icons.south_rounded, label: 'Easier', value: move.easier),
+              _Line(icon: Icons.north_rounded, label: 'Harder', value: move.harder),
+              _Line(icon: Icons.front_hand_rounded, label: 'Stop if', value: move.stopIf, warn: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _clock(int s) => s >= 60 ? '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}' : '$s';
+
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final move = moveById(_step.moveId);
     final color = moveKindColor(move.kind);
     final timed = _step.seconds != null;
     final nextMove = _index + 1 < _steps.length ? moveById(_steps[_index + 1].moveId) : null;
+    // While resting, the photo previews what's next.
+    final shown = _resting && nextMove != null ? nextMove : move;
+    final screen = MediaQuery.sizeOf(context);
+    final progress = (_index + (_resting ? 1 : 0)) / _steps.length;
 
     return PopScope(
       canPop: _finishing,
@@ -172,113 +200,172 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
         if (!didPop) _confirmLeave();
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(widget.workout.title)),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
-            children: [
-              HuxProgressBar(value: (_index + (_resting ? 1 : 0)) / _steps.length, color: widget.color),
-              const SizedBox(height: HuxSpacing.xs),
-              Text('${_section()} · ${_index + 1} of ${_steps.length}', style: text.labelMedium),
-              const SizedBox(height: HuxSpacing.lg),
-              if (_resting) ...[
-                Center(child: Text('Rest', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700))),
-                const SizedBox(height: HuxSpacing.lg),
-                Center(
-                  child: HuxScoreRing(
-                    progress: _step.restSeconds == 0 ? 0 : _left / _step.restSeconds,
-                    centerText: '$_left',
-                    color: HuxColors.ringSleep,
-                    size: 160,
-                    stroke: 10,
+        backgroundColor: HuxColors.bg,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          title: Text(widget.workout.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ---- the move, full width ----
+            SizedBox(
+              height: screen.height * 0.52,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: KeyedSubtree(key: ValueKey(shown.id), child: MovePhoto(move: shown, objectSize: 150)),
                   ),
-                ),
-                const SizedBox(height: HuxSpacing.lg),
-                if (nextMove != null)
-                  Center(child: Text('Next: ${nextMove.name}', style: text.titleSmall)),
-                const SizedBox(height: HuxSpacing.lg),
-                OutlinedButton(onPressed: _next, child: const Text('Skip rest')),
-              ] else ...[
-                HuxCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          HuxIconBadge(icon: moveIcon(move.icon), color: color, size: 56),
-                          const SizedBox(width: HuxSpacing.md),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(move.name, style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                                Text(stepAmount(_step), style: text.titleSmall?.copyWith(color: color)),
-                              ],
-                            ),
-                          ),
-                        ],
+                  // Legibility for the white text: top and bottom only.
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x99000000), Color(0x00000000), Color(0x00000000), Color(0xCC000000)],
+                        stops: [0, 0.25, 0.55, 1],
                       ),
-                      const SizedBox(height: HuxSpacing.md),
-                      for (final (i, c) in move.cues.indexed)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: HuxSpacing.xs),
-                          child: Row(
+                    ),
+                  ),
+                  if (_resting) const ColoredBox(color: Color(0x66000000)),
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 18,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('${i + 1}.  ', style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: color)),
-                              Expanded(child: Text(c, style: text.bodyMedium)),
+                              Text(_resting ? 'Rest · next up' : '${_section()} · ${_index + 1} of ${_steps.length}',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xDDFFFFFF))),
+                              const SizedBox(height: 4),
+                              Text(shown.name,
+                                  style: const TextStyle(
+                                      fontSize: 30, fontWeight: FontWeight.w800, height: 1.1, color: Colors.white)),
+                              if (!_resting) ...[
+                                const SizedBox(height: 4),
+                                Text(stepAmount(_step),
+                                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+                              ],
                             ],
                           ),
                         ),
-                      const Divider(color: HuxColors.hairline),
-                      _Line(icon: Icons.south_rounded, label: 'Easier', value: move.easier),
-                      _Line(icon: Icons.north_rounded, label: 'Harder', value: move.harder),
-                      _Line(icon: Icons.front_hand_rounded, label: 'Stop if', value: move.stopIf, warn: true),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: HuxSpacing.lg),
-                if (timed)
-                  Center(
-                    child: HuxScoreRing(
-                      progress: _step.seconds == 0 ? 0 : 1 - _left / _step.seconds!,
-                      centerText: '$_left s',
-                      color: color,
-                      size: 140,
-                      stroke: 10,
+                        if (_resting || timed)
+                          Text(_clock(_left),
+                              style: const TextStyle(
+                                fontSize: 56,
+                                fontWeight: FontWeight.w800,
+                                height: 1,
+                                color: Colors.white,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              )),
+                      ],
                     ),
                   ),
-                const SizedBox(height: HuxSpacing.lg),
-                Row(
+                ],
+              ),
+            ),
+            LinearProgressIndicator(value: progress, minHeight: 4, color: widget.color, backgroundColor: huxTrack),
+
+            // ---- how to do it ----
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                children: [
+                  if (_resting)
+                    const Text('Breathe. Shake out your arms and legs.',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: huxInk))
+                  else ...[
+                    for (final (i, c) in move.cues.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 26,
+                              height: 26,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
+                              child: Text('${i + 1}',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color.lerp(color, huxInk, 0.3))),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                                child: Text(c, style: const TextStyle(fontSize: 16, height: 1.35, color: huxInk))),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Stop if ${move.stopIf[0].toLowerCase()}${move.stopIf.substring(1)}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 14, color: HuxColors.rundown)),
+                        ),
+                        TextButton(onPressed: () => _tips(move), child: const Text('Easier / harder')),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // ---- controls ----
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Row(
                   children: [
                     IconButton.filledTonal(
                       tooltip: 'Previous move',
                       onPressed: _index == 0 ? null : _back,
                       icon: const Icon(Icons.skip_previous_rounded),
                     ),
-                    const SizedBox(width: HuxSpacing.md),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: SizedBox(
-                        height: 52,
-                        child: timed
-                            ? FilledButton.icon(
-                                onPressed: _running
-                                    ? () {
-                                        _timer?.cancel();
-                                        setState(() => _running = false);
-                                      }
-                                    : _startTimer,
-                                icon: Icon(_running ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                                label: Text(_running ? 'Pause' : 'Start'),
-                              )
-                            : FilledButton.icon(
+                        height: 56,
+                        child: _resting
+                            ? FilledButton(
                                 onPressed: _next,
-                                icon: const Icon(Icons.check_rounded),
-                                label: const Text('Done'),
-                              ),
+                                style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                                child: const Text('Skip rest', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                              )
+                            : timed
+                                ? FilledButton.icon(
+                                    onPressed: _running
+                                        ? () {
+                                            _timer?.cancel();
+                                            setState(() => _running = false);
+                                          }
+                                        : _startTimer,
+                                    style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                                    icon: Icon(_running ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                                    label: Text(_running ? 'Pause' : 'Start',
+                                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                                  )
+                                : FilledButton.icon(
+                                    onPressed: _next,
+                                    style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                                    icon: const Icon(Icons.check_rounded),
+                                    label: const Text('Done', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                                  ),
                       ),
                     ),
-                    const SizedBox(width: HuxSpacing.md),
+                    const SizedBox(width: 12),
                     IconButton.filledTonal(
                       tooltip: 'Skip move',
                       onPressed: _next,
@@ -286,9 +373,9 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
                     ),
                   ],
                 ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );

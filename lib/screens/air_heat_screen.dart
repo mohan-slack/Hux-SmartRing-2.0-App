@@ -228,8 +228,7 @@ class _DayCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title.toUpperCase(),
-                      style: text.labelSmall?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700, color: color)),
+                  Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
                   Text(
                     o.aqi == null ? 'Air: no data' : 'Air: ${o.aqiCategory!.label} (AQI ~${o.aqi}, est.)',
                     style: text.titleSmall?.copyWith(fontWeight: FontWeight.w600),

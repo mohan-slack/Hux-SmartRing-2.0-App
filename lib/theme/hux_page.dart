@@ -12,8 +12,10 @@ import 'hux_motion.dart';
 import 'hux_tokens.dart';
 import 'hux_ui.dart';
 
-/// Tinted hero card at the top of a screen: icon badge, small eyebrow,
-/// big title/value, subtitle, optional trailing action and extra child.
+/// Hero tile at the top of a screen (UI 2.0): flat white, no badge, no
+/// gradient. Small sentence-case label, then the big title, one short
+/// subtitle, optional trailing action and extra child. [icon] and
+/// [color] stay for API compatibility; [color] tints the label only.
 class HuxHeroCard extends StatelessWidget {
   final IconData icon;
   final Color color;
@@ -36,53 +38,42 @@ class HuxHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final label = Color.lerp(color, HuxColors.ink, 0.25)!;
     return HuxEntrance(
       child: Container(
-      padding: const EdgeInsets.all(HuxSpacing.lg),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(HuxRadii.card),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color.alphaBlend(color.withValues(alpha: 0.16), HuxColors.card), HuxColors.card],
-        ),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 8))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              HuxIconBadge(icon: icon, color: color, size: 44),
-              const SizedBox(width: HuxSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (eyebrow != null)
-                      Text(eyebrow!.toUpperCase(),
-                          style: text.labelSmall?.copyWith(
-                              color: color, letterSpacing: 0.8, fontWeight: FontWeight.w700)),
-                    Text(title, style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(subtitle!, style: text.bodySmall?.copyWith(color: HuxColors.mutedText)),
+        padding: const EdgeInsets.all(HuxSpacing.lg),
+        decoration: BoxDecoration(color: HuxColors.card, borderRadius: BorderRadius.circular(20)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (eyebrow != null)
+                        Text(eyebrow!, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: label)),
+                      Text(title,
+                          style: const TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.w800, height: 1.2, color: HuxColors.ink)),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(subtitle!, style: const TextStyle(fontSize: 15, height: 1.35, color: HuxColors.mutedText)),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (trailing != null) trailing!,
+                if (trailing != null) trailing!,
+              ],
+            ),
+            if (child != null) ...[
+              const SizedBox(height: HuxSpacing.md),
+              child!,
             ],
-          ),
-          if (child != null) ...[
-            const SizedBox(height: HuxSpacing.md),
-            child!,
           ],
-        ],
-      ),
+        ),
       ),
     );
   }

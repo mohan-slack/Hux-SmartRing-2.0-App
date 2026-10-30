@@ -106,8 +106,17 @@ class _PrivacyAccountScreenState extends State<PrivacyAccountScreen> {
         await Share.shareXFiles(
           [XFile.fromData(utf8.encode(jsonText), mimeType: 'application/json', name: name)],
           subject: 'My HUX data',
+          // Needed on iPad and on iPhone since iOS 26.
+          sharePositionOrigin: _shareOrigin(),
         );
       }, error: "Couldn't prepare your data. Please try again.");
+
+  Rect? _shareOrigin() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final size = box.size;
+    return Rect.fromCenter(center: box.localToGlobal(size.center(Offset.zero)), width: 1, height: 1);
+  }
 
   Future<bool> _confirm({required String title, required String body, required String action, String? typeToConfirm}) async {
     if (typeToConfirm != null) {

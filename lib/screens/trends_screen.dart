@@ -16,7 +16,6 @@ import '../core/trends/night_row.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
-import '../theme/hux_ui.dart';
 import '../widgets/wellness_note.dart';
 
 /// Single-letter weekday labels, [DateTime.weekday]-indexed (1 = Mon).
@@ -269,6 +268,7 @@ class _TrendsCharts extends StatelessWidget {
   const _TrendsCharts({required this.rows, required this.baseline});
 
   static final _metrics = <_Metric>[
+    _Metric('Steps', Icons.directions_walk_rounded, HuxColors.ringSteps, 'steps', _Better.higher, (r) => r.steps),
     _Metric('Avg HRV', Icons.monitor_heart_outlined, HuxColors.accentPurple, 'ms', _Better.higher,
         (r) => r.avgHrvMs),
     _Metric('Avg resting heart rate', Icons.favorite_border_rounded, HuxColors.ringHeart, 'bpm', _Better.lower,
@@ -453,10 +453,8 @@ class _ChartCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              HuxIconBadge(icon: icon, color: color, size: 32),
-              const SizedBox(width: HuxSpacing.sm),
               Expanded(
-                child: Text(title, style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
               ),
               if (hint != null) Text(hint!, style: textTheme.labelSmall?.copyWith(color: HuxColors.mutedText)),
             ],

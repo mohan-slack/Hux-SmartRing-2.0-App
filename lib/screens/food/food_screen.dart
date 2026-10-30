@@ -1,5 +1,5 @@
-/// Food: today's protein vs goal, what to add (in katoris), and three
-/// ways to log — take a photo, pick a photo, or type it.
+/// Food (UI 2.0): protein ring + macro bars, the gap as one number with
+/// two foods, meals as compact rows, and a log bar: snap, gallery, type.
 library;
 
 import 'package:flutter/material.dart';
@@ -14,6 +14,7 @@ import '../../core/profile/user_profile.dart';
 import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
 import '../../theme/hux_ui.dart';
+import '../../widgets/hux/hux_kit.dart';
 import '../../core/food/photo_privacy.dart';
 import 'meal_review_screen.dart';
 import '../../widgets/text_prompt.dart';
@@ -105,6 +106,11 @@ class _FoodScreenState extends State<FoodScreen> {
       ),
     );
     if (text == null || text.trim().isEmpty || !mounted) return;
+    await _logText(text);
+  }
+
+  /// One tap from the quick-add row: straight to the review screen.
+  Future<void> _logText(String text) async {
     final parsed = MealTextParser.parse(text);
     if (parsed.entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -116,6 +122,14 @@ class _FoodScreenState extends State<FoodScreen> {
       MealAnalysis(items: parsed.entries, confidence: [for (final _ in parsed.entries) 1.0], questions: const []),
       unknown: parsed.unknown,
     );
+  }
+
+  List<(String, String)> get _quickAdds {
+    final protein = switch (widget.diet) {
+      Diet.veg || Diet.jain => ('Curd', '1 katori curd'),
+      _ => ('Egg', '1 egg'),
+    };
+    return [('Chai', '1 chai'), ('2 roti', '2 roti'), ('Dal', '1 katori dal'), protein];
   }
 
   // ---- photo ----
@@ -304,167 +318,297 @@ class _FoodScreenState extends State<FoodScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final gap = ProteinGap.compute(eaten: _total, goalG: _goal, diet: widget.diet);
     final pct = _goal == 0 ? 0.0 : (_total.proteinG / _goal).clamp(0.0, 1.0);
 
+    Widget macro(String label, double grams, double of, Color color) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk))),
+                  Text('${grams.round()} g', style: const TextStyle(fontSize: 14, color: huxMuted)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: of <= 0 ? 0 : (grams / of).clamp(0.0, 1.0),
+                  minHeight: 7,
+                  color: color,
+                  backgroundColor: huxTrack,
+                ),
+              ),
+            ],
+          ),
+        );
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Food & protein')),
+      appBar: AppBar(
+        title: const Text('Food'),
+        actions: [
+          TextButton.icon(
+            onPressed: _editGoal,
+            icon: const Icon(Icons.flag_outlined, size: 18),
+            label: Text('${_goal.round()} g goal'),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
                 ListView(
-                  padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.xxl),
+                  padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, 120),
                   children: [
                     if (_loadError != null) ...[
-                      HuxCard(
+                      HuxTile(
                         child: Row(
                           children: [
-                            Expanded(child: Text(_loadError!, style: text.bodyMedium)),
+                            Expanded(child: Text(_loadError!, style: const TextStyle(fontSize: 15, color: huxInk))),
                             TextButton(onPressed: _load, child: const Text('Retry')),
                           ],
                         ),
                       ),
-                      const SizedBox(height: HuxSpacing.md),
+                      const SizedBox(height: 12),
                     ],
-                    // ---- hero: protein ring + macros ----
-                    HuxHeroCard(
-                      icon: Icons.restaurant_rounded,
-                      color: HuxColors.ringFood,
-                      eyebrow: 'Today',
-                      title: 'Protein ${_total.proteinG.round()} of ${_goal.round()} g',
-                      subtitle: '${_total.kcal.round()} kcal so far (approx.)',
-                      trailing: TextButton(onPressed: _editGoal, child: const Text('Goal')),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              HuxScoreRing(
-                                progress: pct,
-                                centerText: '${(pct * 100).round()}%',
-                                color: HuxColors.ringFood,
-                                size: 76,
-                              ),
-                              const SizedBox(width: HuxSpacing.lg),
-                              Expanded(
-                                child: Wrap(
-                                  spacing: HuxSpacing.sm,
-                                  runSpacing: HuxSpacing.sm,
-                                  children: [
-                                    HuxPill(label: 'Carbs ${_total.carbsG.round()} g', color: HuxColors.ringSteps),
-                                    HuxPill(label: 'Fat ${_total.fatG.round()} g', color: HuxColors.ringCharge),
-                                    HuxPill(label: 'Fibre ${_total.fiberG.round()} g', color: HuxColors.ringSleep),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: HuxSpacing.md),
-                          HuxProgressBar(value: pct, color: HuxColors.ringFood),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: HuxSpacing.md),
 
-                    // ---- what to add ----
-                    HuxCard(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          HuxIconBadge(
-                            icon: gap.done ? Icons.check_rounded : Icons.lightbulb_outline_rounded,
-                            color: gap.done ? HuxColors.recharged : HuxColors.ringHabit,
-                          ),
-                          const SizedBox(width: HuxSpacing.md),
-                          Expanded(
-                            child: Text(
-                              gap.done
-                                  ? 'Protein goal reached today.'
-                                  : 'To close the gap (${gap.remainingG.round()} g): '
-                                      'add ${gap.suggestions.map((s) => s.text).join(' and ')}.',
-                              style: text.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: HuxSpacing.xl),
-
-                    // ---- log a meal ----
-                    const HuxSectionTitle('Log a meal', icon: Icons.add_circle_outline_rounded),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: HuxActionTile(
-                            icon: Icons.photo_camera_rounded,
-                            label: 'Photo',
-                            color: HuxColors.ringCharge,
-                            onTap: _analysing ? null : () => _photo(ImageSource.camera),
-                          ),
-                        ),
-                        const SizedBox(width: HuxSpacing.sm),
-                        Expanded(
-                          child: HuxActionTile(
-                            icon: Icons.photo_library_rounded,
-                            label: 'Gallery',
-                            color: HuxColors.ringSleep,
-                            onTap: _analysing ? null : () => _photo(ImageSource.gallery),
-                          ),
-                        ),
-                        const SizedBox(width: HuxSpacing.sm),
-                        Expanded(
-                          child: HuxActionTile(
-                            icon: Icons.edit_rounded,
-                            label: 'Type',
-                            color: HuxColors.ringSteps,
-                            onTap: _analysing ? null : _typeIt,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: HuxSpacing.xl),
-
-                    // ---- today's meals ----
-                    const HuxSectionTitle('Today', icon: Icons.schedule_rounded),
-                    if (_meals.isEmpty)
-                      const HuxEmptyState(
-                        icon: Icons.ramen_dining_outlined,
-                        color: HuxColors.ringFood,
-                        title: 'Nothing logged yet.',
-                        body: 'Snap your next meal — it takes 10 seconds.',
-                      )
-                    else
-                      HuxCard(
-                        padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.md, vertical: HuxSpacing.xs),
-                        child: Column(
+                    // ---- hero: protein ring + macro bars ----
+                    HuxTile(
+                      semanticLabel: 'Protein ${_total.proteinG.round()} of ${_goal.round()} grams, '
+                          '${_total.kcal.round()} kilocalories today',
+                      padding: const EdgeInsets.all(18),
+                      child: ExcludeSemantics(
+                        child: Row(
                           children: [
-                            for (var i = 0; i < _meals.length; i++) ...[
-                              if (i > 0) const Divider(height: 1, color: HuxColors.hairline),
-                              HuxListRow(
-                                icon: _mealIcon(_meals[i].type),
-                                color: HuxColors.ringFood,
-                                title: _meals[i].type.label,
-                                subtitle: '${_meals[i].items.map((e) => '${e.portionText} ${e.name.toLowerCase()}').join(', ')}\n'
-                                    '${_meals[i].total.proteinG.round()} g protein · ${_meals[i].total.kcal.round()} kcal',
-                                trailing: IconButton(
-                                  tooltip: 'Delete meal',
-                                  icon: const Icon(Icons.delete_outline, color: HuxColors.mutedText),
-                                  onPressed: () => _deleteMeal(i),
-                                ),
+                            SizedBox(
+                              width: 124,
+                              height: 124,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 124,
+                                    height: 124,
+                                    child: CircularProgressIndicator(
+                                      value: pct,
+                                      strokeWidth: 12,
+                                      strokeCap: StrokeCap.round,
+                                      color: HuxColors.ringFood,
+                                      backgroundColor: huxTrack,
+                                    ),
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      HuxTileValue('${_total.proteinG.round()}', unit: 'g', size: 30),
+                                      Text('protein of ${_goal.round()}',
+                                          style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                    ],
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
+                            const SizedBox(width: 18),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  HuxTileValue('${_total.kcal.round()}', unit: 'kcal', size: 24),
+                                  const SizedBox(height: 12),
+                                  macro('Carbs', _total.carbsG, 250, HuxColors.ringSteps),
+                                  macro('Fat', _total.fatG, 70, HuxColors.ringHabit),
+                                  macro('Fibre', _total.fiberG, 30, HuxColors.ringSleep),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    const SizedBox(height: HuxSpacing.lg),
-                    Text(
-                      'Values are approximate home-style estimates, not medical advice.',
-                      style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ---- the gap, as a number + two foods ----
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: gap.done ? const Color(0xFFE3F5EA) : const Color(0xFFFCE8F3),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(gap.done ? 'Done' : '+${gap.remainingG.round()} g',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: gap.done ? const Color(0xFF17804B) : const Color(0xFFA1306B),
+                              )),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: gap.done
+                                ? const Text('Protein goal reached',
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk))
+                                : Semantics(
+                                    label: 'Add: ${gap.suggestions.map((s) => s.text).join(', ')}',
+                                    excludeSemantics: true,
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: [
+                                        for (final s in gap.suggestions)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(999),
+                                            ),
+                                            child: Text.rich(TextSpan(children: [
+                                              TextSpan(
+                                                  text: s.food.name,
+                                                  style: const TextStyle(
+                                                      fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
+                                              TextSpan(
+                                                  text: '  +${s.proteinG.round()}',
+                                                  style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                            ])),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ---- meals ----
+                    HuxTileLabel('Meals today', trailing: Text('${_meals.length}', style: const TextStyle(fontSize: 15, color: huxMuted))),
+                    const SizedBox(height: 10),
+                    if (_meals.isEmpty)
+                      const HuxTile(
+                        child: Row(
+                          children: [
+                            Icon(Icons.ramen_dining_outlined, color: HuxColors.ringFood, size: 28),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text('Nothing logged yet',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      for (var i = 0; i < _meals.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        HuxTile(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
+                          child: Row(
+                            children: [
+                              Icon(_mealIcon(_meals[i].type), color: HuxColors.ringFood, size: 26),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(_meals[i].type.label,
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                                    Text(
+                                      _meals[i].items.map((e) => e.name).join(', '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 14, color: huxMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text('${_meals[i].total.proteinG.round()} g',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                                  Text('${_meals[i].total.kcal.round()} kcal',
+                                      style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                ],
+                              ),
+                              IconButton(
+                                tooltip: 'Delete meal',
+                                icon: const Icon(Icons.close_rounded, color: huxMuted, size: 20),
+                                onPressed: () => _deleteMeal(i),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    const SizedBox(height: 20),
+                    const HuxTileLabel('Quick add'),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final (label, text) in _quickAdds)
+                          ActionChip(
+                            label: Text('+ $label'),
+                            onPressed: _analysing ? null : () => _logText(text),
+                            backgroundColor: Colors.white,
+                            side: BorderSide.none,
+                            shape: const StadiumBorder(),
+                            labelStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Approximate home-style values.',
+                      style: TextStyle(fontSize: 13, color: huxMuted),
                       textAlign: TextAlign.center,
                     ),
                   ],
+                ),
+
+                // ---- log bar: photo first, then gallery and type ----
+                Positioned(
+                  left: HuxSpacing.lg,
+                  right: HuxSpacing.lg,
+                  bottom: 16,
+                  child: SafeArea(
+                    top: false,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _analysing ? null : () => _photo(ImageSource.camera),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: HuxColors.accentPink,
+                              minimumSize: const Size(0, 56),
+                              shape: const StadiumBorder(),
+                            ),
+                            icon: const Icon(Icons.photo_camera_outlined),
+                            label: const Text('Snap meal', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          tooltip: 'Pick from gallery',
+                          onPressed: _analysing ? null : () => _photo(ImageSource.gallery),
+                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: Colors.white),
+                          icon: const Icon(Icons.photo_library_outlined, color: huxInk),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          tooltip: 'Type what you ate',
+                          onPressed: _analysing ? null : _typeIt,
+                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: Colors.white),
+                          icon: const Icon(Icons.edit_outlined, color: huxInk),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
                 if (_analysing) const HuxBusyOverlay(message: 'Reading your meal…'),
               ],
