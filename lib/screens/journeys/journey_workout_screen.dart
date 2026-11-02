@@ -11,15 +11,29 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/journeys/journey_content.dart';
 import '../../core/journeys/journey_models.dart';
+import '../../core/journeys/workout_log.dart';
 import '../../theme/hux_tokens.dart';
 import '../../widgets/hux/hux_kit.dart';
 import 'journey_visuals.dart';
+import 'workout_done_screen.dart';
 
 class JourneyWorkoutScreen extends StatefulWidget {
   final Workout workout;
   final Color color;
 
-  const JourneyWorkoutScreen({super.key, required this.workout, required this.color});
+  /// Where the finished workout is saved (null = not saved, e.g. tests).
+  final WorkoutLog? log;
+
+  /// Shows a "Low impact" badge (the swaps are already in [workout]).
+  final bool lowImpact;
+
+  const JourneyWorkoutScreen({
+    super.key,
+    required this.workout,
+    required this.color,
+    this.log,
+    this.lowImpact = false,
+  });
 
   @override
   State<JourneyWorkoutScreen> createState() => _JourneyWorkoutScreenState();
@@ -33,6 +47,11 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
   int _left = 0;
   Timer? _timer;
   bool _finishing = false;
+
+  // For the "Workout done" screen.
+  DateTime? _startedAt;
+  final Set<int> _doneSteps = {};
+  final Map<MoveKind, int> _secondsByKind = {};
 
   MoveStep get _step => _steps[_index];
 
@@ -61,6 +80,7 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
   }
 
   void _startTimer() {
+    _startedAt ??= DateTime.now();
     _timer?.cancel();
     setState(() => _running = true);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -74,7 +94,17 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
     });
   }
 
+  /// Counts the current move as done (once) for time and calories.
+  void _countStep() {
+    if (_resting || !_doneSteps.add(_index)) return;
+    _startedAt ??= DateTime.now();
+    final kind = moveById(_step.moveId).kind;
+    final secs = _step.seconds ?? (_step.reps! * 3);
+    _secondsByKind[kind] = (_secondsByKind[kind] ?? 0) + secs;
+  }
+
   void _next() {
+    _countStep();
     if (!_resting && _step.restSeconds > 0) {
       setState(() {
         _resting = true;
@@ -112,14 +142,28 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
   Future<void> _finish() async {
     _timer?.cancel();
     _finishing = true;
-    await showDialog<void>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Workout done'),
-        content: Text('${widget.workout.title} complete. Drink some water and stretch if anything feels tight.'),
-        actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Done'))],
-      ),
+    final planned = _secondsByKind.values.fold<int>(0, (a, b) => a + b);
+    final elapsed = _startedAt == null ? planned : DateTime.now().difference(_startedAt!).inSeconds;
+    double? weight;
+    try {
+      weight = await widget.log?.latestWeight();
+    } catch (_) {}
+    final record = WorkoutRecord(
+      at: DateTime.now(),
+      title: widget.workout.title,
+      moves: _doneSteps.length,
+      // Wall-clock time, but never less than the moves themselves.
+      seconds: elapsed < planned ? planned : elapsed,
+      kcal: WorkoutKcal.estimate(secondsByKind: _secondsByKind, weightKg: weight ?? WorkoutLog.defaultWeightKg),
     );
+    try {
+      await widget.log?.add(record);
+    } catch (_) {}
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => WorkoutDoneScreen(record: record, color: widget.color, log: widget.log, weightKnown: weight != null),
+    ));
     if (mounted) Navigator.of(context).pop(true);
   }
 
@@ -207,6 +251,19 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
           foregroundColor: Colors.white,
           elevation: 0,
           title: Text(widget.workout.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          actions: [
+            if (widget.lowImpact)
+              const Padding(
+                padding: EdgeInsets.only(right: 12),
+                child: Chip(
+                  label: Text('Low impact'),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: Color(0x33FFFFFF),
+                  side: BorderSide.none,
+                  labelStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                ),
+              ),
+          ],
         ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

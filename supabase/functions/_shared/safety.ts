@@ -15,6 +15,11 @@ const EMERGENCY = [
   "heart attack", "having a stroke", "stroke symptoms", "heat stroke", "heatstroke",
   "seizure", "fits aa", "heavy bleeding",
   "spo2 below 90", "oxygen below 90", "oxygen is 8",
+  // romanised Telugu / Tamil / Kannada / Malayalam
+  "gunde noppi", "chathi lo noppi", "oopiri aadatledu", "upiri adatledu", "swasa aadatledu",
+  "nenju vali", "nenjuvali", "moochu vida mudiyala", "mayakkam aagiten",
+  "ede novu", "edhe novu", "usiru aadtilla", "usiraadoke aagtilla",
+  "nenju vedana", "shwasam kittunnilla", "shwasam muttunnu", "bodham poyi",
   // Hindi (Devanagari)
   "सीने में दर्द", "छाती में दर्द", "सांस नहीं", "साँस नहीं", "बेहोश", "दिल का दौरा",
   // Telugu
@@ -30,7 +35,8 @@ const SELF_HARM = [
   "want to die", "wanna die", "better off dead", "no reason to live", "hurt myself",
   "harm myself", "self harm", "self-harm", "cut myself",
   "marna chahta", "marna chahti", "mar jaana chahta", "mar jana chahti", "jeena nahi",
-  "khudkushi", "aatmahatya", "atmahatya", "chachipovali", "chanipovali",
+  "khudkushi", "aatmahatya", "atmahatya", "chachipovali", "chanipovali", "chavalani", "chachipotha",
+  "saaganum", "saaga poren", "thatkolai", "saayabeku", "saaytini", "chaavanam", "marikkanam",
   // Hindi
   "आत्महत्या", "खुदकुशी", "मरना चाहता", "मरना चाहती", "जीना नहीं",
   // Telugu

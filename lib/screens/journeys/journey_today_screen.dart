@@ -17,6 +17,7 @@ import '../../widgets/hux/hux_kit.dart';
 import '../../widgets/share_card.dart';
 import 'journey_visuals.dart';
 import 'journey_workout_screen.dart';
+import 'workout_report_screen.dart';
 
 class JourneyTodayScreen extends StatefulWidget {
   final JourneyService journeys;
@@ -43,6 +44,9 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
   bool _useGentle = true;
   bool _periodToday = false;
 
+  /// No jumping, knee-friendly swaps (remembered).
+  bool _lowImpact = false;
+
   @override
   void initState() {
     super.initState();
@@ -51,9 +55,10 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
 
   Future<void> _load() async {
     JourneyState? s;
-    var gentle = false, period = false;
+    var gentle = false, period = false, low = false;
     try {
       s = await widget.journeys.active();
+      low = await widget.journeys.lowImpact();
     } catch (_) {}
     try {
       gentle = await widget.cycle?.gentleToday() ?? false;
@@ -65,6 +70,7 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
       _loading = false;
       _gentleOffered = gentle;
       _periodToday = period;
+      _lowImpact = low;
     });
   }
 
@@ -147,9 +153,29 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
     await _load();
   }
 
-  Future<void> _startWorkout(Workout workout) async {
+  Future<void> _setLowImpact(bool on) async {
+    setState(() => _lowImpact = on);
+    try {
+      await widget.journeys.setLowImpact(on);
+    } catch (_) {}
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(on
+            ? 'Low impact on: no jumping, chair squats, wall push-ups. Same time, kinder on joints.'
+            : 'Low impact off: the full moves are back.'),
+      ));
+  }
+
+  Future<void> _startWorkout(Workout workout, {bool lowImpact = false}) async {
     final done = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => JourneyWorkoutScreen(workout: workout, color: journeyColor(_s!.setup.id)),
+      builder: (_) => JourneyWorkoutScreen(
+        workout: workout,
+        color: journeyColor(_s!.setup.id),
+        log: widget.journeys.workouts,
+        lowImpact: lowImpact,
+      ),
     ));
     if (done == true && !(_s?.ticks.contains(DayItem.move) ?? true)) await _toggle(DayItem.move);
   }
@@ -169,6 +195,14 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
       appBar: AppBar(
         title: Text(s.def.title),
         actions: [
+          if (s.setup.id == JourneyId.fitIn30)
+            IconButton(
+              tooltip: 'Report',
+              icon: const Icon(Icons.insights_rounded),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => WorkoutReportScreen(log: widget.journeys.workouts),
+              )),
+            ),
           PopupMenuButton<_Menu>(
             onSelected: _menu,
             itemBuilder: (_) => [
@@ -191,7 +225,9 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
     final meals = widget.journeys.mealsToday(s);
     final locked = doneToday || s.paused;
     final gentle = _gentleOffered && _useGentle && s.setup.id == JourneyId.fitIn30;
-    final workout = gentle ? gentleWorkout : day.workout;
+    final base = gentle ? gentleWorkout : day.workout;
+    final canSwap = hasHighImpact(base);
+    final workout = _lowImpact && canSwap ? lowImpactVersion(base) : base;
 
     // Food tile shows the meal that's next by the clock.
     final hour = DateTime.now().hour;
@@ -283,17 +319,31 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
             _DetailRow('Main', '${workout.main.length} moves${workout.rounds > 1 ? ' × ${workout.rounds}' : ''}'),
             const _DetailRow('Cool-down', 'stretch + breathing'),
           ]),
-          extra: Row(
+          extra: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (!locked)
                 FilledButton.icon(
-                  onPressed: () => _startWorkout(workout),
+                  onPressed: () => _startWorkout(workout, lowImpact: _lowImpact && canSwap),
                   style: FilledButton.styleFrom(backgroundColor: huxInk, minimumSize: const Size(0, 44), shape: const StadiumBorder()),
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: const Text('Start'),
                 ),
+              if (canSwap)
+                FilterChip(
+                  avatar: Icon(Icons.airline_seat_legroom_normal_rounded,
+                      size: 18, color: _lowImpact ? Colors.white : huxInk),
+                  label: const Text('Low impact'),
+                  tooltip: 'No jumping, knee-friendly swaps',
+                  selected: _lowImpact,
+                  showCheckmark: false,
+                  selectedColor: huxInk,
+                  labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _lowImpact ? Colors.white : huxInk),
+                  onSelected: locked ? null : _setLowImpact,
+                ),
               if (_gentleOffered && s.setup.id == JourneyId.fitIn30) ...[
-                const SizedBox(width: 8),
                 FilterChip(
                   label: const Text('Gentle day'),
                   selected: _useGentle,

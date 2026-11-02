@@ -16,6 +16,8 @@ import '../../theme/hux_tokens.dart';
 import '../../theme/hux_ui.dart';
 import 'journey_setup_screen.dart';
 import 'journey_today_screen.dart';
+import '../../widgets/hux/hux_3d.dart';
+import '../../widgets/hux/hux_kit.dart';
 import 'journey_visuals.dart';
 
 class JourneysScreen extends StatefulWidget {
@@ -149,47 +151,96 @@ class _JourneyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final color = journeyColor(def.id);
-    return HuxCard(
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              HuxIconBadge(icon: journeyIcon(def.id), color: color, size: 48),
-              const SizedBox(width: HuxSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(def.title, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                    Text(def.subtitle, style: text.bodySmall?.copyWith(color: HuxColors.mutedText)),
-                  ],
+          SizedBox(
+            height: 190,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                HuxPhoto(journeyPhoto(def.id), object: journeyObject(def.id), color: color),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x00000000), Color(0xB3000000)],
+                      stops: [0.45, 1],
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: HuxSpacing.md),
-          for (final h in def.highlights)
-            Padding(
-              padding: const EdgeInsets.only(bottom: HuxSpacing.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.check_circle_rounded, size: 16, color: color),
-                  const SizedBox(width: HuxSpacing.sm),
-                  Expanded(child: Text(h, style: text.bodySmall)),
-                ],
-              ),
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 14,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(def.title,
+                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
+                            Text(def.subtitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14, color: Color(0xE6FFFFFF))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        children: [
+                          Text('${def.days}',
+                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, height: 1, color: Colors.white)),
+                          const Text('days', style: TextStyle(fontSize: 13, color: Color(0xE6FFFFFF))),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          const SizedBox(height: HuxSpacing.sm),
-          Row(
-            children: [
-              HuxPill(label: '${def.days} days', color: color, icon: Icons.calendar_today_rounded),
-              const Spacer(),
-              FilledButton(onPressed: onStart, child: const Text('Start')),
-            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final h in def.highlights.take(3))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(top: 6, right: 10),
+                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                        ),
+                        Expanded(child: Text(h, style: const TextStyle(fontSize: 15, height: 1.35, color: huxInk))),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: FilledButton(
+                    onPressed: onStart,
+                    style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                    child: const Text('Start', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

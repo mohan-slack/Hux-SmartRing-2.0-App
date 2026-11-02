@@ -14,6 +14,7 @@ import '../../core/profile/user_profile.dart';
 import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
 import '../../theme/hux_ui.dart';
+import '../../widgets/hux/hux_3d.dart';
 import '../../widgets/hux/hux_kit.dart';
 import '../../core/food/photo_privacy.dart';
 import 'meal_review_screen.dart';
@@ -109,18 +110,69 @@ class _FoodScreenState extends State<FoodScreen> {
     await _logText(text);
   }
 
-  /// One tap from the quick-add row: straight to the review screen.
+  /// Typed or quick-add text → review screen. HUX's own table first
+  /// (instant, offline, forgives typos); anything it doesn't know can be
+  /// estimated by AI, after one plain question — only the food words go.
   Future<void> _logText(String text) async {
     final parsed = MealTextParser.parse(text);
-    if (parsed.entries.isEmpty) {
+    var entries = [...parsed.entries];
+    var confidence = <double>[for (final _ in entries) 1.0];
+    var questions = <MealQuestion>[];
+    var unknown = parsed.unknown;
+
+    if (unknown.isNotEmpty && widget.analyzer != null && mounted) {
+      final names = unknown.map((u) => '“$u”').join(', ');
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Look it up with AI?'),
+          content: Text(
+            '$names isn’t in HUX’s food list yet. HUX can estimate it with AI: only these words are sent '
+            '(to HUX’s server, then Groq in the USA, not stored). The numbers are marked as an AI estimate.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Estimate')),
+          ],
+        ),
+      );
+      if (ok == true && mounted) {
+        setState(() => _analysing = true);
+        try {
+          final ai = await widget.analyzer!.analyzeText(unknown.join(', '));
+          // AI questions refer to AI items; shift them past the table items.
+          questions = [
+            for (final q in ai.questions)
+              MealQuestion(itemIndex: q.itemIndex + entries.length, kind: q.kind, text: q.text, options: q.options),
+          ];
+          entries = [...entries, ...ai.items];
+          confidence = [...confidence, ...ai.confidence];
+          unknown = const [];
+        } on MealAnalysisException catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text("Couldn't reach HUX — check your connection and try again.")));
+          }
+        } finally {
+          if (mounted) setState(() => _analysing = false);
+        }
+      }
+    }
+
+    if (!mounted) return;
+    if (entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("Couldn't find “${text.trim()}”. Try a photo, or a simpler name like “dal”."),
+        content: Text(widget.analyzer == null
+            ? "“${text.trim()}” isn’t in HUX’s food list yet. Try a photo, or another name for it."
+            : "Nothing logged. Try a photo, or another name for “${text.trim()}”."),
       ));
       return;
     }
     await _review(
-      MealAnalysis(items: parsed.entries, confidence: [for (final _ in parsed.entries) 1.0], questions: const []),
-      unknown: parsed.unknown,
+      MealAnalysis(items: entries, confidence: confidence, questions: questions),
+      unknown: unknown,
     );
   }
 
@@ -488,16 +540,43 @@ class _FoodScreenState extends State<FoodScreen> {
                     HuxTileLabel('Meals today', trailing: Text('${_meals.length}', style: const TextStyle(fontSize: 15, color: huxMuted))),
                     const SizedBox(height: 10),
                     if (_meals.isEmpty)
-                      const HuxTile(
-                        child: Row(
-                          children: [
-                            Icon(Icons.ramen_dining_outlined, color: HuxColors.ringFood, size: 28),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Text('Nothing logged yet',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
-                            ),
-                          ],
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: SizedBox(
+                          height: 168,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              const HuxPhoto('assets/images/photos/food.jpg', object: Hux3D.bowl, color: HuxColors.ringFood),
+                              const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Color(0x00000000), Color(0xB3000000)],
+                                    stops: [0.4, 1],
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                left: 16,
+                                right: 16,
+                                bottom: 14,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Nothing logged yet',
+                                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _analysing ? 'Reading your photo…' : 'Snap your plate. HUX reads the katoris.',
+                                      style: const TextStyle(fontSize: 14, color: Color(0xE6FFFFFF)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     else

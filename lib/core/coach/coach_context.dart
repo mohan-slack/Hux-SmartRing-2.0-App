@@ -41,6 +41,18 @@ class CoachContext {
   /// ONE word ("Luteal"), only if the user turned it on in Cycle.
   final String? cyclePhase;
 
+  /// The phone's clock ("21:33") and day ("Fri"), so advice fits the hour.
+  final String? localTime;
+  final String? weekday;
+
+  /// Meals logged today, and minutes since the last one.
+  final int? mealsToday;
+  final int? lastMealMinAgo;
+
+  /// True when last night's sleep looked impossible (e.g. two apps
+  /// writing the same night); the sleep numbers are then left out.
+  final bool sleepDataOdd;
+
   const CoachContext({
     this.goals = const [],
     this.audience,
@@ -63,6 +75,11 @@ class CoachContext {
     this.proteinTodayG,
     this.proteinGoalG,
     this.cyclePhase,
+    this.localTime,
+    this.weekday,
+    this.mealsToday,
+    this.lastMealMinAgo,
+    this.sleepDataOdd = false,
   });
 
   /// Sent to the backend. Only filled fields; flat and small.
@@ -87,6 +104,11 @@ class CoachContext {
       'proteinTodayG': proteinTodayG,
       'proteinGoalG': proteinGoalG,
       'cyclePhase': cyclePhase,
+      'localTime': localTime,
+      'weekday': weekday,
+      'mealsToday': mealsToday,
+      'lastMealMinAgo': lastMealMinAgo,
+      if (sleepDataOdd) 'sleepDataOdd': true,
     };
     m.removeWhere((_, v) => v == null);
     return m;
@@ -111,7 +133,9 @@ class CoachContext {
       if (moveDaysThisWeek != null) 'Move days this week: $moveDaysThisWeek',
       if (proteinTodayG != null) 'Protein today: $proteinTodayG g${proteinGoalG != null ? ' of $proteinGoalG g' : ''}',
       if (cyclePhase != null) 'Cycle phase: $cyclePhase',
-      'Time of day: $partOfDay',
+      if (mealsToday != null) 'Meals logged today: $mealsToday',
+      if (sleepDataOdd) 'Sleep data: looked wrong, not shared',
+      'Time: ${localTime ?? partOfDay}${weekday != null ? ', $weekday' : ''}',
     ];
   }
 
@@ -163,6 +187,7 @@ class CoachContextLoader {
     }
 
     int? lastNight, usual;
+    var odd = false;
     try {
       final utc = at.toUtc();
       final sessions = await store.sleepSessionsBetween(utc.subtract(const Duration(days: 8)), utc);
@@ -172,13 +197,19 @@ class CoachContextLoader {
         final m = s.totalSleep.inMinutes;
         if (m > (byNight[k] ?? -1)) byNight[k] = m;
       }
+      // A night under 1 h or over 14 h is almost always bad data
+      // (duplicate sources); never let the coach praise or use it.
+      bool plausible(int m) => m >= 60 && m <= 14 * 60;
       if (byNight.isNotEmpty) {
         final keys = byNight.keys.toList()..sort();
-        lastNight = byNight[keys.last];
-        if (byNight.length >= 3) {
-          final v = byNight.values.toList()..sort();
-          usual = v[v.length ~/ 2];
+        final last = byNight[keys.last]!;
+        if (plausible(last)) {
+          lastNight = last;
+        } else {
+          odd = true;
         }
+        final v = byNight.values.where(plausible).toList()..sort();
+        if (v.length >= 3) usual = v[v.length ~/ 2];
       }
     } catch (_) {
       // Sleep is optional context.
@@ -193,11 +224,16 @@ class CoachContextLoader {
       // Streak is optional context.
     }
 
-    int? protein, proteinGoal;
+    int? protein, proteinGoal, meals, lastMealAgo;
     try {
       final food = FoodLogService(store);
-      if ((await food.mealsFor(at)).isNotEmpty) {
-        protein = (await food.totalFor(at)).proteinG.round();
+      final today = await food.mealsFor(at);
+      meals = today.length;
+      protein = today.isEmpty ? 0 : (await food.totalFor(at)).proteinG.round();
+      if (today.isNotEmpty) {
+        final last = today.map((m) => m.loggedAt).reduce((a, b) => a.isAfter(b) ? a : b);
+        final ago = at.difference(last).inMinutes;
+        if (ago >= 0) lastMealAgo = ago;
       }
       proteinGoal = (await food.proteinGoal()).round();
     } catch (_) {
@@ -233,6 +269,11 @@ class CoachContextLoader {
       proteinTodayG: protein,
       proteinGoalG: proteinGoal,
       cyclePhase: phase,
+      localTime: '${at.toLocal().hour.toString().padLeft(2, '0')}:${at.toLocal().minute.toString().padLeft(2, '0')}',
+      weekday: const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][at.toLocal().weekday - 1],
+      mealsToday: meals,
+      lastMealMinAgo: lastMealAgo,
+      sleepDataOdd: odd,
     );
   }
 

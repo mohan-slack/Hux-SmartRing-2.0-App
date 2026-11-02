@@ -71,7 +71,7 @@ void main() {
       final lines = ctx.preview();
       expect(lines, contains('HUX Charge: 42 (Low)'));
       expect(lines, contains('Steps today: 1200 of 6000'));
-      expect(lines.last, 'Time of day: morning');
+      expect(lines.last, 'Time: morning');
     });
 
     test('part of day', () {
@@ -87,7 +87,11 @@ void main() {
       final c = await CoachContextLoader(store: store, now: () => DateTime(2026, 10, 22, 8)).load();
       expect(c.partOfDay, 'morning');
       expect(c.charge, isNull);
-      expect(c.proteinTodayG, isNull);
+      expect(c.proteinTodayG, 0);
+      expect(c.mealsToday, 0);
+      expect(c.localTime, '08:00');
+      expect(c.weekday, 'Thu');
+      expect(c.sleepDataOdd, isFalse);
       expect(c.streakDays, 0);
       await store.close();
     });

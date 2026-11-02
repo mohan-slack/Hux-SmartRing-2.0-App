@@ -4,6 +4,7 @@
 /// still show (Home must never break because, say, the weather is down).
 library;
 
+import '../coach/coach_nudges.dart';
 import '../environment/environment_service.dart';
 import '../food/food_log_service.dart';
 import '../journal/journal.dart';
@@ -81,6 +82,9 @@ class HomeExtras {
   /// hour, and the Why factors.
   final HomeInsights insights;
 
+  /// "Coach noticed": one pattern from the user's history (null = none).
+  final CoachNudge? coachNudge;
+
   const HomeExtras({
     this.agenda = const [],
     this.food,
@@ -89,6 +93,7 @@ class HomeExtras {
     this.journey,
     this.cycle,
     this.insights = HomeInsights.empty,
+    this.coachNudge,
   });
 
   static const empty = HomeExtras();
@@ -302,7 +307,24 @@ class HomeExtrasLoader {
       // Optional: Home falls back to fewer tiles.
     }
 
+    CoachNudge? nudge;
+    try {
+      final f = foodLog;
+      nudge = CoachNudges.pick(
+        mealsByDay: f == null ? const {} : await f.allMeals(),
+        today: localDayKey(at),
+        nights7: insights.nights7,
+        sleep7: sleep7,
+        steps7: steps7,
+        proteinGoalG: f == null ? 0 : await f.proteinGoal(),
+        hidden: await CoachNudgeStore(store, now: now).hidden(),
+      );
+    } catch (_) {
+      // Optional.
+    }
+
     return HomeExtras(
+        coachNudge: nudge,
         agenda: agenda,
         food: food,
         sleep7: sleep7,

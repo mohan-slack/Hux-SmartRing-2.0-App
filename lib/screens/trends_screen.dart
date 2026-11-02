@@ -16,6 +16,7 @@ import '../core/trends/night_row.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_page.dart';
 import '../theme/hux_tokens.dart';
+import '../widgets/hux/hux_3d.dart';
 import '../widgets/wellness_note.dart';
 
 /// Single-letter weekday labels, [DateTime.weekday]-indexed (1 = Mon).
@@ -362,6 +363,16 @@ class _TrendsCharts extends StatelessWidget {
   }
 }
 
+Hux3D _objectFor(IconData icon) {
+  if (icon == Icons.bedtime_outlined) return Hux3D.moon;
+  if (icon == Icons.directions_walk_rounded) return Hux3D.steps;
+  if (icon == Icons.local_fire_department_outlined) return Hux3D.flame;
+  if (icon == Icons.monitor_heart_outlined) return Hux3D.chart;
+  if (icon == Icons.air_rounded) return Hux3D.bubble;
+  if (icon == Icons.spa_outlined) return Hux3D.leaf;
+  return Hux3D.heart;
+}
+
 /// One averaged number in the at-a-glance row.
 class _Glance extends StatelessWidget {
   final String label;
@@ -453,6 +464,8 @@ class _ChartCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              Hux3DObject(_objectFor(icon), color: color, size: 34),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
               ),

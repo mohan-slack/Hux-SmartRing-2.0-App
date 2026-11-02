@@ -10,7 +10,25 @@ import '../../core/coach/coach_service.dart';
 import '../../core/coach/safety.dart';
 import '../../theme/hux_glass.dart';
 import '../../theme/hux_tokens.dart';
+import '../../widgets/hux/hux_3d.dart';
 import '../../widgets/hux/hux_kit.dart';
+
+/// A question to open the coach with (e.g. from the Home "coach noticed"
+/// card): which specialist, and the text placed in the box — the user
+/// still taps send, so nothing goes out without them.
+class CoachDraft {
+  final CoachTopic topic;
+  final String text;
+  const CoachDraft(this.topic, this.text);
+}
+
+/// Look of each specialist: 3D object + colour.
+({Hux3D object, Color color}) coachTopicLook(CoachTopic t) => switch (t) {
+      CoachTopic.general => (object: Hux3D.bubble, color: HuxColors.ringCharge),
+      CoachTopic.sleep => (object: Hux3D.pillow, color: HuxColors.ringSleep),
+      CoachTopic.food => (object: Hux3D.bowl, color: HuxColors.ringFood),
+      CoachTopic.move => (object: Hux3D.shoe, color: HuxColors.ringSteps),
+    };
 
 class CoachScreen extends StatefulWidget {
   final CoachService coach;
@@ -26,7 +44,18 @@ class CoachScreen extends StatefulWidget {
   /// "Not now" on the consent view inside the tab (e.g. go to Home).
   final VoidCallback? onNotNow;
 
-  const CoachScreen({super.key, required this.coach, this.embedded = false, this.refreshSignal, this.onNotNow});
+  /// Set from elsewhere to open a specialist with a question ready to
+  /// send. The screen reads it, then sets it back to null.
+  final ValueNotifier<CoachDraft?>? draft;
+
+  const CoachScreen({
+    super.key,
+    required this.coach,
+    this.embedded = false,
+    this.refreshSignal,
+    this.onNotNow,
+    this.draft,
+  });
 
   @override
   State<CoachScreen> createState() => _CoachScreenState();
@@ -42,12 +71,45 @@ class _CoachScreenState extends State<CoachScreen> {
   bool _sending = false;
   List<ChatMessage> _messages = const [];
   List<String>? _shared;
+  CoachTopic _topic = CoachTopic.general;
+
+  /// Last message per specialist, for the little "new" dots on the strip.
+  Map<CoachTopic, ChatMessage?> _last = const {};
 
   @override
   void initState() {
     super.initState();
     widget.refreshSignal?.addListener(_onRefresh);
-    _init();
+    widget.draft?.addListener(_onDraft);
+    _init().then((_) => _onDraft());
+  }
+
+  void _onDraft() {
+    final d = widget.draft?.value;
+    // While loading, initState's _init().then(_onDraft) picks it up.
+    if (d == null || _sending || _loading || !mounted) return;
+    widget.draft!.value = null;
+    _input.text = d.text;
+    _input.selection = TextSelection.collapsed(offset: d.text.length);
+    if (d.topic != _topic) {
+      _switchTopic(d.topic);
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _switchTopic(CoachTopic t) async {
+    if (_sending) return;
+    setState(() => _topic = t);
+    List<ChatMessage> history;
+    try {
+      history = _consent ? await widget.coach.history(topic: t) : const <ChatMessage>[];
+    } catch (_) {
+      history = const [];
+    }
+    if (!mounted || _topic != t) return;
+    setState(() => _messages = history);
+    _toBottom();
   }
 
   void _onRefresh() {
@@ -57,6 +119,7 @@ class _CoachScreenState extends State<CoachScreen> {
   @override
   void dispose() {
     widget.refreshSignal?.removeListener(_onRefresh);
+    widget.draft?.removeListener(_onDraft);
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -66,9 +129,16 @@ class _CoachScreenState extends State<CoachScreen> {
     final bool consent;
     final List<ChatMessage> history;
     List<String>? shared;
+    var last = const <CoachTopic, ChatMessage?>{};
+    final topic = _topic;
     try {
       consent = await widget.coach.hasConsent();
-      history = consent ? await widget.coach.history() : const <ChatMessage>[];
+      history = consent ? await widget.coach.history(topic: topic) : const <ChatMessage>[];
+      if (consent) {
+        try {
+          last = await widget.coach.lastMessages();
+        } catch (_) {}
+      }
       try {
         // Also when consented: the chat shows these as small context chips.
         shared = (await widget.coach.previewContext()).preview();
@@ -83,8 +153,9 @@ class _CoachScreenState extends State<CoachScreen> {
     if (!mounted) return;
     setState(() {
       _consent = consent;
-      _messages = history;
+      if (_topic == topic) _messages = history;
       _shared = shared;
+      _last = last;
       _loading = false;
     });
     _toBottom();
@@ -105,6 +176,7 @@ class _CoachScreenState extends State<CoachScreen> {
   Future<void> _send(String text) async {
     final t = text.trim();
     if (t.isEmpty || _sending) return;
+    final topic = _topic;
     _input.clear();
     // Show the message (and any safety card) immediately.
     setState(() {
@@ -116,9 +188,12 @@ class _CoachScreenState extends State<CoachScreen> {
     });
     _toBottom();
     try {
-      final updated = await widget.coach.send(t);
+      final updated = await widget.coach.send(t, topic: topic);
       if (!mounted) return;
-      setState(() => _messages = updated);
+      setState(() {
+        _last = {..._last, topic: updated.lastOrNull};
+        if (_topic == topic) _messages = updated;
+      });
     } on CoachException catch (e) {
       if (!mounted) return;
       if (e.kind == CoachErrorKind.tooLong) {
@@ -151,7 +226,7 @@ class _CoachScreenState extends State<CoachScreen> {
     );
     if (reason == null) return;
     try {
-      final updated = await widget.coach.report(index, reason);
+      final updated = await widget.coach.report(index, reason, topic: _topic);
       if (!mounted) return;
       setState(() => _messages = updated);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thanks — we\'ll review it.')));
@@ -166,7 +241,7 @@ class _CoachScreenState extends State<CoachScreen> {
     setState(() => _sending = true);
     _toBottom();
     try {
-      final updated = await widget.coach.retryLast();
+      final updated = await widget.coach.retryLast(topic: _topic);
       if (mounted) setState(() => _messages = updated);
     } on CoachException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -189,8 +264,13 @@ class _CoachScreenState extends State<CoachScreen> {
           ),
         );
       case _Menu.clear:
-        await widget.coach.clearHistory();
-        if (mounted) setState(() => _messages = const []);
+        await widget.coach.clearHistory(topic: _topic);
+        if (mounted) {
+          setState(() {
+            _messages = const [];
+            _last = {..._last, _topic: null};
+          });
+        }
       case _Menu.stop:
         final ok = await showDialog<bool>(
           context: context,
@@ -210,6 +290,7 @@ class _CoachScreenState extends State<CoachScreen> {
         setState(() {
           _consent = false;
           _messages = const [];
+          _last = const {};
           _shared = shared;
         });
     }
@@ -228,8 +309,8 @@ class _CoachScreenState extends State<CoachScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('HUX coach'),
-                Text(_sending ? 'typing…' : 'Your wellness companion',
+                Text(_consent && _topic != CoachTopic.general ? '${_topic.label} coach' : 'HUX coach'),
+                Text(_sending ? 'typing…' : (_consent ? _topic.blurb : 'Your wellness companion'),
                     style: Theme.of(context).textTheme.labelSmall),
               ],
             ),
@@ -241,7 +322,7 @@ class _CoachScreenState extends State<CoachScreen> {
               onSelected: _onMenu,
               itemBuilder: (_) => const [
                 PopupMenuItem(value: _Menu.shared, child: Text('What HUX shares')),
-                PopupMenuItem(value: _Menu.clear, child: Text('Clear chat')),
+                PopupMenuItem(value: _Menu.clear, child: Text('Clear this chat')),
                 PopupMenuItem(value: _Menu.stop, child: Text('Stop sharing & delete chat')),
               ],
             ),
@@ -279,17 +360,61 @@ class _CoachScreenState extends State<CoachScreen> {
     return out.take(3).toList();
   }
 
-  static const _suggestions = [
-    (icon: Icons.wb_sunny_rounded, color: HuxColors.ringSteps, text: 'What should I do today?'),
-    (icon: Icons.bedtime_rounded, color: HuxColors.ringSleep, text: 'How can I sleep better tonight?'),
-    (icon: Icons.restaurant_rounded, color: HuxColors.ringFood, text: 'Easy protein ideas for my diet'),
-    (icon: Icons.directions_walk_rounded, color: HuxColors.ringCharge, text: 'Make me a 2-week walking plan'),
-  ];
+  static List<({IconData icon, Color color, String text})> _suggestionsFor(CoachTopic t) => switch (t) {
+        CoachTopic.general => const [
+            (icon: Icons.wb_sunny_rounded, color: HuxColors.ringSteps, text: 'What should I do today?'),
+            (icon: Icons.bedtime_rounded, color: HuxColors.ringSleep, text: 'How can I sleep better tonight?'),
+            (icon: Icons.restaurant_rounded, color: HuxColors.ringFood, text: 'Easy protein ideas for my diet'),
+            (icon: Icons.bolt_rounded, color: HuxColors.ringCharge, text: 'Why is my charge low today?'),
+          ],
+        CoachTopic.sleep => const [
+            (icon: Icons.bedtime_rounded, color: HuxColors.ringSleep, text: 'Why do I wake up tired?'),
+            (icon: Icons.self_improvement_rounded, color: HuxColors.ringSleep, text: 'Build me a 10-minute wind-down'),
+            (icon: Icons.airline_seat_flat_rounded, color: HuxColors.ringSleep, text: 'Is a nap okay today?'),
+            (icon: Icons.coffee_rounded, color: HuxColors.ringSleep, text: 'When should I have my last chai?'),
+          ],
+        CoachTopic.food => const [
+            (icon: Icons.egg_alt_rounded, color: HuxColors.ringFood, text: 'Easy protein ideas for my diet'),
+            (icon: Icons.dinner_dining_rounded, color: HuxColors.ringFood, text: 'What should I eat for dinner tonight?'),
+            (icon: Icons.rice_bowl_rounded, color: HuxColors.ringFood, text: 'Is my lunch portion okay?'),
+            (icon: Icons.currency_rupee_rounded, color: HuxColors.ringFood, text: 'Healthy snacks under ₹30'),
+          ],
+        CoachTopic.move => const [
+            (icon: Icons.directions_walk_rounded, color: HuxColors.ringSteps, text: 'Make me a 2-week walking plan'),
+            (icon: Icons.battery_3_bar_rounded, color: HuxColors.ringSteps, text: 'A short workout for a low-energy day'),
+            (icon: Icons.accessibility_new_rounded, color: HuxColors.ringSteps, text: 'My knees hurt — what can I do instead?'),
+            (icon: Icons.flag_rounded, color: HuxColors.ringSteps, text: 'How many steps should I aim for?'),
+          ],
+      };
+
+  /// The coach team: one pill per specialist.
+  Widget _topicStrip() {
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.lg),
+        children: [
+          for (final t in CoachTopic.values) ...[
+            _TopicPill(
+              topic: t,
+              selected: t == _topic,
+              hasChat: _last[t] != null,
+              onTap: _sending || t == _topic ? null : () => _switchTopic(t),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _chat(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final look = coachTopicLook(_topic);
     return Column(
       children: [
+        _topicStrip(),
         Expanded(
           child: ListView(
             controller: _scroll,
@@ -304,11 +429,31 @@ class _CoachScreenState extends State<CoachScreen> {
                 const SizedBox(height: HuxSpacing.md),
               ],
               if (_messages.isEmpty) ...[
-                const SizedBox(height: HuxSpacing.lg),
-                Text('Ask about today',
-                    style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: huxInk)),
+                const SizedBox(height: HuxSpacing.sm),
+                Row(
+                  children: [
+                    Hux3DObject(look.object, color: look.color, size: 56),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_topic == CoachTopic.general ? 'Ask about today' : 'Your ${_topic.label.toLowerCase()} coach',
+                              style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: huxInk)),
+                          const SizedBox(height: 2),
+                          Text(
+                            _topic == CoachTopic.general
+                                ? 'Anything about your day. For deeper help, pick a specialist above.'
+                                : 'Knows your ${_topic == CoachTopic.sleep ? 'nights and bedtime' : _topic == CoachTopic.food ? 'meals and protein' : 'steps and effort'}. This chat stays separate.',
+                            style: const TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: HuxSpacing.md),
-                for (final s in _suggestions) ...[
+                for (final s in _suggestionsFor(_topic)) ...[
                   HuxTile(
                     onTap: () => _send(s.text),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -409,6 +554,52 @@ class _CoachScreenState extends State<CoachScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One specialist in the coach strip.
+class _TopicPill extends StatelessWidget {
+  final CoachTopic topic;
+  final bool selected;
+  final bool hasChat;
+  final VoidCallback? onTap;
+
+  const _TopicPill({required this.topic, required this.selected, required this.hasChat, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final look = coachTopicLook(topic);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${topic.label} coach',
+      child: Material(
+        color: selected ? huxInk : HuxColors.card,
+        shape: StadiumBorder(side: BorderSide(color: selected ? huxInk : HuxColors.glassStroke)),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 4, 14, 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Hux3DObject(look.object, color: look.color, size: 30, animate: false),
+                const SizedBox(width: 6),
+                Text(topic.label,
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700, color: selected ? Colors.white : huxInk)),
+                if (hasChat && !selected) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                      width: 6, height: 6, decoration: BoxDecoration(color: look.color, shape: BoxShape.circle)),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

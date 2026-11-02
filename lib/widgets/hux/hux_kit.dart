@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../theme/hux_tokens.dart';
+import 'hux_3d.dart';
 
 /// Night plum: the only dark surface, behind the Charge ring.
 const huxNight = Color(0xFF1C0D30);
@@ -418,14 +419,19 @@ class HuxBedtimeWeek extends StatelessWidget {
   const HuxBedtimeWeek({super.key, required this.nights, this.targetBed, this.color = HuxColors.ringSleep});
 
   static const _days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  static const lateColor = Color(0xFFE08A1E);
+
+  /// Hours shown on the left: 9 PM … 9 AM every 3 h.
+  static const _ticks = ['9 PM', '12 AM', '3 AM', '6 AM', '9 AM'];
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final labels = [for (var i = 6; i >= 0; i--) _days[now.subtract(Duration(days: i)).weekday - 1]];
-    const h = 120.0;
+    final target = targetBed == null ? null : _nightFraction(targetBed!);
+    const h = 150.0;
     return Semantics(
-      label: 'Bedtimes for the last ${nights.length} nights',
+      label: 'Sleep windows for the last ${nights.length} nights',
       child: Column(
         children: [
           SizedBox(
@@ -434,24 +440,22 @@ class HuxBedtimeWeek extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  width: 44,
+                  width: 46,
                   child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      const Positioned(top: 0, child: Text('9 PM', style: TextStyle(fontSize: 12, color: huxMuted))),
-                      if (targetBed != null)
+                      for (var k = 0; k < _ticks.length; k++)
                         Positioned(
-                          top: (h * _nightFraction(targetBed!) - 7).clamp(14.0, h - 30),
-                          child: Text(huxClock(targetBed!),
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+                          top: (h * k / (_ticks.length - 1) - 7).clamp(-2.0, h - 14),
+                          child: Text(_ticks[k], style: const TextStyle(fontSize: 11, color: huxMuted)),
                         ),
-                      const Positioned(bottom: 0, child: Text('9 AM', style: TextStyle(fontSize: 12, color: huxMuted))),
                     ],
                   ),
                 ),
                 Expanded(
                   child: CustomPaint(
                     size: const Size(double.infinity, h),
-                    painter: _WeekPainter(nights, targetBed == null ? null : _nightFraction(targetBed!), color),
+                    painter: _WeekPainter(nights, target, color, lateColor),
                   ),
                 ),
               ],
@@ -460,7 +464,7 @@ class HuxBedtimeWeek extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              const SizedBox(width: 44),
+              const SizedBox(width: 46),
               for (var i = 0; i < labels.length; i++)
                 Expanded(
                   child: Text(labels[i],
@@ -472,25 +476,66 @@ class HuxBedtimeWeek extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const SizedBox(width: 46),
+              _Key(color: color, label: 'on time'),
+              const SizedBox(width: 14),
+              const _Key(color: lateColor, label: 'late'),
+              if (targetBed != null) ...[
+                const SizedBox(width: 14),
+                Container(width: 14, height: 2, color: color.withValues(alpha: 0.6)),
+                const SizedBox(width: 6),
+                Text('bed ${huxClock(targetBed!)}', style: const TextStyle(fontSize: 12, color: huxMuted)),
+              ],
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
+class _Key extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _Key({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(fontSize: 12, color: huxMuted)),
+        ],
+      );
+}
+
 class _WeekPainter extends CustomPainter {
   final List<({DateTime bed, DateTime wake})?> nights;
   final double? target;
   final Color color;
+  final Color lateColor;
 
-  _WeekPainter(this.nights, this.target, this.color);
+  _WeekPainter(this.nights, this.target, this.color, this.lateColor);
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Hour grid every 3 h.
+    final grid = Paint()
+      ..color = const Color(0xFFECE9F2)
+      ..strokeWidth = 1;
+    for (var k = 0; k <= 4; k++) {
+      final y = size.height * k / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
     if (target != null) {
       final y = size.height * target!;
       final p = Paint()
-        ..color = color.withValues(alpha: 0.45)
+        ..color = color.withValues(alpha: 0.6)
         ..strokeWidth = 2;
       for (var x = 0.0; x < size.width; x += 8) {
         canvas.drawLine(Offset(x, y), Offset(math.min(x + 4, size.width), y), p);
@@ -499,17 +544,39 @@ class _WeekPainter extends CustomPainter {
     final n = nights.length;
     if (n == 0) return;
     final slot = size.width / n;
-    final w = slot * 0.6;
+    final w = math.min(slot * 0.55, 26.0);
+    // 15 minutes past the target counts as late.
+    final lateAfter = target == null ? null : target! + 15 / (12 * 60);
     for (var i = 0; i < n; i++) {
+      final cx = slot * i + slot / 2;
       final night = nights[i];
-      if (night == null) continue;
+      if (night == null) {
+        // No data that night: a small hollow mark, so it doesn't read as zero sleep.
+        canvas.drawCircle(
+          Offset(cx, size.height - 6),
+          3,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..color = const Color(0xFFC9C5D3),
+        );
+        continue;
+      }
       final top = size.height * _nightFraction(night.bed);
       final bottom = size.height * _nightFraction(night.wake);
       if (bottom <= top) continue;
-      final x = slot * i + (slot - w) / 2;
+      final isLate = lateAfter != null && _nightFraction(night.bed) > lateAfter;
+      final base = isLate ? lateColor : color;
+      final today = i == n - 1;
+      final rect = Rect.fromLTRB(cx - w / 2, top, cx + w / 2, bottom);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTRB(x, top, x + w, bottom), const Radius.circular(6)),
-        Paint()..color = i == n - 1 ? color : color.withValues(alpha: 0.32),
+        RRect.fromRectAndRadius(rect, Radius.circular(w / 2)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [base.withValues(alpha: today ? 1 : 0.75), base.withValues(alpha: today ? 0.7 : 0.4)],
+          ).createShader(rect),
       );
     }
   }
@@ -658,6 +725,9 @@ class HuxDayLine extends StatelessWidget {
 
 class HuxNextUp extends StatelessWidget {
   final IconData icon;
+
+  /// Shown instead of [icon] when set.
+  final Hux3D? object;
   final Color color;
   final String title;
   final String subtitle;
@@ -667,6 +737,7 @@ class HuxNextUp extends StatelessWidget {
   const HuxNextUp({
     super.key,
     required this.icon,
+    this.object,
     required this.color,
     required this.title,
     required this.subtitle,
@@ -680,8 +751,8 @@ class HuxNextUp extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(width: 14),
+          if (object != null) Hux3DObject(object!, color: color, size: 46) else Icon(icon, color: color, size: 28),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

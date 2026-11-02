@@ -50,6 +50,11 @@ class SafetyCheck {
   static const _emergency = [
     'chest pain', 'pain in my chest', 'chest is hurting', 'chest tight', 'tightness in chest',
     'seene me dard', 'seene mein dard', 'chhati me dard', 'chaati mein dard', 'chathi noppi',
+    // romanised Telugu / Tamil / Kannada / Malayalam
+    'gunde noppi', 'chathi lo noppi', 'oopiri aadatledu', 'upiri adatledu', 'swasa aadatledu',
+    'nenju vali', 'nenjuvali', 'moochu vida mudiyala', 'mayakkam aagiten',
+    'ede novu', 'edhe novu', 'usiru aadtilla', 'usiraadoke aagtilla',
+    'nenju vedana', 'shwasam kittunnilla', 'shwasam muttunnu', 'bodham poyi',
     "can't breathe", 'cant breathe', 'cannot breathe', 'hard to breathe', 'breathless at rest',
     'saans nahi', 'saans lene me', 'saans lene mein',
     'fainted', 'passed out', 'unconscious', 'behosh',
@@ -70,7 +75,8 @@ class SafetyCheck {
     'want to die', 'wanna die', 'better off dead', 'no reason to live', 'hurt myself',
     'harm myself', 'self harm', 'self-harm', 'cut myself',
     'marna chahta', 'marna chahti', 'mar jaana chahta', 'mar jana chahti', 'jeena nahi',
-    'khudkushi', 'aatmahatya', 'atmahatya', 'chachipovali', 'chanipovali',
+    'khudkushi', 'aatmahatya', 'atmahatya', 'chachipovali', 'chanipovali', 'chavalani', 'chachipotha',
+    'saaganum', 'saaga poren', 'thatkolai', 'saayabeku', 'saaytini', 'chaavanam', 'marikkanam',
     'आत्महत्या', 'खुदकुशी', 'मरना चाहता', 'मरना चाहती', 'जीना नहीं',
     'ఆత్మహత్య', 'చనిపోవాలని',
     'தற்கொலை', 'சாக வேண்டும்',

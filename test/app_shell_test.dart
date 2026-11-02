@@ -99,6 +99,9 @@ void main() {
 
     await tapTab(tester, 'Progress');
     expect(find.text('DEMO — simulated ring data'), findsOneWidget);
+    expect(find.text('This week'), findsOneWidget); // Score opens first
+    await tester.tap(find.text('Trends'));
+    await settle(tester);
     expect(find.text('Sleep duration'), findsOneWidget);
 
     await tester.tap(find.text('Story'));
@@ -157,6 +160,8 @@ void main() {
     // back — IndexedStack must keep Trends' widget (and its selection)
     // alive instead of tearing it down and rebuilding at the default.
     await tapTab(tester, 'Progress');
+    await tester.tap(find.text('Trends')); // Progress opens on Score
+    await settle(tester);
     await tester.tap(find.text('30 days'));
     await settle(tester);
 

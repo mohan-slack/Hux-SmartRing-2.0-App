@@ -66,6 +66,9 @@ class FoodLogService {
     );
   }
 
+  /// Every kept day's meals, keyed by `DateTime.utc(y, m, d)` labels.
+  Future<Map<DateTime, List<Meal>>> allMeals() => _loadAll();
+
   Future<List<Meal>> mealsFor(DateTime day) async => (await _loadAll())[dayKey(day)] ?? const [];
 
   Future<void> addMeal(Meal meal, {DateTime? now}) async {

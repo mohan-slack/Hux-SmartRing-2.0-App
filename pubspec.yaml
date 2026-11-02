@@ -64,5 +64,6 @@ flutter:
   assets:
     - assets/images/modes/
     - assets/images/moves/
+    - assets/images/photos/
     - assets/images/brand/
     - assets/splash/splash_bg.png

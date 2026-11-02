@@ -71,6 +71,25 @@ Rules:
 - If there is no food in the photo, return {"items": [], "questions": [], "note": "No food found"}.
 - Wellness only: never comment on diseases or diagnoses.`;
 
+const TEXT_RULES = `
+The user TYPED what they ate (no photo). Read it the way an Indian friend would:
+- Fix spelling slips and mixed languages ("chcken noodls", "rendu idli", "do roti", "pesarattu upma").
+- One item per dish they name; use the quantity and size they give, else a typical single serving.
+- Restaurant / street versions (noodles, fried rice, biryani, momos, pizza) have more oil than home food.
+- Never invent dishes they did not mention. If a word is not food, leave it out.
+- Ask a question only if the protein would change a lot (e.g. "chicken or veg noodles?").`;
+
+/** Typed meal → same JSON as a photo, so the app reviews both the same way. */
+async function callModelText(text: string): Promise<string> {
+  return chat({
+    model: Deno.env.get("MEAL_TEXT_MODEL") ?? Deno.env.get("MEAL_MODEL") ?? "",
+    system: SYSTEM_PROMPT + TEXT_RULES,
+    messages: [{ role: "user", content: `I ate: "${text}". Reply with the JSON object only.` }],
+    maxTokens: 1200,
+    temperature: 0.2,
+  });
+}
+
 async function callModel(imageBase64: string, mediaType: string, description?: string): Promise<string> {
   const userText = description
     ? `The user says this is: "${description}". Identify the items and portions. Reply with the JSON object only.`
@@ -155,7 +174,7 @@ Deno.serve(async (req) => {
   if (!uid) return json({ error: "unauthorized" }, 401);
   if (aiPaused()) return json({ error: "paused" }, 503);
 
-  let body: { image?: unknown; mediaType?: unknown; description?: unknown };
+  let body: { image?: unknown; mediaType?: unknown; description?: unknown; text?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -167,7 +186,9 @@ Deno.serve(async (req) => {
   const description =
     typeof body.description === "string" ? body.description.slice(0, MAX_DESCRIPTION).trim() : undefined;
 
-  if (!image) return json({ error: "no image" }, 400);
+  // Text-only: only the food words the user typed (no photo).
+  const typed = typeof body.text === "string" ? body.text.replace(/\s+/g, " ").slice(0, MAX_DESCRIPTION).trim() : "";
+  if (!image && !typed) return json({ error: "no image" }, 400);
   if (image.length > MAX_IMAGE_BASE64) return json({ error: "image too large" }, 413);
 
   let counted = false;
@@ -180,11 +201,11 @@ Deno.serve(async (req) => {
       return json({ error: "busy" }, 503);
     }
 
-    const reply = await callModel(image, mediaType, description || undefined);
+    const reply = image ? await callModel(image, mediaType, description || undefined) : await callModelText(typed);
     const parsed = extractJson(reply);
     if (!parsed || typeof parsed !== "object") {
       await refundUsage(uid, "meal");
-      return json({ items: [], questions: [], note: "Could not read this photo" });
+      return json({ items: [], questions: [], note: image ? "Could not read this photo" : "Could not read that" });
     }
     return json(sanitize(parsed));
   } catch (e) {

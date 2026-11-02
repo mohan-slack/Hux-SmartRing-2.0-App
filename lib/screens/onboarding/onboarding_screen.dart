@@ -153,11 +153,11 @@ final _steps = <_Step>[
       label: (d) => d.label,
       look: (d) => switch (d) {
         DayType.desk => (Hux3D.laptop, HuxColors.accentIndigo, 'Sit-too-long and after-meal walk nudges'),
-        DayType.nightShift => (Hux3D.moon, HuxColors.ringSleep, 'Night shift mode: day sleep counts'),
-        DayType.student => (Hux3D.book, HuxColors.accentPurple, 'Exam season mode, steady sleep'),
+        DayType.nightShift => (Hux3D.building, HuxColors.ringSleep, 'Night shift mode: day sleep counts'),
+        DayType.student => (Hux3D.cap, HuxColors.accentPurple, 'Exam season mode, steady sleep'),
         DayType.homemaker => (Hux3D.bowl, HuxColors.ringFood, 'Home workouts, after-meal walks'),
         DayType.fieldTravel => (Hux3D.sun, HuxColors.ringSteps, 'Air and heat alerts for your city'),
-        DayType.retired => (Hux3D.steps, HuxColors.ringCharge, 'Gentle guided walks'),
+        DayType.retired => (Hux3D.shoe, HuxColors.ringCharge, 'Gentle guided walks'),
       },
       read: (p) => p.dayType,
       write: (p, v) => _with(p, dayType: () => v),
@@ -172,7 +172,7 @@ final _steps = <_Step>[
         Diet.veg => (Hux3D.leaf, HuxColors.ringFood, 'Dal, paneer, curd ideas'),
         Diet.egg => (Hux3D.egg, HuxColors.ringHabit, 'Eggs plus veg protein'),
         Diet.nonVeg => (Hux3D.bowl, HuxColors.accentCherry, 'Chicken, fish and eggs too'),
-        Diet.jain => (Hux3D.leaf, HuxColors.steady, 'Jain-friendly protein ideas'),
+        Diet.jain => (Hux3D.diya, HuxColors.steady, 'Jain-friendly protein ideas'),
       },
       read: (p) => p.diet,
       write: (p, v) => _with(p, diet: () => v),
@@ -237,7 +237,7 @@ _Look _goalLook(Goal g) => switch (g) {
       Goal.getFit => (Hux3D.dumbbell, HuxColors.ringSteps, 'Daily effort, step targets, streaks'),
       Goal.lessStress => (Hux3D.leaf, HuxColors.steady, 'Journal, steady sleep, desk breaks'),
       Goal.sugarBp => (Hux3D.sun, HuxColors.ringHabit, 'Walks after meals, gentle plans'),
-      Goal.activeElder => (Hux3D.steps, HuxColors.ringFood, 'Gentle guided walks'),
+      Goal.activeElder => (Hux3D.shoe, HuxColors.ringFood, 'Gentle guided walks'),
       Goal.cycleHealth => (Hux3D.drop, HuxColors.accentPink, 'Your phase, in your scores'),
     };
 

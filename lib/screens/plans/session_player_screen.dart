@@ -12,10 +12,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/plans/plan_models.dart';
 import '../../core/plans/speaker.dart';
 import '../../core/plans/voice_cues.dart';
-import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
-import '../../theme/hux_ui.dart';
-import 'plan_visuals.dart';
+import '../../widgets/hux/hux_3d.dart';
+import '../../widgets/hux/hux_kit.dart';
 
 class SessionPlayerScreen extends StatefulWidget {
   final Plan plan;
@@ -185,9 +184,29 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
         SegmentKind.exercise => HuxColors.accentPurple,
       };
 
+  static Hux3D _object(SegmentKind k) => switch (k) {
+        SegmentKind.warmup || SegmentKind.cooldown || SegmentKind.walk || SegmentKind.slow => Hux3D.steps,
+        SegmentKind.brisk || SegmentKind.fast => Hux3D.flame,
+        SegmentKind.run || SegmentKind.snack => Hux3D.heart,
+        SegmentKind.exercise => Hux3D.dumbbell,
+      };
+
+  /// The talk test: how it should feel, in words anyone can check.
+  static String _feel(SegmentKind k) => switch (k) {
+        SegmentKind.warmup || SegmentKind.cooldown || SegmentKind.slow => 'Easy. You can chat comfortably.',
+        SegmentKind.walk => 'Steady. You can talk easily.',
+        SegmentKind.brisk => 'About 100 steps a minute. Talk, but not sing.',
+        SegmentKind.fast => 'Fast. Short sentences only.',
+        SegmentKind.run => 'Light jog. A few words at a time.',
+        SegmentKind.snack => 'As hard as you safely can.',
+        SegmentKind.exercise => 'Steady and controlled.',
+      };
+
+  static bool _isEffort(SegmentKind k) =>
+      k == SegmentKind.brisk || k == SegmentKind.fast || k == SegmentKind.run || k == SegmentKind.snack;
+
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final pos = SessionPosition.of(widget.session, _elapsed);
     final segs = widget.session.segments;
     final seg = segs[pos.segmentIndex];
@@ -197,6 +216,10 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
     final color = _color(seg.kind);
     final left = _started ? pos.secondsLeftInSegment : seg.seconds;
     final segProgress = seg.seconds == 0 ? 0.0 : (1 - left / seg.seconds).clamp(0.0, 1.0);
+    final efforts = [for (var i = 0; i < segs.length; i++) if (_isEffort(segs[i].kind)) i];
+    final effortNo = efforts.indexOf(pos.segmentIndex) + 1;
+    final ink = Color.lerp(color, HuxColors.ink, 0.45)!;
+    final ring = (MediaQuery.sizeOf(context).height * 0.32).clamp(180.0, 270.0);
 
     return PopScope(
       // Back gesture mid-session asks first (it won't be marked done).
@@ -204,151 +227,207 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _endEarly();
       },
-      child: Scaffold(
-      appBar: AppBar(
-        title: Text('Week ${widget.session.week} · Session ${widget.session.day}'),
-        actions: [
-          IconButton(
-            tooltip: _voice ? 'Mute voice' : 'Unmute voice',
-            icon: Icon(_voice ? Icons.volume_up_rounded : Icons.volume_off_rounded),
-            onPressed: _voiceAvailable ? () => setState(() => _voice = !_voice) : null,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        // Scrolls on small phones / large text instead of overflowing;
-        // on normal screens it fills the height exactly (Spacers work).
-        child: LayoutBuilder(
-          builder: (context, box) => SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: box.maxHeight),
-              child: IntrinsicHeight(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
-          child: Column(
-            children: [
-              // ---- whole-session timeline: one bar per segment ----
-              ClipRRect(
-                borderRadius: BorderRadius.circular(HuxRadii.chip),
-                child: SizedBox(
-                  height: 10,
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < segs.length; i++)
-                        Expanded(
-                          flex: segs[i].seconds.clamp(1, 1 << 20),
-                          child: Container(
-                            margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : 2),
-                            color: i < pos.segmentIndex || (i == pos.segmentIndex && _started)
-                                ? _color(segs[i].kind)
-                                : _color(segs[i].kind).withValues(alpha: 0.2),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 600),
+        color: Color.alphaBlend(color.withValues(alpha: 0.12), HuxColors.bg),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            title: Text('Week ${widget.session.week} · Session ${widget.session.day}'),
+            actions: [
+              IconButton(
+                tooltip: _voice ? 'Mute voice' : 'Unmute voice',
+                icon: Icon(_voice ? Icons.volume_up_rounded : Icons.volume_off_rounded),
+                onPressed: _voiceAvailable ? () => setState(() => _voice = !_voice) : null,
               ),
-              const SizedBox(height: HuxSpacing.sm),
-              Row(
-                children: [
-                  Text(_clock(_elapsed.clamp(0, total)), style: text.labelMedium),
-                  const Spacer(),
-                  Text('${widget.plan.name} · ${_clock(total)}', style: text.labelMedium),
-                ],
-              ),
-              const Spacer(),
-
-              // ---- now ----
-              HuxPill(label: _label(seg.kind), color: color, icon: planIcon(widget.plan.id)),
-              const SizedBox(height: HuxSpacing.xl),
-              Semantics(
-                label: '$left seconds left',
-                excludeSemantics: true,
-                child: HuxScoreRing(
-                  progress: segProgress,
-                  centerText: _clock(left),
-                  color: color,
-                  size: (MediaQuery.sizeOf(context).height * 0.3).clamp(160.0, 240.0),
-                  stroke: 14,
-                  centerStyle: text.displayMedium?.copyWith(fontWeight: FontWeight.w700, color: HuxColors.ink),
-                ),
-              ),
-              if (seg.instruction != null) ...[
-                const SizedBox(height: HuxSpacing.lg),
-                Text(seg.instruction!, style: text.bodyLarge, textAlign: TextAlign.center),
-              ],
-              const SizedBox(height: HuxSpacing.lg),
-              if (next != null)
-                HuxCard(
-                  padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.md, vertical: HuxSpacing.sm),
-                  child: Row(
-                    children: [
-                      HuxIconBadge(icon: Icons.skip_next_rounded, color: _color(next.kind), size: 32),
-                      const SizedBox(width: HuxSpacing.sm),
-                      Expanded(
-                        child: Text('Next: ${_label(next.kind)} · ${_clock(next.seconds)}',
-                            style: text.bodyMedium?.copyWith(color: HuxColors.mutedText)),
-                      ),
-                    ],
-                  ),
-                ),
-              if (!_voiceAvailable)
-                Padding(
-                  padding: const EdgeInsets.only(top: HuxSpacing.md),
-                  child: Text('No voice available on this phone — follow the timer.',
-                      style: text.bodySmall?.copyWith(color: HuxColors.mutedText)),
-                ),
-              const Spacer(),
-
-              // ---- controls ----
-              if (!_started)
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: FilledButton.icon(
-                    onPressed: _start,
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text('Start · ${widget.session.minutes} min'),
-                  ),
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 56,
-                        child: OutlinedButton.icon(
-                          onPressed: _endEarly,
-                          icon: const Icon(Icons.stop_rounded),
-                          label: const Text('End'),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: HuxSpacing.md),
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(
-                        height: 56,
-                        child: FilledButton.icon(
-                          onPressed: _togglePause,
-                          icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
-                          label: Text(_paused ? 'Resume' : 'Pause'),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              const SizedBox(height: HuxSpacing.sm),
-              Text('Stop if you feel chest pain, dizziness or severe breathlessness.',
-                  style: text.bodySmall?.copyWith(color: HuxColors.mutedText), textAlign: TextAlign.center),
             ],
           ),
-        ),
+          body: SafeArea(
+            // Scrolls on small phones / large text instead of overflowing.
+            child: LayoutBuilder(
+              builder: (context, box) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: box.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
+                      child: Column(
+                        children: [
+                          // ---- whole session: one bar per segment ----
+                          SizedBox(
+                            height: 12,
+                            child: Row(
+                              children: [
+                                for (var i = 0; i < segs.length; i++)
+                                  Expanded(
+                                    flex: segs[i].seconds.clamp(1, 1 << 20),
+                                    child: Container(
+                                      margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : 3),
+                                      decoration: BoxDecoration(
+                                        color: i < pos.segmentIndex || (i == pos.segmentIndex && _started)
+                                            ? _color(segs[i].kind)
+                                            : _color(segs[i].kind).withValues(alpha: 0.22),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: i == pos.segmentIndex
+                                            ? Border.all(color: _color(segs[i].kind), width: 2)
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Text('${_clock(_elapsed.clamp(0, total))} done',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
+                              const Spacer(),
+                              Text('${_clock((total - _elapsed).clamp(0, total))} left',
+                                  style: const TextStyle(fontSize: 14, color: huxMuted)),
+                            ],
+                          ),
+                          const Spacer(),
+
+                          // ---- now ----
+                          Text(_label(seg.kind),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: ink)),
+                          const SizedBox(height: 4),
+                          Text(
+                            effortNo > 0 ? '${_feel(seg.kind)}  ·  $effortNo of ${efforts.length}' : _feel(seg.kind),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 15, color: huxMuted),
+                          ),
+                          const SizedBox(height: 18),
+                          Semantics(
+                            label: '$left seconds left',
+                            excludeSemantics: true,
+                            child: SizedBox(
+                              width: ring,
+                              height: ring,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  SizedBox.expand(
+                                    child: CircularProgressIndicator(
+                                      value: segProgress,
+                                      strokeWidth: 16,
+                                      strokeCap: StrokeCap.round,
+                                      color: color,
+                                      backgroundColor: color.withValues(alpha: 0.18),
+                                    ),
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Hux3DObject(_object(seg.kind), color: color, size: ring * 0.3,
+                                          animate: _started && !_paused ? null : false),
+                                      Text(_clock(left),
+                                          style: TextStyle(
+                                            fontSize: ring * 0.22,
+                                            fontWeight: FontWeight.w800,
+                                            height: 1,
+                                            color: huxInk,
+                                            fontFeatures: const [FontFeature.tabularFigures()],
+                                          )),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (seg.instruction != null) ...[
+                            const SizedBox(height: 14),
+                            Text(seg.instruction!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 16, height: 1.35, color: huxInk)),
+                          ],
+                          const SizedBox(height: 18),
+                          if (next != null)
+                            HuxTile(
+                              padding: const EdgeInsets.fromLTRB(10, 8, 16, 8),
+                              child: Row(
+                                children: [
+                                  Hux3DObject(_object(next.kind), color: _color(next.kind), size: 44, animate: false),
+                                  const SizedBox(width: 10),
+                                  const Text('Next', style: TextStyle(fontSize: 14, color: huxMuted)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(_label(next.kind),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                                  ),
+                                  Text(_clock(next.seconds),
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                                ],
+                              ),
+                            ),
+                          if (!_voiceAvailable)
+                            const Padding(
+                              padding: EdgeInsets.only(top: HuxSpacing.md),
+                              child: Text('No voice on this phone — follow the timer.',
+                                  style: TextStyle(fontSize: 13, color: huxMuted)),
+                            ),
+                          const Spacer(),
+
+                          // ---- controls ----
+                          if (!_started)
+                            SizedBox(
+                              width: double.infinity,
+                              height: 58,
+                              child: FilledButton.icon(
+                                onPressed: _start,
+                                style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                                icon: const Icon(Icons.play_arrow_rounded),
+                                label: Text('Start · ${widget.session.minutes} min',
+                                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                              ),
+                            )
+                          else
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 58,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _endEarly,
+                                      style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
+                                      icon: const Icon(Icons.stop_rounded),
+                                      label: const Text('End'),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: HuxSpacing.md),
+                                Expanded(
+                                  flex: 2,
+                                  child: SizedBox(
+                                    height: 58,
+                                    child: FilledButton.icon(
+                                      onPressed: _togglePause,
+                                      style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                                      icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                                      label: Text(_paused ? 'Resume' : 'Pause',
+                                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: HuxSpacing.sm),
+                          const Text('Stop if you feel chest pain, dizziness or severe breathlessness.',
+                              textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: huxMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
       ),
     );
   }

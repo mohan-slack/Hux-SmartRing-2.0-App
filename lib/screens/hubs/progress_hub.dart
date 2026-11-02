@@ -1,4 +1,4 @@
-/// Progress tab: Trends, weekly Story and Streaks behind one segmented
+/// Progress tab: week Score, Trends, weekly Story and Streaks behind one segmented
 /// switch. [section] lets other parts of the app open a given section.
 library;
 
@@ -9,10 +9,11 @@ import '../../core/progress/progress_service.dart';
 import '../../core/storage/health_store.dart';
 import '../../theme/hux_tokens.dart';
 import '../progress/progress_screen.dart';
+import '../progress/score_screen.dart';
 import '../story_screen.dart';
 import '../trends_screen.dart';
 
-enum ProgressSection { trends, story, streaks }
+enum ProgressSection { score, trends, story, streaks }
 
 class ProgressHub extends StatelessWidget {
   final HealthStore store;
@@ -52,6 +53,7 @@ class ProgressHub extends StatelessWidget {
                   child: SegmentedButton<ProgressSection>(
                     showSelectedIcon: false,
                     segments: const [
+                      ButtonSegment(value: ProgressSection.score, label: Text('Score')),
                       ButtonSegment(value: ProgressSection.trends, label: Text('Trends')),
                       ButtonSegment(value: ProgressSection.story, label: Text('Story')),
                       ButtonSegment(value: ProgressSection.streaks, label: Text('Streaks')),
@@ -67,6 +69,7 @@ class ProgressHub extends StatelessWidget {
             child: IndexedStack(
               index: current.index,
               children: [
+                ScoreScreen(store: store, progress: progress, refreshSignal: refreshSignal),
                 TrendsScreen(store: store, refreshSignal: refreshSignal),
                 StoryScreen(storyService: storyService, refreshSignal: refreshSignal),
                 ProgressScreen(progress: progress, embedded: true, refreshSignal: refreshSignal),

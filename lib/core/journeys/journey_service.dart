@@ -15,6 +15,7 @@ import '../profile/user_profile.dart';
 import '../storage/health_store.dart';
 import 'journey_content.dart';
 import 'journey_models.dart';
+import 'workout_log.dart';
 
 class JourneySetup {
   final JourneyId id;
@@ -220,6 +221,16 @@ class JourneyService {
   }
 
   Future<void> stop() => _save(null);
+
+  /// Finished workouts, weight and height (on the phone only).
+  WorkoutLog get workouts => WorkoutLog(_store, now: _now);
+
+  static const _lowImpactKey = 'journey_low_impact_v1';
+
+  /// "Low impact": no jumping, knee- and wrist-friendly swaps.
+  Future<bool> lowImpact() async => (await _store.readSetting(_lowImpactKey)) == 'yes';
+
+  Future<void> setLowImpact(bool on) => _store.writeSetting(_lowImpactKey, on ? 'yes' : 'no');
 
   Future<JourneyState?> setPaused(bool paused) async {
     final s = await active();

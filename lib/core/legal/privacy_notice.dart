@@ -88,6 +88,13 @@ class PrivacyNotice {
       optional: true,
     ),
     DataUse(
+      what: 'Food names you ask HUX to look up',
+      why: 'To estimate dishes not in HUX\'s food list (only when you tap Estimate)',
+      where: 'HUX server, then Groq Inc. (AI provider, USA). Only the typed food words; '
+          'neither stores them (Groq zero data retention)',
+      optional: true,
+    ),
+    DataUse(
       what: 'The city you pick (not GPS)',
       why: 'For air-quality and heat alerts',
       where: 'Open-Meteo weather service',

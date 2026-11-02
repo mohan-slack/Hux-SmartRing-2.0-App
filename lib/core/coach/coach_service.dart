@@ -16,6 +16,27 @@ import 'safety.dart';
 
 enum ChatRole { user, coach }
 
+/// Specialist threads. Each keeps its own chat on the phone and tells the
+/// backend which focus to use. [general] is the original single chat.
+enum CoachTopic { general, sleep, food, move }
+
+extension CoachTopicLabel on CoachTopic {
+  String get label => switch (this) {
+        CoachTopic.general => 'All-round',
+        CoachTopic.sleep => 'Sleep',
+        CoachTopic.food => 'Food',
+        CoachTopic.move => 'Movement',
+      };
+
+  /// One line under the name: what this coach is for.
+  String get blurb => switch (this) {
+        CoachTopic.general => 'Your day, energy and anything else',
+        CoachTopic.sleep => 'Bedtime, wind-down, naps, caffeine',
+        CoachTopic.food => 'Meals, protein, portions, timing',
+        CoachTopic.move => 'Walks, workouts, form, recovery',
+      };
+}
+
 class ChatMessage {
   final ChatRole role;
   final String text;
@@ -155,6 +176,11 @@ class CoachService {
 
   Future<void> giveConsent() => _store.writeSetting(_consentKey, 'yes');
 
+  /// Where [topic]'s chat is kept. General keeps the original key so
+  /// existing chats survive the update.
+  static String historyKeyFor(CoachTopic topic) =>
+      topic == CoachTopic.general ? _historyKey : '${_historyKey}_${topic.name}';
+
   /// Stops sharing AND deletes the chat history on the phone.
   Future<void> withdrawConsent() async {
     await _store.writeSetting(_consentKey, 'no');
@@ -163,8 +189,8 @@ class CoachService {
 
   Future<CoachContext> previewContext() => _loadContext();
 
-  Future<List<ChatMessage>> history() async {
-    final raw = await _store.readSetting(_historyKey);
+  Future<List<ChatMessage>> history({CoachTopic topic = CoachTopic.general}) async {
+    final raw = await _store.readSetting(historyKeyFor(topic));
     if (raw == null) return const [];
     try {
       final list = jsonDecode(raw);
@@ -180,45 +206,58 @@ class CoachService {
     }
   }
 
-  Future<void> clearHistory() => _store.writeSetting(_historyKey, '[]');
+  /// Clears [topic]'s chat, or every chat when [topic] is null.
+  Future<void> clearHistory({CoachTopic? topic}) async {
+    for (final t in topic == null ? CoachTopic.values : [topic]) {
+      await _store.writeSetting(historyKeyFor(t), '[]');
+    }
+  }
 
-  Future<void> _saveHistory(List<ChatMessage> all) {
+  /// Last message per topic (for the thread list), newest chats first.
+  Future<Map<CoachTopic, ChatMessage?>> lastMessages() async => {
+        for (final t in CoachTopic.values) t: (await history(topic: t)).lastOrNull,
+      };
+
+  Future<void> _saveHistory(List<ChatMessage> all, CoachTopic topic) {
     final kept = all.length > keepMessages ? all.sublist(all.length - keepMessages) : all;
-    return _store.writeSetting(_historyKey, jsonEncode([for (final m in kept) m.toJson()]));
+    return _store.writeSetting(historyKeyFor(topic), jsonEncode([for (final m in kept) m.toJson()]));
   }
 
   /// Sends [text]; returns the updated history (user message + reply).
   /// The user's message is saved even if the reply fails, so nothing
   /// they typed is lost.
-  Future<List<ChatMessage>> send(String text) async {
+  Future<List<ChatMessage>> send(String text, {CoachTopic topic = CoachTopic.general}) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return history();
+    if (trimmed.isEmpty) return history(topic: topic);
     if (trimmed.length > maxMessageChars) throw const CoachException(CoachErrorKind.tooLong);
     if (!await hasConsent()) throw const CoachException(CoachErrorKind.noConsent);
     final invoke = _invoke;
     if (invoke == null) throw const CoachException(CoachErrorKind.unavailable);
 
     final safety = SafetyCheck.check(trimmed)?.kind;
-    final all = [...await history(), ChatMessage(role: ChatRole.user, text: trimmed, at: _now(), safety: safety)];
-    await _saveHistory(all);
+    final all = [
+      ...await history(topic: topic),
+      ChatMessage(role: ChatRole.user, text: trimmed, at: _now(), safety: safety),
+    ];
+    await _saveHistory(all, topic);
 
-    return _reply(all, safety);
+    return _reply(all, safety, topic);
   }
 
   /// Re-sends the last message if it never got a reply (after an error).
   /// Returns the updated history; throws [CoachException] like [send].
-  Future<List<ChatMessage>> retryLast() async {
-    final all = await history();
+  Future<List<ChatMessage>> retryLast({CoachTopic topic = CoachTopic.general}) async {
+    final all = await history(topic: topic);
     if (all.isEmpty || all.last.role != ChatRole.user) return all;
     if (!await hasConsent()) throw const CoachException(CoachErrorKind.noConsent);
     if (_invoke == null) throw const CoachException(CoachErrorKind.unavailable);
-    return _reply(all, all.last.safety);
+    return _reply(all, all.last.safety, topic);
   }
 
   /// True when the last message is the user's (no reply yet).
   static bool awaitingReply(List<ChatMessage> all) => all.isNotEmpty && all.last.role == ChatRole.user;
 
-  Future<List<ChatMessage>> _reply(List<ChatMessage> all, SafetyKind? safety) async {
+  Future<List<ChatMessage>> _reply(List<ChatMessage> all, SafetyKind? safety, CoachTopic topic) async {
     final invoke = _invoke!;
     final context = await _loadContext();
     final recent = all.length > turnsSent ? all.sublist(all.length - turnsSent) : all;
@@ -232,6 +271,7 @@ class CoachService {
         'style': context.style?.name ?? 'dost',
         'language': context.language?.name ?? 'english',
         if (safety != null) 'safety': safety.name,
+        if (topic != CoachTopic.general) 'topic': topic.name,
       });
     } catch (e) {
       throw CoachException.fromCall(e);
@@ -239,7 +279,7 @@ class CoachService {
 
     final reply = parseReply(raw);
     final withReply = [...all, ChatMessage(role: ChatRole.coach, text: reply, at: _now())];
-    await _saveHistory(withReply);
+    await _saveHistory(withReply, topic);
     return withReply;
   }
 
@@ -247,8 +287,8 @@ class CoachService {
   /// AI-generated content policy: users must be able to flag replies in
   /// the app). Sends ONLY that reply, the question before it, and the
   /// reason — never the health summary. Returns the updated history.
-  Future<List<ChatMessage>> report(int index, ReportReason reason) async {
-    final all = [...await history()];
+  Future<List<ChatMessage>> report(int index, ReportReason reason, {CoachTopic topic = CoachTopic.general}) async {
+    final all = [...await history(topic: topic)];
     if (index < 0 || index >= all.length || all[index].role != ChatRole.coach) {
       throw ArgumentError('Not a coach reply');
     }
@@ -271,7 +311,7 @@ class CoachService {
       throw CoachException.fromCall(e);
     }
     all[index] = all[index].markReported();
-    await _saveHistory(all);
+    await _saveHistory(all, topic);
     return all;
   }
 

@@ -17,6 +17,7 @@ import '../core/auth/auth_service.dart';
 import '../core/environment/environment_service.dart';
 import '../core/food/food_log_service.dart';
 import '../core/coach/coach_context.dart';
+import '../core/coach/coach_nudges.dart';
 import '../core/cycle/cycle_health_source.dart';
 import '../core/cycle/cycle_service.dart';
 import '../core/coach/coach_service.dart';
@@ -31,6 +32,7 @@ import '../core/plans/voice_cues.dart';
 import '../core/progress/progress_service.dart';
 import '../core/journal/journal.dart';
 import '../core/journeys/journey_service.dart';
+import '../core/meaning/day_plan.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/meaning/weekly_story.dart';
 import '../core/modes/mode_service.dart';
@@ -45,6 +47,7 @@ import '../theme/hux_tokens.dart';
 import '../theme/hux_ui.dart';
 import '../widgets/hux/hux_3d.dart';
 import '../widgets/hux/hux_kit.dart';
+import 'home/plan_sheet.dart';
 import 'hubs/plans_hub.dart';
 import 'hubs/progress_hub.dart';
 import 'air_heat_screen.dart';
@@ -175,8 +178,11 @@ class _AppShellState extends State<AppShell> {
   final _coachRefresh = ValueNotifier<int>(0);
   final _progressRefresh = ValueNotifier<int>(0);
 
+  /// A question waiting for the Coach tab (from the Home "coach noticed" card).
+  final _coachDraft = ValueNotifier<CoachDraft?>(null);
+
   /// Which part of the Progress tab is showing (Trends / Story / Streaks).
-  final _progressSection = ValueNotifier<ProgressSection>(ProgressSection.trends);
+  final _progressSection = ValueNotifier<ProgressSection>(ProgressSection.score);
 
   static const _homeTab = 0;
   static const _coachTab = 1;
@@ -187,6 +193,7 @@ class _AppShellState extends State<AppShell> {
     _todayRefresh.dispose();
     _coachRefresh.dispose();
     _progressRefresh.dispose();
+    _coachDraft.dispose();
     _progressSection.dispose();
     super.dispose();
   }
@@ -373,6 +380,24 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
+    // Plan cards that live on Home open as a sheet with today's numbers.
+    if (id == FeatureId.nextStepTargets || id == FeatureId.effortTarget || id == FeatureId.targetBedtime) {
+      DayPlan? plan;
+      try {
+        plan = (await widget.readoutService.today()).plan;
+      } catch (_) {
+        // No readout yet: the sheet explains it fills in with data.
+      }
+      if (!mounted) return;
+      await showPlanSheet(
+        context,
+        id: id,
+        plan: plan,
+        onOpenWalks: () => _openFeature(FeatureId.beginnerWalkPlan),
+      );
+      return;
+    }
+
     // Anything else lives on Home.
     Navigator.of(context).popUntil((route) => route.isFirst);
     _onDestinationSelected(_homeTab);
@@ -487,7 +512,7 @@ class _AppShellState extends State<AppShell> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    tile(FeatureId.beginnerWalkPlan, Hux3D.steps, HuxColors.ringSteps, 'Walk',
+                    tile(FeatureId.beginnerWalkPlan, Hux3D.shoe, HuxColors.ringSteps, 'Walk',
                         'Guided, with voice'),
                     const SizedBox(width: 10),
                     tile(FeatureId.aiCoach, Hux3D.bubble, HuxColors.accentPink, 'Ask coach',
@@ -519,12 +544,14 @@ class _AppShellState extends State<AppShell> {
       isScrollControlled: true,
       backgroundColor: HuxColors.bg,
       builder: (c) {
-        Widget row(String key, String label, {String? detail}) => InkWell(
+        Widget row(String key, String label, Hux3D object, Color color, {String? detail}) => InkWell(
               onTap: () => Navigator.pop(c, key),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
+                padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
                 child: Row(
                   children: [
+                    Hux3DObject(object, color: color, size: 40, animate: false),
+                    const SizedBox(width: 10),
                     Expanded(
                         child: Text(label,
                             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: huxInk))),
@@ -536,12 +563,12 @@ class _AppShellState extends State<AppShell> {
               ),
             );
         final rows = <Widget>[
-          if (widget.nudgeService != null) row('briefing', 'Morning briefing'),
-          if (showCycle) row('cycle', 'Cycle', detail: 'Private'),
-          row('privacy', 'Privacy & account'),
+          if (widget.nudgeService != null) row('briefing', 'Morning briefing', Hux3D.sun, HuxColors.ringHabit),
+          if (showCycle) row('cycle', 'Cycle', Hux3D.drop, HuxColors.accentPink, detail: 'Private'),
+          row('privacy', 'Privacy & account', Hux3D.shield, HuxColors.accentIndigo),
           if (widget.profileService != null) ...[
-            row('answers', 'Edit my answers'),
-            row('explore', 'All features'),
+            row('answers', 'Edit my answers', Hux3D.person, HuxColors.accentPurple),
+            row('explore', 'All features', Hux3D.cube, HuxColors.ringSteps),
           ],
         ];
         final name = _firstName ?? 'Your account';
@@ -587,7 +614,7 @@ class _AppShellState extends State<AppShell> {
                   child: Column(
                     children: [
                       for (var i = 0; i < rows.length; i++) ...[
-                        if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16, color: HuxColors.hairline),
+                        if (i > 0) const Divider(height: 1, indent: 62, endIndent: 16, color: HuxColors.hairline),
                         rows[i],
                       ],
                     ],
@@ -677,12 +704,21 @@ class _AppShellState extends State<AppShell> {
                         autoSync: widget.autoSync,
                         onOpenJourney: _openJourneyToday,
                         onOpenCycle: _openCycle,
+                        onCoachNudge: (n) {
+                          _coachDraft.value = CoachDraft(n.topic, n.prompt);
+                          _onDestinationSelected(_coachTab);
+                        },
+                        onHideCoachNudge: (n) async {
+                          await CoachNudgeStore(widget.store).hide(n.id);
+                          _todayRefresh.value++;
+                        },
                       ),
                       CoachScreen(
                         coach: _coach,
                         embedded: true,
                         refreshSignal: _coachRefresh,
                         onNotNow: () => _onDestinationSelected(0),
+                        draft: _coachDraft,
                       ),
                       PlansHub(
                         onOpenFeature: _openFeature,

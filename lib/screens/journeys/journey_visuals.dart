@@ -56,8 +56,8 @@ Hux3D moveObject(MoveKind k) => switch (k) {
       MoveKind.breathing => Hux3D.bubble,
     };
 
-/// A move's photo (assets/images/moves/<id>.jpg), cropped to fill. Until
-/// a photo is added, a soft tinted panel with the move's 3D object.
+/// A move's photo (assets/images/moves/<id>.jpg), cropped to fill;
+/// its 3D object until the photo exists.
 class MovePhoto extends StatelessWidget {
   final Move move;
   final double objectSize;
@@ -65,17 +65,22 @@ class MovePhoto extends StatelessWidget {
   const MovePhoto({super.key, required this.move, this.objectSize = 140});
 
   @override
-  Widget build(BuildContext context) {
-    final color = moveKindColor(move.kind);
-    final fallback = ColoredBox(
-      color: Color.alphaBlend(color.withValues(alpha: 0.16), const Color(0xFFF6F4FA)),
-      child: Center(child: Hux3DObject(moveObject(move.kind), color: color, size: objectSize)),
-    );
-    return Image.asset(
-      'assets/images/moves/${move.id}.jpg',
-      fit: BoxFit.cover,
-      semanticLabel: move.name,
-      errorBuilder: (_, __, ___) => fallback,
-    );
-  }
+  Widget build(BuildContext context) => HuxPhoto(
+        'assets/images/moves/${move.id}.jpg',
+        object: moveObject(move.kind),
+        color: moveKindColor(move.kind),
+        objectSize: objectSize,
+        semanticLabel: move.name,
+      );
 }
+
+/// The cover photo for a journey.
+String journeyPhoto(JourneyId id) => switch (id) {
+      JourneyId.sleepReset21 => 'assets/images/photos/sleep.jpg',
+      JourneyId.fitIn30 => 'assets/images/moves/squat.jpg',
+    };
+
+Hux3D journeyObject(JourneyId id) => switch (id) {
+      JourneyId.sleepReset21 => Hux3D.moon,
+      JourneyId.fitIn30 => Hux3D.medal,
+    };

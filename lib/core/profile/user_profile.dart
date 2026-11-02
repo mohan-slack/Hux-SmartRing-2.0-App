@@ -23,7 +23,7 @@ enum Wearable { phoneOnly, watch, band, ring }
 
 enum CoachStyle { coach, dost, amma, numbers }
 
-enum AppLanguage { english, hinglish, telugu, hindi, tamil, kannada }
+enum AppLanguage { english, hinglish, telugu, hindi, tamil, kannada, tenglish, tanglish, kanglish, malayalam }
 
 /// Short, user-facing labels — what the onboarding chips show.
 extension AudienceLabel on Audience {
@@ -102,6 +102,10 @@ extension AppLanguageLabel on AppLanguage {
         AppLanguage.hindi => 'हिन्दी',
         AppLanguage.tamil => 'தமிழ்',
         AppLanguage.kannada => 'ಕನ್ನಡ',
+        AppLanguage.tenglish => 'Telugu in ABC',
+        AppLanguage.tanglish => 'Tamil in ABC',
+        AppLanguage.kanglish => 'Kannada in ABC',
+        AppLanguage.malayalam => 'മലയാളം',
       };
 }
 

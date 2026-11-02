@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 
 import '../core/profile/feature_catalog.dart';
 import '../core/profile/profile_service.dart';
-import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
 import '../widgets/hux/hux_3d.dart';
 import '../widgets/hux/hux_kit.dart';
@@ -32,26 +31,45 @@ class ForYouSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final items = [for (final id in featured.where(isFeatureVisible)) FeatureCatalog.of(id)];
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      if (i > 0) rows.add(const SizedBox(height: 10));
+      rows.add(IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: FeatureCard(info: items[i], onTap: () => onOpen(items[i].id))),
+            const SizedBox(width: 10),
+            Expanded(
+              child: i + 1 < items.length
+                  ? FeatureCard(info: items[i + 1], onTap: () => onOpen(items[i + 1].id))
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ));
+    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Expanded(child: Text('For you', style: text.titleMedium)),
+            const Expanded(
+              child: Text('For you', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
+            ),
             TextButton(onPressed: onSeeAll, child: const Text('See all')),
           ],
         ),
         const SizedBox(height: HuxSpacing.sm),
-        for (final id in featured.where(isFeatureVisible)) ...[
-          FeatureCard(info: FeatureCatalog.of(id), onTap: () => onOpen(id)),
-          const SizedBox(height: HuxSpacing.sm),
-        ],
+        ...rows,
       ],
     );
   }
 }
 
+/// A feature as a tile: its floating 3D object on a soft tint, the name,
+/// one short line.
 class FeatureCard extends StatelessWidget {
   final FeatureInfo info;
   final VoidCallback onTap;
@@ -60,59 +78,37 @@ class FeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final color = _ExploreScreenState.colorOf(info.category);
     return Semantics(
       button: true,
       label: '${info.title}. ${info.blurb}${info.isAvailable ? '' : ' Coming soon.'}',
       excludeSemantics: true,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: GlassPanel(
-          padding: const EdgeInsets.all(HuxSpacing.md),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(info.title, style: text.titleSmall),
-                    const SizedBox(height: HuxSpacing.xs),
-                    Text(
-                      info.blurb,
-                      style: text.bodySmall?.copyWith(color: HuxColors.mutedText),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: HuxSpacing.sm),
-              if (!info.isAvailable)
-                const _Badge(label: 'Coming soon')
-              else
-                const Icon(Icons.chevron_right, color: HuxColors.mutedText),
-            ],
+      child: Material(
+        color: Color.alphaBlend(color.withValues(alpha: 0.13), Colors.white),
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Hux3DObject(hux3dFor(info.id), color: color, size: 56),
+                const SizedBox(height: 8),
+                Text(info.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.2, color: huxInk)),
+                const SizedBox(height: 2),
+                Text(info.blurb,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, height: 1.3, color: huxMuted)),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  const _Badge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: HuxSpacing.sm, vertical: HuxSpacing.xs),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(HuxRadii.chip),
-        border: Border.all(color: HuxColors.glassStroke),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: HuxColors.mutedText),
       ),
     );
   }

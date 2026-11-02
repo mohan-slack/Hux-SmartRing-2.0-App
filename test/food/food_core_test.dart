@@ -57,17 +57,34 @@ void main() {
       expect(p.entries.map((e) => e.quantity), [2, 0.5]);
     });
 
-    test('grams only for paneer', () {
-      final p = MealTextParser.parse('200g paneer, 100 g rice');
-      expect(p.entries.single.foodId, 'paneer');
-      expect(p.entries.single.quantity, 2);
-      expect(p.unknown, ['100 g rice']);
+    test('grams convert wherever a portion weight is known', () {
+      final p = MealTextParser.parse('200g paneer, 150 g rice, 100 g samosa');
+      expect(p.entries.map((e) => e.foodId), ['paneer', 'rice']);
+      expect(p.entries.first.quantity, 2);
+      expect(p.entries.last.quantity, closeTo(1, 0.001));
+      expect(p.unknown, ['100 g samosa']); // counted in pieces
+    });
+
+    test('typos, everyday dishes and sizes', () {
+      expect(MealTextParser.parse('Chcken Noodles').entries.single.foodId, 'chicken_noodles');
+      expect(MealTextParser.parse('chicken noodles').entries.single.foodId, 'chicken_noodles');
+      expect(MealTextParser.parse('maggi').entries.single.foodId, 'instant_noodles');
+      expect(MealTextParser.parse('2 vada and sambar').entries.map((e) => e.foodId), ['vada', 'sambar']);
+      expect(MealTextParser.parse('chiken biryni').entries.single.foodId, 'chicken_biryani');
+      expect(MealTextParser.parse('had some dal for lunch').entries.single.foodId, 'dal');
+      // Half a match is not logged as the wrong dish; it's left for an AI estimate.
+      expect(MealTextParser.parse('mutton kola urundai').unknown, ['mutton kola urundai']);
+      expect(MealTextParser.parse('pav bhaji').entries.single.foodId, 'pav_bhaji');
+      final big = MealTextParser.parse('big plate biryani').entries.single;
+      expect(big.foodId, 'chicken_biryani');
+      expect(big.quantity, 1.5);
+      expect(MealTextParser.parse('rendu idli').entries.single.quantity, 2);
     });
 
     test('unknown parts are reported, not dropped silently', () {
-      final p = MealTextParser.parse('1 katori dal, 2 momos');
+      final p = MealTextParser.parse('1 katori dal, 2 xqzt');
       expect(p.entries.single.foodId, 'dal');
-      expect(p.unknown, ['2 momos']);
+      expect(p.unknown, ['2 xqzt']);
     });
   });
 

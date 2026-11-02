@@ -249,6 +249,36 @@ const Workout gentleWorkout = Workout(title: 'Gentle day', warmup: _warmup, main
   MoveStep('legs_up_wall', seconds: 120),
 ], cooldown: [MoveStep('box_breathing', seconds: 120)]);
 
+/// Low-impact swaps: no jumping, less load on knees and wrists. For
+/// heavier bodies, sore joints, or anyone who wants a quieter session
+/// (no thumping for the flat downstairs).
+const lowImpactSwaps = <String, String>{
+  'step_jacks': 'march', // no jumping
+  'step_up': 'march', // no stepping load on the knee
+  'static_lunge': 'glute_bridge', // knee-friendly leg work
+  'squat': 'chair_squat', // shorter range, a seat to touch
+  'knee_pushup': 'wall_pushup', // less weight on the wrists
+  'plank': 'plank_knees',
+};
+
+/// True when [w] has any move [lowImpactSwaps] would replace.
+bool hasHighImpact(Workout w) => w.allSteps.any((s) => lowImpactSwaps.containsKey(s.moveId));
+
+/// [w] with every high-impact move swapped; timings stay the same.
+Workout lowImpactVersion(Workout w) {
+  List<MoveStep> swap(List<MoveStep> steps) => [
+        for (final s in steps)
+          MoveStep(lowImpactSwaps[s.moveId] ?? s.moveId, seconds: s.seconds, reps: s.reps, restSeconds: s.restSeconds),
+      ];
+  return Workout(
+    title: w.title,
+    warmup: swap(w.warmup),
+    main: swap(w.main),
+    rounds: w.rounds,
+    cooldown: swap(w.cooldown),
+  );
+}
+
 /// The day plan for [id] on [day] (1-based).
 JourneyDay journeyDay(JourneyId id, int day, FitnessLevel level) {
   switch (id) {

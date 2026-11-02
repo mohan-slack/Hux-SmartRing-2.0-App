@@ -11,6 +11,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/coach/coach_nudges.dart';
+import '../core/coach/coach_service.dart';
+import '../core/food/nutrients.dart' show MealTypeLabel;
 import '../core/home/home_extras.dart';
 import '../core/home/home_insights.dart';
 import '../core/meaning/daily_readout.dart';
@@ -30,7 +33,9 @@ import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
 import '../theme/hux_tokens.dart';
 import '../theme/hux_ui.dart';
+import 'coach/coach_screen.dart' show coachTopicLook;
 import 'for_you.dart';
+import '../widgets/hux/hux_3d.dart';
 import '../widgets/hux/hux_kit.dart';
 import '../widgets/wellness_note.dart';
 import 'home/why_sheet.dart';
@@ -92,6 +97,12 @@ class TodayScreen extends StatefulWidget {
   /// Opens Cycle from its Home card.
   final VoidCallback? onOpenCycle;
 
+  /// "Coach noticed" card: open the right coach with the question ready.
+  final ValueChanged<CoachNudge>? onCoachNudge;
+
+  /// "Not now" on that card (hidden for a few days).
+  final ValueChanged<CoachNudge>? onHideCoachNudge;
+
   /// Sync in the background on open and whenever the app comes back to
   /// the foreground (throttled), so Home never shows yesterday's data.
   /// Off by default so widget tests stay deterministic.
@@ -114,6 +125,8 @@ class TodayScreen extends StatefulWidget {
     this.autoSync = false,
     this.onOpenJourney,
     this.onOpenCycle,
+    this.onCoachNudge,
+    this.onHideCoachNudge,
   });
 
   @override
@@ -367,6 +380,8 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
             extras: _extras,
             onOpenJourney: widget.onOpenJourney,
             onOpenCycle: widget.onOpenCycle,
+            onCoachNudge: widget.onCoachNudge,
+            onHideCoachNudge: widget.onHideCoachNudge,
           ),
         );
     }
@@ -562,6 +577,8 @@ class _ReadoutBody extends StatelessWidget {
   final HomeExtras extras;
   final VoidCallback? onOpenJourney;
   final VoidCallback? onOpenCycle;
+  final ValueChanged<CoachNudge>? onCoachNudge;
+  final ValueChanged<CoachNudge>? onHideCoachNudge;
 
   const _ReadoutBody({
     required this.readout,
@@ -580,6 +597,8 @@ class _ReadoutBody extends StatelessWidget {
     this.extras = HomeExtras.empty,
     this.onOpenJourney,
     this.onOpenCycle,
+    this.onCoachNudge,
+    this.onHideCoachNudge,
   });
 
   void _open(FeatureId id) => onOpenFeature?.call(id);
@@ -643,6 +662,18 @@ class _ReadoutBody extends StatelessWidget {
           onWhy: () => _why(context),
         ))),
         if (next != null) ...[gap, pad(HuxEntrance(index: 1, child: next))],
+        if (extras.coachNudge != null && onCoachNudge != null) ...[
+          gap,
+          pad(HuxEntrance(
+            index: 1,
+            child: _CoachNoticedCard(
+              nudge: extras.coachNudge!,
+              onAsk: () => onCoachNudge!(extras.coachNudge!),
+              onLogMeal: () => _open(FeatureId.proteinGap),
+              onHide: onHideCoachNudge == null ? null : () => onHideCoachNudge!(extras.coachNudge!),
+            ),
+          )),
+        ],
         if (events.isNotEmpty) ...[
           gap,
           pad(HuxEntrance(
@@ -759,6 +790,12 @@ class _ReadoutBody extends StatelessWidget {
       final (icon, color) = _agendaStyle(e.kind);
       return HuxNextUp(
         icon: icon,
+        object: switch (e.kind) {
+          AgendaKind.air => Hux3D.sun,
+          AgendaKind.walk => Hux3D.shoe,
+          AgendaKind.plan => Hux3D.pin,
+          AgendaKind.journal => Hux3D.book,
+        },
         color: color,
         title: e.title,
         subtitle: e.time,
@@ -770,6 +807,7 @@ class _ReadoutBody extends StatelessWidget {
     if (steps != null && !steps.done) {
       return HuxNextUp(
         icon: Icons.directions_walk_rounded,
+        object: Hux3D.shoe,
         color: HuxColors.ringFood,
         title: 'Walk ${steps.minutesToGo} min',
         subtitle: '${StepTargetCalculator.formatSteps(steps.remaining)} steps to go',
@@ -963,7 +1001,12 @@ class _LastNightTile extends StatelessWidget {
           HuxTileLabel('Last night', trailing: Text('goal ${goal.inHours}h${goal.inMinutes % 60 == 0 ? '' : ' ${goal.inMinutes % 60}m'}',
               style: const TextStyle(fontSize: 14, color: huxMuted))),
           const SizedBox(height: 8),
-          HuxTileValue(_hm(night.totalSleep), size: 32),
+          Row(
+            children: [
+              Expanded(child: HuxTileValue(_hm(night.totalSleep), size: 32)),
+              const Hux3DObject(Hux3D.moon, color: HuxColors.ringSleep, size: 44),
+            ],
+          ),
           const SizedBox(height: 12),
           HuxSleepWindow(bed: night.bedtime.toLocal(), wake: night.wakeTime.toLocal(), targetBed: targetBed),
           if (chips.isNotEmpty) ...[
@@ -993,7 +1036,12 @@ class _StepsTile extends StatelessWidget {
           children: [
             const HuxTileLabel('Steps'),
             const SizedBox(height: 8),
-            HuxTileValue(s == null ? '—' : StepTargetCalculator.formatSteps(s.today)),
+            Row(
+              children: [
+                Expanded(child: HuxTileValue(s == null ? '—' : StepTargetCalculator.formatSteps(s.today))),
+                const Hux3DObject(Hux3D.steps, color: HuxColors.ringSteps, size: 38),
+              ],
+            ),
             const SizedBox(height: 8),
             HuxHourBars(values: byHour, color: HuxColors.ringSteps),
             const SizedBox(height: 6),
@@ -1024,7 +1072,12 @@ class _ProteinTile extends StatelessWidget {
           children: [
             const HuxTileLabel('Protein'),
             const SizedBox(height: 8),
-            HuxTileValue('${food.proteinG.round()}', unit: 'g'),
+            Row(
+              children: [
+                Expanded(child: HuxTileValue('${food.proteinG.round()}', unit: 'g')),
+                const Hux3DObject(Hux3D.egg, color: HuxColors.ringFood, size: 38),
+              ],
+            ),
             const SizedBox(height: 10),
             HuxSegmentBar(value: food.proteinG, max: food.proteinGoalG, color: HuxColors.ringFood),
             const SizedBox(height: 8),
@@ -1049,9 +1102,9 @@ class _LogMealTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             HuxTileLabel('Food'),
-            SizedBox(height: 14),
-            Icon(Icons.add_a_photo_outlined, color: HuxColors.ringFood, size: 30),
-            SizedBox(height: 10),
+            SizedBox(height: 6),
+            Hux3DObject(Hux3D.bowl, color: HuxColors.ringFood, size: 52),
+            SizedBox(height: 6),
             Text('Log a meal', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
           ],
         ),
@@ -1201,6 +1254,98 @@ class _ModeStripCard extends StatelessWidget {
           Text(strip.themedAction,
               style: Theme.of(context).textTheme.bodyMedium),
         ],
+      ),
+    );
+  }
+}
+
+/// "Coach noticed": one pattern from the user's own history, phrased as a
+/// question, with ONE next step. Nothing is sent until they tap send in
+/// the chat.
+class _CoachNoticedCard extends StatelessWidget {
+  final CoachNudge nudge;
+  final VoidCallback onAsk;
+  final VoidCallback onLogMeal;
+  final VoidCallback? onHide;
+
+  const _CoachNoticedCard({required this.nudge, required this.onAsk, required this.onLogMeal, this.onHide});
+
+  @override
+  Widget build(BuildContext context) {
+    final look = coachTopicLook(nudge.topic);
+    final logMeal = nudge.action == CoachNudgeAction.logMeal && nudge.meal != null;
+    final coachName = nudge.topic == CoachTopic.general ? 'coach' : '${nudge.topic.label.toLowerCase()} coach';
+    return Material(
+      color: Color.alphaBlend(look.color.withValues(alpha: 0.10), HuxColors.card),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: look.color.withValues(alpha: 0.25)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Hux3DObject(look.object, color: look.color, size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nudge.positive ? 'Nice pattern' : 'Coach noticed',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w800, color: Color.lerp(look.color, huxInk, 0.35))),
+                      const SizedBox(height: 2),
+                      Text(nudge.headline,
+                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, height: 1.2, color: huxInk)),
+                      const SizedBox(height: 4),
+                      Text(nudge.detail, style: const TextStyle(fontSize: 14, height: 1.35, color: huxMuted)),
+                    ],
+                  ),
+                ),
+                if (onHide != null)
+                  IconButton(
+                    tooltip: 'Not now',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onHide,
+                    icon: const Icon(Icons.close_rounded, size: 20, color: huxMuted),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.only(left: 56, right: 10),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (logMeal)
+                    FilledButton.icon(
+                      onPressed: onLogMeal,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: Text('Log ${nudge.meal!.label.toLowerCase()}'),
+                    ),
+                  if (logMeal)
+                    OutlinedButton.icon(
+                      onPressed: onAsk,
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                      label: Text('Ask the $coachName'),
+                    )
+                  else
+                    FilledButton.icon(
+                      onPressed: onAsk,
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                      label: Text('Ask the $coachName'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

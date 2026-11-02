@@ -42,25 +42,37 @@ enum Hux3D {
   egg,
   laptop,
   chart,
+  shield,
+  bed,
+  building,
+  calendar,
+  clipboard,
+  diya,
+  shoe,
+  pin,
+  medal,
+  cap,
+  pillow,
 }
 
 /// The object that stands for a feature.
 Hux3D hux3dFor(FeatureId id) => switch (id) {
-      FeatureId.sleepRegularity => Hux3D.moon,
-      FeatureId.targetBedtime => Hux3D.moon,
-      FeatureId.nightShiftMode => Hux3D.moon,
-      FeatureId.weeklyStory => Hux3D.book,
+      // Every feature gets its own object, so no two cards look alike.
+      FeatureId.sleepRegularity => Hux3D.pillow,
+      FeatureId.targetBedtime => Hux3D.bed,
+      FeatureId.nightShiftMode => Hux3D.building,
+      FeatureId.weeklyStory => Hux3D.calendar,
       FeatureId.indianJournal => Hux3D.book,
-      FeatureId.doctorReport => Hux3D.book,
+      FeatureId.doctorReport => Hux3D.clipboard,
       FeatureId.shaadiMode => Hux3D.heart,
-      FeatureId.examMode => Hux3D.cube,
-      FeatureId.fastingMode => Hux3D.sun,
+      FeatureId.examMode => Hux3D.cap,
+      FeatureId.fastingMode => Hux3D.diya,
       FeatureId.airAndHeatAlerts => Hux3D.sun,
       FeatureId.effortTarget => Hux3D.ring,
       FeatureId.nextStepTargets => Hux3D.steps,
-      FeatureId.walkAfterMeal => Hux3D.steps,
-      FeatureId.beginnerWalkPlan => Hux3D.steps,
-      FeatureId.zeroTo5k => Hux3D.flame,
+      FeatureId.walkAfterMeal => Hux3D.shoe,
+      FeatureId.beginnerWalkPlan => Hux3D.pin,
+      FeatureId.zeroTo5k => Hux3D.medal,
       FeatureId.proteinGap => Hux3D.bowl,
       FeatureId.sitTooLong => Hux3D.clock,
       FeatureId.streaksMonthly => Hux3D.flame,
@@ -462,6 +474,174 @@ class _ObjectPainter extends CustomPainter {
         c.drawRRect(RRect.fromLTRBR(26, 20, 74, 54, const Radius.circular(3)), Paint()..color = _light(color, 0.2));
         final base = Path()..addPolygon(const [Offset(14, 62), Offset(86, 62), Offset(92, 72), Offset(8, 72)], true);
         _clay(c, base, const Color(0xFFB9B4C7), gloss: 0.5);
+      case Hux3D.shield:
+        final shield = Path()
+          ..moveTo(50, 8)
+          ..cubicTo(62, 16, 76, 18, 84, 18)
+          ..cubicTo(84, 52, 74, 76, 50, 90)
+          ..cubicTo(26, 76, 16, 52, 16, 18)
+          ..cubicTo(24, 18, 38, 16, 50, 8)
+          ..close();
+        _clay(c, shield, color, gloss: 0.8);
+        c.drawPath(
+          Path()
+            ..moveTo(36, 48)
+            ..lineTo(46, 58)
+            ..lineTo(66, 38),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 7
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..color = Colors.white,
+        );
+      case Hux3D.bed:
+        _clay(c, _rrect(10, 26, 14, 58, 6), _dark(color, 0.25), gloss: 0.4); // headboard
+        _clay(c, _rrect(10, 58, 82, 18, 8), const Color(0xFFF7F4FA), gloss: 0.4); // mattress
+        _clay(c, _rrect(22, 44, 24, 14, 7), Colors.white, gloss: 0.8); // pillow
+        _clay(c, _rrect(40, 46, 52, 22, 10), color); // blanket
+        _clay(c, _rrect(14, 76, 6, 10, 3), _dark(color, 0.3), gloss: 0.3);
+        _clay(c, _rrect(82, 76, 6, 10, 3), _dark(color, 0.3), gloss: 0.3);
+        c.drawCircle(const Offset(80, 22), 3, Paint()..color = _light(color, 0.5));
+        c.drawCircle(const Offset(88, 32), 2, Paint()..color = _light(color, 0.6));
+      case Hux3D.building:
+        final moon = Path.combine(PathOperation.difference, _circle(78, 18, 11), _circle(84, 14, 9));
+        _clay(c, moon, const Color(0xFFFFD36B), gloss: 0.8);
+        _clay(c, _rrect(22, 22, 48, 72, 6), const Color(0xFF3A2A5C), gloss: 0.4);
+        final lit = Paint()..color = const Color(0xFFFFD36B);
+        final dim = Paint()..color = const Color(0xFF5A4880);
+        for (var r = 0; r < 4; r++) {
+          for (var k = 0; k < 3; k++) {
+            final on = (r * 3 + k + (t * 12).floor()) % 5 != 0 && (r + k) % 2 == 0;
+            c.drawRRect(RRect.fromLTRBR(30.0 + k * 12, 32.0 + r * 14, 37.0 + k * 12, 40.0 + r * 14, const Radius.circular(2)),
+                on ? lit : dim);
+          }
+        }
+      case Hux3D.calendar:
+        _clay(c, _rrect(14, 20, 72, 68, 14), Colors.white, gloss: 0.5);
+        c.save();
+        c.clipRRect(RRect.fromLTRBR(14, 20, 86, 88, const Radius.circular(14)));
+        _clay(c, _rrect(14, 20, 72, 22, 0), color);
+        c.restore();
+        _clay(c, _rrect(30, 12, 8, 18, 4), const Color(0xFF8F8AA0), gloss: 0.5);
+        _clay(c, _rrect(62, 12, 8, 18, 4), const Color(0xFF8F8AA0), gloss: 0.5);
+        for (var r = 0; r < 3; r++) {
+          for (var k = 0; k < 4; k++) {
+            final today = r == 1 && k == 2;
+            c.drawCircle(Offset(28.0 + k * 15, 52.0 + r * 12), today ? 5.0 : 3.0,
+                Paint()..color = today ? color : const Color(0xFFD8D3E3));
+          }
+        }
+      case Hux3D.clipboard:
+        _clay(c, _rrect(20, 14, 60, 78, 10), color, gloss: 0.5);
+        _clay(c, _rrect(28, 24, 44, 60, 6), Colors.white, gloss: 0.4);
+        _clay(c, _rrect(38, 8, 24, 14, 6), const Color(0xFF8F8AA0), gloss: 0.6);
+        final cross = Paint()..color = const Color(0xFFE5484D);
+        c.drawRRect(RRect.fromLTRBR(46, 34, 54, 54, const Radius.circular(2)), cross);
+        c.drawRRect(RRect.fromLTRBR(40, 40, 60, 48, const Radius.circular(2)), cross);
+        final line = Paint()
+          ..color = const Color(0xFFD8D3E3)
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round;
+        c.drawLine(const Offset(36, 64), const Offset(64, 64), line);
+        c.drawLine(const Offset(36, 72), const Offset(56, 72), line);
+      case Hux3D.diya:
+        // Flame flickers a little with the loop.
+        final f = 1 + 0.08 * math.sin(t * 2 * math.pi * 3);
+        c.save();
+        c.translate(52, 46);
+        c.scale(1, f);
+        final flame = Path()
+          ..moveTo(0, -30)
+          ..cubicTo(10, -16, 10, -4, 0, 0)
+          ..cubicTo(-10, -4, -10, -16, 0, -30)
+          ..close();
+        c.drawPath(
+          flame,
+          Paint()
+            ..color = const Color(0x66FFB13B)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        );
+        _clay(c, flame, const Color(0xFFFFB13B), gloss: 0.9);
+        c.restore();
+        final lamp = Path()
+          ..moveTo(10, 52)
+          ..lineTo(84, 52)
+          ..lineTo(94, 46)
+          ..cubicTo(90, 70, 74, 82, 50, 82)
+          ..cubicTo(26, 82, 12, 70, 10, 52)
+          ..close();
+        _clay(c, lamp, color);
+        c.drawOval(const Rect.fromLTRB(16, 47, 82, 57), Paint()..color = _dark(color, 0.35));
+      case Hux3D.shoe:
+        final upper = Path()
+          ..moveTo(12, 66)
+          ..cubicTo(12, 42, 22, 32, 36, 34)
+          ..cubicTo(44, 36, 48, 46, 58, 50)
+          ..cubicTo(72, 54, 88, 56, 90, 68)
+          ..close();
+        _clay(c, upper, color);
+        _clay(c, _rrect(8, 64, 86, 16, 8), Colors.white, gloss: 0.5);
+        final lace = Paint()
+          ..color = Colors.white
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round;
+        c.drawLine(const Offset(40, 44), const Offset(48, 40), lace);
+        c.drawLine(const Offset(46, 50), const Offset(54, 46), lace);
+      case Hux3D.pin:
+        c.drawOval(const Rect.fromLTRB(26, 78, 74, 90), Paint()..color = _dark(color, 0.2).withValues(alpha: 0.3));
+        final pin = Path()
+          ..addOval(Rect.fromCircle(center: const Offset(50, 38), radius: 26))
+          ..moveTo(30, 52)
+          ..lineTo(50, 86)
+          ..lineTo(70, 52)
+          ..close();
+        _clay(c, pin, color);
+        _clay(c, _circle(50, 38, 10), Colors.white, gloss: 0.6);
+      case Hux3D.medal:
+        final left = Path()..addPolygon(const [Offset(28, 4), Offset(44, 4), Offset(58, 44), Offset(44, 48)], true);
+        final right = Path()..addPolygon(const [Offset(72, 4), Offset(56, 4), Offset(42, 44), Offset(56, 48)], true);
+        _clay(c, left, const Color(0xFF4453D6), gloss: 0.3);
+        _clay(c, right, const Color(0xFFC93B86), gloss: 0.3);
+        _clay(c, _circle(50, 64, 26), const Color(0xFFE9B400), gloss: 0.9);
+        _clay(c, _circle(50, 64, 17), const Color(0xFFF7CF4A), gloss: 0.6, light: const Alignment(0.5, 0.6));
+      case Hux3D.cap:
+        _clay(c, _rrect(28, 44, 44, 26, 10), _dark(color, 0.15));
+        final top = Path()..addPolygon(const [Offset(50, 20), Offset(92, 38), Offset(50, 56), Offset(8, 38)], true);
+        _clay(c, top, color, gloss: 0.6);
+        final tassel = Paint()
+          ..color = const Color(0xFFE9B400)
+          ..strokeWidth = 3;
+        final sway = 4 * math.sin(t * 2 * math.pi);
+        c.drawLine(const Offset(50, 38), const Offset(80, 46), tassel);
+        c.drawLine(const Offset(80, 46), Offset(80 + sway, 66), tassel);
+        _clay(c, _circle(80 + sway, 68, 5), const Color(0xFFE9B400), gloss: 0.8);
+      case Hux3D.pillow:
+        final pillow = Path()
+          ..moveTo(14, 50)
+          ..cubicTo(10, 34, 24, 30, 50, 34)
+          ..cubicTo(76, 30, 90, 34, 86, 50)
+          ..cubicTo(90, 66, 76, 72, 50, 68)
+          ..cubicTo(24, 72, 10, 66, 14, 50)
+          ..close();
+        _clay(c, pillow, color, gloss: 0.7);
+        // "z z" drifting up with the loop.
+        final zp = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = _dark(color, 0.35);
+        void z(double x, double y, double w) => c.drawPath(
+            Path()
+              ..moveTo(x, y)
+              ..lineTo(x + w, y)
+              ..lineTo(x, y + w)
+              ..lineTo(x + w, y + w),
+            zp);
+        final drift = 3 * math.sin(t * 2 * math.pi);
+        z(66, 10 - drift, 10);
+        z(80, 22 - drift, 7);
       case Hux3D.chart:
         _clay(c, _rrect(14, 58, 18, 26, 6), _light(color, 0.4));
         _clay(c, _rrect(38, 42, 18, 42, 6), _light(color, 0.2));
@@ -472,4 +652,41 @@ class _ObjectPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ObjectPainter o) => o.t != t || o.kind != kind || o.color != color;
+}
+
+/// A photo from the app's assets, cropped to fill. If the file isn't
+/// there (photos are fetched separately, see tool/fetch_photos.sh), a
+/// soft tinted panel with a 3D object stands in, so layouts never break.
+class HuxPhoto extends StatelessWidget {
+  final String asset;
+  final Hux3D object;
+  final Color color;
+  final double objectSize;
+  final String? semanticLabel;
+  final Alignment alignment;
+
+  const HuxPhoto(
+    this.asset, {
+    super.key,
+    required this.object,
+    required this.color,
+    this.objectSize = 120,
+    this.semanticLabel,
+    this.alignment = Alignment.center,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      asset,
+      fit: BoxFit.cover,
+      alignment: alignment,
+      semanticLabel: semanticLabel,
+      excludeFromSemantics: semanticLabel == null,
+      errorBuilder: (_, __, ___) => ColoredBox(
+        color: Color.alphaBlend(color.withValues(alpha: 0.16), const Color(0xFFF6F4FA)),
+        child: Center(child: Hux3DObject(object, color: color, size: objectSize)),
+      ),
+    );
+  }
 }

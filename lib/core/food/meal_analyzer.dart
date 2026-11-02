@@ -155,7 +155,8 @@ class MealAnalysisParser {
     required FoodUnit unit,
     Nutrients? aiEstimate,
   }) {
-    final food = IndianFoodDb.match(name);
+    final m = IndianFoodDb.bestMatch(name);
+    final food = m != null && m.confident ? m.food : null;
     if (food != null) {
       return FoodEntry(
         name: food.name,
@@ -189,6 +190,10 @@ class MealAnalysisException implements Exception {
 
 abstract class MealAnalyzer {
   Future<MealAnalysis> analyze({required Uint8List imageJpeg, String? description});
+
+  /// For typed dishes HUX's own table doesn't know ("thukpa", a typo too
+  /// far gone): only the food words are sent; same JSON as a photo.
+  Future<MealAnalysis> analyzeText(String text);
 }
 
 /// Calls the backend function. [invoke] is injected (the app passes a
@@ -241,6 +246,35 @@ class RemoteMealAnalyzer implements MealAnalyzer {
     final analysis = MealAnalysisParser.parse(Map<String, Object?>.from(json));
     if (analysis.items.isEmpty) {
       throw const MealAnalysisException("No food found in that photo. Try again, or type it instead.");
+    }
+    return analysis;
+  }
+
+  @override
+  Future<MealAnalysis> analyzeText(String text) async {
+    final t = text.trim();
+    if (t.isEmpty) throw const MealAnalysisException('Type what you ate first.');
+    final Object? raw;
+    try {
+      raw = await invoke(functionName, {'text': t.length > 200 ? t.substring(0, 200) : t});
+    } catch (e) {
+      final status = _statusOf(e);
+      if (status == 401 || status == 403) {
+        throw const MealAnalysisException('Your session expired. Please sign out and sign in again.');
+      }
+      if (status != null && status >= 500) {
+        throw const MealAnalysisException('Food lookup is busy right now. Try again in a minute.');
+      }
+      throw const MealAnalysisException("Couldn't reach HUX — check your connection and try again.");
+    }
+    final json = raw is String ? _tryDecode(raw) : raw;
+    if (json is! Map) throw const MealAnalysisException("Couldn't read that — try naming the dish differently.");
+    if (json['error'] == 'daily_limit') {
+      throw const MealAnalysisException("You've used today's AI food look-ups. Try a simpler name, or tomorrow.");
+    }
+    final analysis = MealAnalysisParser.parse(Map<String, Object?>.from(json));
+    if (analysis.items.isEmpty) {
+      throw const MealAnalysisException("Couldn't recognise that as food. Try naming the dish differently.");
     }
     return analysis;
   }
