@@ -10,6 +10,7 @@ import '../../core/progress/streaks.dart';
 import '../../theme/hux_page.dart';
 import '../../theme/hux_tokens.dart';
 import '../../theme/hux_ui.dart';
+import '../../widgets/month_card.dart';
 import '../../widgets/share_card.dart';
 
 class ProgressScreen extends StatefulWidget {
@@ -148,6 +149,15 @@ class _ProgressScreenState extends State<ProgressScreen> {
                 ),
                 const SizedBox(height: HuxSpacing.sm),
                 if (report != null) ...[
+                  if (!report.stats.isEmpty) ...[
+                    ShareCapture(
+                      fileName: 'hux-my-month.png',
+                      shareText: 'My ${_monthNames[_month.month - 1]} on HUX',
+                      buttonLabel: 'Share my month',
+                      child: MonthCard(report: report, monthName: _monthNames[_month.month - 1]),
+                    ),
+                    const SizedBox(height: HuxSpacing.lg),
+                  ],
                   _MonthCalendar(month: _month, report: report, today: widget.progress.today()),
                   const SizedBox(height: HuxSpacing.lg),
                   _ReportBody(report: report),

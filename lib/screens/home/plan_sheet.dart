@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/meaning/day_plan.dart';
+import '../../core/meaning/evening_timing.dart';
 import '../../core/meaning/step_target.dart';
 import '../../core/profile/feature_catalog.dart';
 import '../../theme/hux_tokens.dart';
@@ -19,6 +20,8 @@ Future<bool> showPlanSheet(
   required FeatureId id,
   required DayPlan? plan,
   VoidCallback? onOpenWalks,
+  bool? eveningReminders,
+  Future<bool> Function(bool on)? onEveningReminders,
 }) async {
   final Widget body;
   switch (id) {
@@ -27,7 +30,7 @@ Future<bool> showPlanSheet(
     case FeatureId.effortTarget:
       body = _EffortBody(effort: plan?.effort);
     case FeatureId.targetBedtime:
-      body = _BedBody(bed: plan?.bedtime);
+      body = _BedBody(bed: plan?.bedtime, reminders: eveningReminders, onReminders: onEveningReminders);
     default:
       return false;
   }
@@ -216,10 +219,21 @@ class _EffortBody extends StatelessWidget {
   }
 }
 
-class _BedBody extends StatelessWidget {
+class _BedBody extends StatefulWidget {
   final TargetBedtime? bed;
 
-  const _BedBody({required this.bed});
+  /// Current state of the evening reminders (null = not offered).
+  final bool? reminders;
+  final Future<bool> Function(bool on)? onReminders;
+
+  const _BedBody({required this.bed, this.reminders, this.onReminders});
+
+  @override
+  State<_BedBody> createState() => _BedBodyState();
+}
+
+class _BedBodyState extends State<_BedBody> {
+  late bool? _on = widget.reminders;
 
   static String _clock(DateTime t) {
     final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
@@ -228,8 +242,9 @@ class _BedBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final b = bed;
+    final b = widget.bed;
     final at = b?.bedtime.toLocal();
+    final t = at == null ? null : EveningTiming.forBed(at);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -248,8 +263,9 @@ class _BedBody extends StatelessWidget {
                     style: const TextStyle(fontSize: 16, color: huxMuted)),
                 const SizedBox(height: 14),
                 for (final (time, what) in [
-                  (at.subtract(const Duration(hours: 2, minutes: 30)), 'Last meal'),
-                  (at.subtract(const Duration(minutes: 30)), 'Phone away, lights low'),
+                  (t!.lastCaffeine, 'Last chai or coffee'),
+                  (t.lastMeal, 'Dinner done'),
+                  (t.screensOff, 'Phone away, lights low'),
                   (at, 'In bed'),
                 ])
                   Padding(
@@ -270,6 +286,24 @@ class _BedBody extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _Why(b.reason),
+          const SizedBox(height: 6),
+          const _Why('Caffeine stays in the body for hours — a 4 PM chai is still half-active at 9 PM.'),
+          if (_on != null && widget.onReminders != null) ...[
+            const SizedBox(height: 10),
+            HuxTile(
+              padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _on!,
+                title: const Text('Remind me', style: TextStyle(fontWeight: FontWeight.w700, color: huxInk)),
+                subtitle: const Text('30 min before the last chai and before dinner, moving with your bedtime.'),
+                onChanged: (v) async {
+                  final ok = await widget.onReminders!(v);
+                  if (mounted) setState(() => _on = v && ok);
+                },
+              ),
+            ),
+          ],
         ],
       ],
     );

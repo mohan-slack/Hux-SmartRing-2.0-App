@@ -10,6 +10,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../core/checkin/sleep_checkin.dart';
 import '../core/meaning/baseline.dart';
 import '../core/storage/health_store.dart';
 import '../core/trends/night_row.dart';
@@ -117,7 +118,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
     final queryStart =
         displayStart.isBefore(baselineStart) ? displayStart : baselineStart;
 
-    final sessions = await widget.store.sleepSessionsBetween(queryStart, now);
+    final sessions = await SleepCheckInService.nightsBetween(widget.store, queryStart, now);
     // Stress/active-calories are daytime figures with no baseline
     // window of their own (see meaning_engine.dart) — only the display
     // range is fetched, not the wider baseline window sessions use.

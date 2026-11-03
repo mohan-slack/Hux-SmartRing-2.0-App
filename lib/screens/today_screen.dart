@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/checkin/sleep_checkin.dart';
 import '../core/coach/coach_nudges.dart';
 import '../core/coach/coach_service.dart';
 import '../core/food/nutrients.dart' show MealTypeLabel;
@@ -18,6 +19,9 @@ import '../core/home/home_extras.dart';
 import '../core/home/home_insights.dart';
 import '../core/meaning/daily_readout.dart';
 import '../core/meaning/day_plan.dart';
+import '../core/meaning/hux_charge.dart' show ChargeLevel;
+import '../core/meaning/evening_timing.dart';
+import '../core/meaning/sleep_debt.dart';
 import '../core/meaning/step_target.dart';
 import '../core/meaning/readout_service.dart';
 import '../core/modes/event_mode_engine.dart';
@@ -103,6 +107,13 @@ class TodayScreen extends StatefulWidget {
   /// "Not now" on that card (hidden for a few days).
   final ValueChanged<CoachNudge>? onHideCoachNudge;
 
+  /// Called after each readout load (e.g. to re-plan tonight's reminders).
+  final ValueChanged<DailyReadout>? onReadout;
+
+  /// Morning "How did you sleep?" card. The app turns it on; widget
+  /// tests leave it off (it depends on the real clock).
+  final bool morningCheckIn;
+
   /// Sync in the background on open and whenever the app comes back to
   /// the foreground (throttled), so Home never shows yesterday's data.
   /// Off by default so widget tests stay deterministic.
@@ -127,6 +138,8 @@ class TodayScreen extends StatefulWidget {
     this.onOpenCycle,
     this.onCoachNudge,
     this.onHideCoachNudge,
+    this.morningCheckIn = false,
+    this.onReadout,
   });
 
   @override
@@ -142,6 +155,10 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   List<FeatureId> _featured = const [];
   HomeExtras _extras = HomeExtras.empty;
   String? _errorMessage;
+
+  late final SleepCheckInService _checkIns = SleepCheckInService(widget.store);
+  bool _askCheckIn = false;
+  SleepCheckIn? _previousCheckIn;
 
   /// Seeded from `syncService.lastRingInfo` right after each sync/load
   /// (an immediate, correct reading), then kept fresh by the live
@@ -197,18 +214,34 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
 
   static const _primedKey = 'health_permission_primed';
 
+  /// "Continue without health data": phone-only / denied users still
+  /// get Home (check-in, food, plans, coach). Cleared by Connect.
+  static const _skippedKey = 'health_skipped';
+  bool _healthSkipped = false;
+
   Future<void> _connectHealth() async {
     try {
       await widget.store.writeSetting(_primedKey, 'yes');
+      await widget.store.writeSetting(_skippedKey, 'no');
     } catch (_) {}
+    _healthSkipped = false;
     await _bootstrap();
+  }
+
+  Future<void> _skipHealth() async {
+    try {
+      await widget.store.writeSetting(_primedKey, 'yes');
+      await widget.store.writeSetting(_skippedKey, 'yes');
+    } catch (_) {}
+    _healthSkipped = true;
+    await _loadReadout();
   }
 
   /// Quiet sync: pulls new health data without blanking the screen; on
   /// success the readout reloads in place. Failures stay silent here —
   /// pull-to-refresh is where the user asks and hears back.
   Future<void> _backgroundSync() async {
-    if (!widget.autoSync || _bgSyncing || _phase != _Phase.ready) return;
+    if (!widget.autoSync || _bgSyncing || _healthSkipped || _phase != _Phase.ready) return;
     _bgSyncing = true;
     try {
       final outcome = await widget.syncService.syncIfStale();
@@ -230,9 +263,10 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
 
     try {
       final everSynced = await widget.store.lastSyncedUpTo() != null;
+      _healthSkipped = await widget.store.readSetting(_skippedKey) == 'yes';
       if (!mounted) return;
 
-      if (!everSynced) {
+      if (!everSynced && !_healthSkipped) {
         // First run (app only): explain WHY before the OS permission
         // sheet appears — a cold Health prompt gets denied far more.
         if (widget.autoSync && await widget.store.readSetting(_primedKey) != 'yes') {
@@ -266,6 +300,31 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
       _phase = _Phase.error;
       _errorMessage = message;
     });
+  }
+
+  /// A synced night that ended today: then the card only asks "how
+  /// rested?" (the times are already known).
+  SleepSession? _deviceNightToday() {
+    final n = _lastNight;
+    if (n == null) return null;
+    final w = n.wakeTime.toLocal(), now = DateTime.now();
+    return w.year == now.year && w.month == now.month && w.day == now.day ? n : null;
+  }
+
+  Future<void> _saveCheckIn(SleepCheckIn c) async {
+    try {
+      await _checkIns.save(c);
+    } on ArgumentError {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('That night looks too short or long — check the times.')));
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _askCheckIn = false);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved. Thanks — Charge updated.')));
+    await _loadReadout();
   }
 
   Future<void> _loadReadout() async {
@@ -307,8 +366,21 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
     } catch (_) {
       // Extras are a bonus: Home still shows the readout without them.
     }
+    var ask = false;
+    SleepCheckIn? previous;
+    if (widget.morningCheckIn) {
+      try {
+        ask = await _checkIns.shouldAsk();
+        previous = (await _checkIns.all()).lastOrNull;
+      } catch (_) {}
+    }
     if (!mounted) return;
+    try {
+      widget.onReadout?.call(readout);
+    } catch (_) {}
     setState(() {
+      _askCheckIn = ask;
+      _previousCheckIn = previous;
       _extras = extras;
       _readout = readout;
       _lastNight = lastNight;
@@ -330,12 +402,20 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   /// Pull-to-refresh: sync, then reload. A sync failure here doesn't
   /// blank out an already-visible readout — it just says so quietly.
   Future<void> _refresh() async {
+    if (_healthSkipped) {
+      await _loadReadout(); // nothing to sync until they connect
+      return;
+    }
     final outcome = await widget.syncService.syncNow();
     if (!mounted) return;
     if (!outcome.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Couldn't sync your health data — try again."),
+          // Say WHY (no permission, no Health Connect…), not just "failed".
+          content: Text(outcome.error == null || outcome.error!.isEmpty
+              ? "Couldn't sync your health data — try again."
+              : "Couldn't sync: ${outcome.error!.replaceFirst(RegExp(r'^\w*Exception(\([^)]*\))?:\s*'), '')}"),
+          duration: const Duration(seconds: 6),
           action: SnackBarAction(label: 'Retry', onPressed: _refresh),
         ),
       );
@@ -350,7 +430,7 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   Widget _buildBody() {
     switch (_phase) {
       case _Phase.priming:
-        return _HealthPrimingView(onConnect: _connectHealth);
+        return _HealthPrimingView(onConnect: _connectHealth, onSkip: _skipHealth);
       case _Phase.syncing:
         return const _MessageView(message: 'Syncing your health data…');
       case _Phase.loadingReadout:
@@ -359,6 +439,7 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
         return _ErrorView(
           message: _errorMessage,
           onRetry: _bootstrap,
+          onSkip: _skipHealth,
         );
       case _Phase.ready:
         return RefreshIndicator(
@@ -382,6 +463,18 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
             onOpenCycle: widget.onOpenCycle,
             onCoachNudge: widget.onCoachNudge,
             onHideCoachNudge: widget.onHideCoachNudge,
+            connectCard: _healthSkipped ? _ConnectHealthTile(onConnect: _connectHealth) : null,
+            checkInCard: _askCheckIn
+                ? _SleepCheckInCard(
+                    deviceNight: _deviceNightToday(),
+                    previous: _previousCheckIn,
+                    onSave: _saveCheckIn,
+                    onSkip: () {
+                      setState(() => _askCheckIn = false);
+                      _checkIns.skipToday().catchError((Object _) {});
+                    },
+                  )
+                : null,
           ),
         );
     }
@@ -412,8 +505,9 @@ class _MessageView extends StatelessWidget {
 class _ErrorView extends StatelessWidget {
   final String? message;
   final VoidCallback onRetry;
+  final VoidCallback? onSkip;
 
-  const _ErrorView({required this.message, required this.onRetry});
+  const _ErrorView({required this.message, required this.onRetry, this.onSkip});
 
   /// Strips a raw exception's `SomeException: ` prefix — the detail text
   /// underneath the calm headline should read like a sentence, not a
@@ -476,6 +570,13 @@ class _ErrorView extends StatelessWidget {
                 child: Text('Then: Settings → Health Connect → App permissions → HUX → Allow all.',
                     textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall),
               ),
+            if (onSkip != null) ...[
+              const SizedBox(height: HuxSpacing.lg),
+              OutlinedButton(onPressed: onSkip, child: const Text('Continue without health data')),
+              const SizedBox(height: HuxSpacing.xs),
+              Text('You can tell HUX how you slept each morning instead. Connect any time from Home.',
+                  textAlign: TextAlign.center, style: Theme.of(context).textTheme.labelSmall),
+            ],
           ],
         ),
       ),
@@ -505,8 +606,9 @@ Future<void> openHealthHelp(BuildContext context, Uri uri, {Uri? fallback}) asyn
 /// reads and why, so the OS prompt isn't a surprise.
 class _HealthPrimingView extends StatelessWidget {
   final VoidCallback onConnect;
+  final VoidCallback? onSkip;
 
-  const _HealthPrimingView({required this.onConnect});
+  const _HealthPrimingView({required this.onConnect, this.onSkip});
 
   @override
   Widget build(BuildContext context) {
@@ -550,6 +652,10 @@ class _HealthPrimingView extends StatelessWidget {
             height: 52,
             child: FilledButton(onPressed: onConnect, child: const Text('Continue')),
           ),
+          if (onSkip != null) ...[
+            const SizedBox(height: HuxSpacing.sm),
+            TextButton(onPressed: onSkip, child: const Text('Skip — I don\'t use a health app')),
+          ],
         ],
       ),
     );
@@ -579,6 +685,8 @@ class _ReadoutBody extends StatelessWidget {
   final VoidCallback? onOpenCycle;
   final ValueChanged<CoachNudge>? onCoachNudge;
   final ValueChanged<CoachNudge>? onHideCoachNudge;
+  final Widget? checkInCard;
+  final Widget? connectCard;
 
   const _ReadoutBody({
     required this.readout,
@@ -599,6 +707,8 @@ class _ReadoutBody extends StatelessWidget {
     this.onOpenCycle,
     this.onCoachNudge,
     this.onHideCoachNudge,
+    this.checkInCard,
+    this.connectCard,
   });
 
   void _open(FeatureId id) => onOpenFeature?.call(id);
@@ -661,6 +771,8 @@ class _ReadoutBody extends StatelessWidget {
           onOpenProfile: onOpenProfile,
           onWhy: () => _why(context),
         ))),
+        if (checkInCard != null) ...[gap, pad(HuxEntrance(index: 1, child: checkInCard!))],
+        if (connectCard != null) ...[gap, pad(connectCard!)],
         if (next != null) ...[gap, pad(HuxEntrance(index: 1, child: next))],
         if (extras.coachNudge != null && onCoachNudge != null) ...[
           gap,
@@ -695,6 +807,7 @@ class _ReadoutBody extends StatelessWidget {
           gap,
           pad(HuxEntrance(index: 2, child: _LastNightTile(
             night: night,
+            debt: extras.sleepDebt,
             goal: plan?.bedtime?.sleepGoal ?? const Duration(hours: 8),
             targetBed: plan?.bedtime?.bedtime.toLocal(),
             onTap: () => _open(FeatureId.sleepRegularity),
@@ -706,7 +819,7 @@ class _ReadoutBody extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _StepsTile(steps: plan?.steps, byHour: insights.stepsByHour)),
+              Expanded(child: _StepsTile(steps: plan?.steps, byHour: insights.stepsByHour, distanceM: extras.distanceTodayM)),
               const SizedBox(width: 12),
               Expanded(
                 child: food == null
@@ -845,12 +958,27 @@ class _ReadoutBody extends StatelessWidget {
     final bed = plan?.bedtime?.bedtime.toLocal();
     if (bed != null) {
       var m = bed.hour * 60 + bed.minute;
-      if (m < 6 * 60) m = 24 * 60 - 1; // after midnight: pin to the end
+      if (m < 6 * 60) m += 24 * 60; // after midnight: the line extends to it
       out.add(HuxDayEvent(minuteOfDay: m, label: 'Bed', color: HuxColors.ringSleep, time: huxClock(bed)));
+      // Tonight's timing, only while it's still ahead (it's what you can act on).
+      final t = EveningTiming.forBed(bed);
+      final now = DateTime.now();
+      for (final (at, label, color) in [
+        (t.lastCaffeine, 'Last chai', HuxColors.ringSteps),
+        (t.lastMeal, 'Dinner by', HuxColors.ringFood),
+      ]) {
+        if (!at.isAfter(now) || at.day != now.day) continue;
+        out.add(HuxDayEvent(minuteOfDay: at.hour * 60 + at.minute, label: label, color: color, time: huxClock(at)));
+      }
     }
-    // At most 5, so labels stay readable.
+    // At most 5, so labels stay readable: the next 4 coming up, plus the
+    // most recent one done (so the line still shows where you are).
     out.sort((a, b) => a.minuteOfDay.compareTo(b.minuteOfDay));
-    return out.length <= 5 ? out : [out.first, ...out.sublist(out.length - 4)];
+    if (out.length <= 5) return out;
+    final ahead = out.where((e) => e.minuteOfDay >= nowMin).toList();
+    final past = out.where((e) => e.minuteOfDay < nowMin).toList();
+    if (ahead.length >= 5) return ahead.take(5).toList();
+    return [...past.sublist(past.length - (5 - ahead.length)), ...ahead];
   }
 }
 
@@ -882,6 +1010,27 @@ class _Hero extends StatelessWidget {
     final state = readout.state;
     final first = name?.trim().split(' ').first;
     final stateLabel = charge?.label ?? 'Learning';
+    // The label is about Charge NOW; the readout headline is about last
+    // night's recovery. When the day has drained a normal morning, say so
+    // instead of "Running low · Right in your normal range".
+    final labelColor = switch (charge?.level) {
+      ChargeLevel.full || ChargeLevel.good => HuxColors.recharged,
+      ChargeLevel.low => HuxColors.stretched,
+      ChargeLevel.veryLow => HuxColors.rundown,
+      null => state.huxColor,
+    };
+    final morning = charge?.morningCharge;
+    final drained = charge?.value != null && morning != null && morning - charge!.value! >= 15;
+    final lowNow = charge?.level == ChargeLevel.low || charge?.level == ChargeLevel.veryLow;
+    final recoveredOk = state == RecoveryState.recharged || state == RecoveryState.steady;
+    // Keep last night's headline; add one line that explains the drop.
+    final dayUsedIt = drained && lowNow && recoveredOk;
+    // A short night explains a low number even when it was "usual" for you.
+    final dayNote = charge?.shortSleep == true
+        ? charge!.reason
+        : dayUsedIt
+            ? 'You started at $morning this morning — the day used the rest.'
+            : null;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
       decoration: BoxDecoration(color: huxNight, borderRadius: BorderRadius.circular(28)),
@@ -942,15 +1091,19 @@ class _Hero extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(stateLabel,
+                    Text(dayUsedIt && !charge.shortSleep ? '$stateLabel now' : stateLabel,
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: Color.lerp(state.huxColor, Colors.white, 0.45),
+                          color: Color.lerp(labelColor, Colors.white, 0.45),
                         )),
                     const SizedBox(height: 6),
                     Text(readout.headline,
                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2)),
+                    if (dayNote != null) ...[
+                      const SizedBox(height: 4),
+                      Text(dayNote, style: const TextStyle(fontSize: 13, height: 1.3, color: Color(0xCCFFFFFF))),
+                    ],
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: onWhy,
@@ -979,8 +1132,9 @@ class _LastNightTile extends StatelessWidget {
   final Duration goal;
   final DateTime? targetBed;
   final VoidCallback onTap;
+  final SleepDebt? debt;
 
-  const _LastNightTile({required this.night, required this.goal, required this.targetBed, required this.onTap});
+  const _LastNightTile({required this.night, required this.goal, required this.targetBed, required this.onTap, this.debt});
 
   static String _hm(Duration d) => '${d.inHours}h ${(d.inMinutes % 60).toString().padLeft(2, '0')}';
 
@@ -993,6 +1147,13 @@ class _LastNightTile extends StatelessWidget {
       if (night.avgRespiratoryRateBrpm != null) 'Breathing ${night.avgRespiratoryRateBrpm!.round()}/min',
       if (night.minSpo2Percent != null) 'SpO2 min ${night.minSpo2Percent}%',
     ];
+    final d = debt;
+    // The week, not just the night: debt first, it's what you can act on.
+    if (d != null && d.hasDebt) {
+      chips.insert(0, 'Sleep debt ${d.label} this week');
+    } else if (d != null && d.nights >= 5) {
+      chips.insert(0, 'No sleep debt this week');
+    }
     return HuxTile(
       onTap: onTap,
       child: Column(
@@ -1023,7 +1184,10 @@ class _StepsTile extends StatelessWidget {
   final StepTarget? steps;
   final List<int> byHour;
 
-  const _StepsTile({required this.steps, required this.byHour});
+  /// Today's walking distance in metres (from the health app), if any.
+  final double? distanceM;
+
+  const _StepsTile({required this.steps, required this.byHour, this.distanceM});
 
   @override
   Widget build(BuildContext context) {
@@ -1045,7 +1209,11 @@ class _StepsTile extends StatelessWidget {
             const SizedBox(height: 8),
             HuxHourBars(values: byHour, color: HuxColors.ringSteps),
             const SizedBox(height: 6),
-            Text(s == null ? 'no data yet' : (s.done ? 'goal reached' : 'of ${StepTargetCalculator.formatSteps(s.target)}'),
+            Text(
+                (s == null ? 'no data yet' : (s.done ? 'goal reached' : 'of ${StepTargetCalculator.formatSteps(s.target)}')) +
+                    (distanceM == null || distanceM! < 50 ? '' : ' · ${(distanceM! / 1000).toStringAsFixed(1)} km'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 14, color: huxMuted)),
           ],
         ),
@@ -1346,6 +1514,193 @@ class _CoachNoticedCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Morning check-in: when you slept + how rested you feel. With a synced
+/// night it only asks how rested you feel.
+class _SleepCheckInCard extends StatefulWidget {
+  final SleepSession? deviceNight;
+  final SleepCheckIn? previous;
+  final Future<void> Function(SleepCheckIn) onSave;
+  final VoidCallback onSkip;
+
+  const _SleepCheckInCard({this.deviceNight, this.previous, required this.onSave, required this.onSkip});
+
+  @override
+  State<_SleepCheckInCard> createState() => _SleepCheckInCardState();
+}
+
+class _SleepCheckInCardState extends State<_SleepCheckInCard> {
+  late TimeOfDay _bed = widget.previous == null
+      ? const TimeOfDay(hour: 23, minute: 0)
+      : TimeOfDay.fromDateTime(widget.previous!.bed.toLocal());
+  late TimeOfDay _wake = widget.previous == null
+      ? const TimeOfDay(hour: 7, minute: 0)
+      : TimeOfDay.fromDateTime(widget.previous!.wake.toLocal());
+  Rested? _feel;
+  bool _saving = false;
+
+  static String _t(TimeOfDay t) => huxClock(DateTime(2000, 1, 1, t.hour, t.minute));
+
+  /// Wake today (never in the future); bed the evening before if needed.
+  (DateTime, DateTime) _times() {
+    final now = DateTime.now();
+    var wake = DateTime(now.year, now.month, now.day, _wake.hour, _wake.minute);
+    if (wake.isAfter(now)) wake = now;
+    var bed = DateTime(wake.year, wake.month, wake.day, _bed.hour, _bed.minute);
+    if (!bed.isBefore(wake)) bed = bed.subtract(const Duration(days: 1));
+    return (bed, wake);
+  }
+
+  Future<void> _pick(bool bed) async {
+    final picked = await showTimePicker(context: context, initialTime: bed ? _bed : _wake);
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (bed) {
+        _bed = picked;
+      } else {
+        _wake = picked;
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    final feel = _feel;
+    if (feel == null || _saving) return;
+    setState(() => _saving = true);
+    final n = widget.deviceNight;
+    final (bed, wake) = n == null ? _times() : (n.bedtime, n.wakeTime);
+    await widget.onSave(SleepCheckIn(bed: bed, wake: wake, feel: feel, fromDevice: n != null));
+    if (mounted) setState(() => _saving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final device = widget.deviceNight != null;
+    final (bed, wake) = _times();
+    final len = wake.difference(bed);
+    final lenText = '${len.inHours}h ${(len.inMinutes % 60).toString().padLeft(2, '0')}m';
+    return HuxTile(
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Hux3DObject(Hux3D.pillow, color: HuxColors.ringSleep, size: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(device ? 'How rested do you feel?' : 'How did you sleep?',
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
+                    Text(device ? 'Your watch saw the night — only you know how it felt.' : 'Two taps. Charge uses it.',
+                        style: const TextStyle(fontSize: 13, color: huxMuted)),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Not now',
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.onSkip,
+                icon: const Icon(Icons.close_rounded, size: 20, color: huxMuted),
+              ),
+            ],
+          ),
+          if (!device) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _pick(true),
+                  icon: const Icon(Icons.bedtime_outlined, size: 18),
+                  label: Text('Slept ${_t(_bed)}'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _pick(false),
+                  icon: const Icon(Icons.wb_sunny_outlined, size: 18),
+                  label: Text('Up ${_t(_wake)}'),
+                ),
+                Text('= $lenText', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxMuted)),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final r in Rested.values)
+                ChoiceChip(
+                  label: Text(r.label),
+                  selected: _feel == r,
+                  showCheckmark: false,
+                  selectedColor: huxInk,
+                  labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _feel == r ? Colors.white : huxInk),
+                  onSelected: (_) => setState(() => _feel = r),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  device ? 'Stays on your phone.' : 'Stays on your phone. Charge starts after 3 nights.',
+                  style: const TextStyle(fontSize: 12, color: huxMuted),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilledButton(
+                  onPressed: _feel == null || _saving ? null : _save,
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Home, after "Continue without health data": one quiet way back.
+class _ConnectHealthTile extends StatelessWidget {
+  final VoidCallback onConnect;
+
+  const _ConnectHealthTile({required this.onConnect});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = Platform.isIOS ? 'Apple Health' : 'Health Connect';
+    return HuxTile(
+      onTap: onConnect,
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      child: Row(
+        children: [
+          const Hux3DObject(Hux3D.phone, color: HuxColors.ringSteps, size: 36, animate: false),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Connect $app',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: huxInk)),
+                const Text('Adds steps (your phone counts them) and sleep from any watch.',
+                    style: TextStyle(fontSize: 13, color: huxMuted)),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: huxMuted),
+        ],
       ),
     );
   }

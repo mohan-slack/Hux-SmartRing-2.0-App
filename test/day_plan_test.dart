@@ -132,6 +132,64 @@ void main() {
       expect(DayPlanner.clock(plan.bedtime!.bedtime), '7:30 AM');
     });
 
+    test('short usual sleep steps toward 7 h instead of being copied', () {
+      expect(DayPlanner.needFor(const Duration(hours: 5)), const Duration(hours: 5, minutes: 30));
+      expect(DayPlanner.needFor(const Duration(hours: 6, minutes: 45)), const Duration(hours: 7));
+      expect(DayPlanner.needFor(const Duration(hours: 8)), const Duration(hours: 8));
+      expect(DayPlanner.needFor(null), DayPlanner.defaultSleepNeed);
+      expect(
+          DayPlanner.needFor(const Duration(hours: 7), minimum: const Duration(hours: 7, minutes: 30)),
+          const Duration(hours: 7, minutes: 30));
+
+      const shortBase = PersonalBaseline(
+        medianHrvMs: 50,
+        medianRestingHeartRateBpm: 60,
+        medianTotalSleep: Duration(hours: 6),
+        medianSkinTempCelsius: 33.6,
+        daysOfData: 14,
+      );
+      final plan = planner.plan(
+          charge: charge(70), baseline: shortBase, lastNight: night(360), now: noonIst, utcOffset: ist);
+      // Usual 6 h, slept 6 h: goal 6 h 30 (no double counting as catch-up).
+      expect(plan.bedtime!.sleepGoal, const Duration(hours: 6, minutes: 30));
+      expect(plan.bedtime!.reason, contains('step toward 7 hours'));
+    });
+
+    test('bedtime anchors on the usual wake time, not today\'s', () {
+      final plan = planner.plan(
+        charge: charge(70),
+        baseline: baseline,
+        lastNight: night(450),
+        now: noonIst,
+        utcOffset: ist,
+        usualWakeMinute: 6 * 60 + 30, // usually up at 6:30
+      );
+      expect(DayPlanner.clock(plan.bedtime!.bedtime), '11:00 PM');
+      expect(plan.bedtime!.reason, contains('your usual'));
+    });
+
+    test('usual wake time is the median, across midnight too', () {
+      SleepSession wakeAt(int day, int h, int m) {
+        final w = DateTime.utc(2026, 7, day, h, m).subtract(ist);
+        return SleepSession(
+          bedtime: w.subtract(const Duration(hours: 7)),
+          wakeTime: w,
+          segments: [SleepSegment(start: w.subtract(const Duration(hours: 7)), end: w, stage: SleepStage.light)],
+        );
+      }
+
+      expect(DayPlanner.usualWakeMinute([wakeAt(1, 7, 0), wakeAt(3, 6, 30), wakeAt(5, 9, 30)], utcOffset: ist), 7 * 60);
+      expect(DayPlanner.usualWakeMinute([wakeAt(1, 7, 0)], utcOffset: ist), isNull);
+      // Night-shift wake times around midnight stay together.
+      expect(DayPlanner.usualWakeMinute([wakeAt(1, 23, 40), wakeAt(3, 0, 20), wakeAt(5, 0, 10)], utcOffset: ist), 10);
+    });
+
+    test('gentle effort for older adults: same level, softer words', () {
+      final g = DayPlanner.effortFor(90, gentle: true);
+      expect(g.level, EffortLevel.push);
+      expect(g.suggestion, isNot(contains('hardest')));
+    });
+
     test('no last night -> no bedtime', () {
       final plan = planner.plan(
         charge: charge(70),

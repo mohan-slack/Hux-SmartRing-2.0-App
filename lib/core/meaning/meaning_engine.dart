@@ -24,6 +24,7 @@ import '../ring/ring_models.dart';
 import 'baseline.dart';
 import 'content/action_content.dart';
 import 'daily_readout.dart';
+import 'hux_charge.dart';
 import 'sleep_wording.dart';
 
 class MeaningEngine {
@@ -106,6 +107,7 @@ class MeaningEngine {
     required List<HealthSnapshot> todaySnapshots,
     bool nightShiftActive = false,
     bool excludeDaytimeFood = false,
+    RecoveryState? stateOverride,
   }) {
     if (baseline.insufficient) {
       return DailyReadout.learning(date, daysOfData: baseline.daysOfData);
@@ -149,7 +151,11 @@ class MeaningEngine {
     // so having MORE data would perversely read as LOWER quality.
     if (respRateScore != null) total += respRateScore * respRateWeight;
 
-    final state = _stateFromTotal(total);
+    // ONE source of truth: when the caller has a Charge, its morning
+    // number decides the state (and so the headline), so the words can
+    // never contradict the number (e.g. "Running low" vs "normal range").
+    // The signal scores still pick the details in the text.
+    final state = stateOverride ?? _stateFromTotal(total);
     final quality = considered == 4
         ? DataQuality.full
         : (considered >= 2 ? DataQuality.partial : DataQuality.sparse);
@@ -175,6 +181,16 @@ class MeaningEngine {
       activeEnergyKcal: activeEnergyKcal,
       currentHeartRateBpm: currentHeartRateBpm,
     );
+  }
+
+  /// The recovery state that matches a morning Charge — the same
+  /// cut-offs as the Charge labels (Fully charged / Good to go / Running
+  /// low / Recharge today).
+  static RecoveryState stateForCharge(int morningCharge) {
+    if (morningCharge >= HuxChargeCalculator.fullAt) return RecoveryState.recharged;
+    if (morningCharge >= HuxChargeCalculator.goodAt) return RecoveryState.steady;
+    if (morningCharge >= HuxChargeCalculator.lowAt) return RecoveryState.stretched;
+    return RecoveryState.rundown;
   }
 
   // ---- signal scoring: each returns -2..+1, or null if unavailable ----

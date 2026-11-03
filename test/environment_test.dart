@@ -1,6 +1,7 @@
 /// Air & heat: India AQI math, IMD-based heat levels, outlooks, alerts.
 /// Run with: flutter test
 
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hux_app/core/environment/environment_service.dart';
 import 'package:hux_app/core/environment/india_aqi.dart';
@@ -164,6 +165,57 @@ void main() {
       await EnvironmentService(store, fetch: fetch, apiKey: 'k').outlooks(city);
       expect(seen.first.host, 'customer-api.open-meteo.com');
       expect(seen.first.queryParameters['apikey'], 'k');
+      await store.close();
+    });
+
+    test('bad API key -> falls back to the free endpoint', () async {
+      final store = await openStore();
+      final seen = <String>[];
+      final f = forecast(temp: (d, h) => 25, pm25: (d, h) => 20);
+      Future<Map<String, Object?>> fetch(Uri u) async {
+        seen.add(u.host);
+        if (u.host.startsWith('customer-')) throw const HttpException('HTTP 401');
+        return u.host.contains('air-quality') ? f.air : f.weather;
+      }
+
+      final out = await EnvironmentService(store, fetch: fetch, apiKey: 'expired').outlooks(cityNamed('Hyderabad')!);
+      expect(out.city.name, 'Hyderabad');
+      expect(seen, ['customer-api.open-meteo.com', 'api.open-meteo.com', 'air-quality-api.open-meteo.com']);
+      await store.close();
+    });
+
+    test('backend first: one call, no direct Open-Meteo traffic', () async {
+      final store = await openStore();
+      final f = forecast(temp: (d, h) => 25, pm25: (d, h) => 20);
+      final direct = <Uri>[];
+      final sent = <Map<String, Object?>>[];
+      final env = EnvironmentService(
+        store,
+        fetch: (u) async {
+          direct.add(u);
+          return f.weather;
+        },
+        remote: (body) async {
+          sent.add(body);
+          return {'weather': f.weather, 'air': f.air, 'cached': true};
+        },
+      );
+      final out = await env.outlooks(cityNamed('Hyderabad')!);
+      expect(out.city.name, 'Hyderabad');
+      expect(direct, isEmpty);
+      expect(sent.single.keys, containsAll(['lat', 'lon']));
+      await store.close();
+    });
+
+    test('backend down (debug build) -> falls back to the free API', () async {
+      final store = await openStore();
+      final f = forecast(temp: (d, h) => 25, pm25: (d, h) => 20);
+      final env = EnvironmentService(
+        store,
+        fetch: (u) async => u.host.contains('air-quality') ? f.air : f.weather,
+        remote: (_) async => throw Exception('not deployed'),
+      );
+      expect((await env.outlooks(cityNamed('Hyderabad')!)).city.name, 'Hyderabad');
       await store.close();
     });
 

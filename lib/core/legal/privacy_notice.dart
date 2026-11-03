@@ -49,7 +49,7 @@ class PrivacyNotice {
   /// Change this when the notice's meaning changes (forces re-consent).
   // v2: names the AI provider (Groq, USA) and its retention.
   // v3: adds Cycle (period data, on this phone only).
-  static const noticeVersion = '2026-11-v3';
+  static const noticeVersion = '2026-11-v6';
 
   static const uses = <DataUse>[
     DataUse(
@@ -58,7 +58,7 @@ class PrivacyNotice {
       where: 'HUX account service (Supabase)',
     ),
     DataUse(
-      what: 'Health readings you allow: steps, heart rate, HRV, sleep, SpO₂, calories, breathing rate',
+      what: 'Health readings you allow: steps, walking distance, heart rate, HRV, sleep, SpO₂, calories, breathing rate (and which app sent each)',
       why: 'To show your charge, sleep, trends, streaks and plans',
       where: 'Read from Apple Health / Health Connect and kept on this phone only',
     ),
@@ -74,7 +74,7 @@ class PrivacyNotice {
       optional: true,
     ),
     DataUse(
-      what: 'A short summary of your numbers + your coach messages',
+      what: 'A short summary of your numbers, any coach notes you add, and your coach messages',
       why: 'To answer you in the HUX coach',
       where: 'HUX server, then Groq Inc. (AI provider, USA) to write the reply. Neither stores it '
           '(Groq zero data retention) — your chat stays on this phone',
@@ -97,7 +97,8 @@ class PrivacyNotice {
     DataUse(
       what: 'The city you pick (not GPS)',
       why: 'For air-quality and heat alerts',
-      where: 'Open-Meteo weather service',
+      where: 'HUX server, then Open-Meteo (weather service, Switzerland). Only the city\'s map point; '
+          'Open-Meteo never sees who you are (one shared answer per city for an hour)',
       optional: true,
     ),
     DataUse(
@@ -107,7 +108,7 @@ class PrivacyNotice {
       optional: true,
     ),
     DataUse(
-      what: 'A daily count of coach messages',
+      what: 'A daily count of coach, food-estimate and air requests',
       why: 'Fair-use limit',
       where: 'HUX server, kept for 7 days',
       optional: true,

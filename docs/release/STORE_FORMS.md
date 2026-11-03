@@ -90,7 +90,8 @@ Paste one justification per data type.
 | Permission | Justification (paste) |
 |---|---|
 | `READ_STEPS` | HUX shows the user's daily steps against a personal step goal set from their own last 7 days, keeps their activity streak, and builds their monthly report. Read-only. Data stays on the device. |
-| `READ_ACTIVE_CALORIES_BURNED` | Active energy is part of the user's daily "HUX Charge" energy score (energy used through the day) and their activity summary. Read-only, on device. |
+| `READ_ACTIVE_CALORIES_BURNED` | Active energy is shown in the user's activity summary next to steps. Read-only, on device. |
+| `READ_DISTANCE` | Walking distance is shown next to the user's daily steps. Read-only, on device. |
 | `READ_HEART_RATE` | Resting and current heart rate are compared with the user's own baseline to show how recovered they are each morning ("HUX Charge") and today's suggested effort level. Read-only, on device. |
 | `READ_HEART_RATE_VARIABILITY` | HRV against the user's personal baseline is the main recovery signal in the daily HUX Charge and the suggested effort for the day. Read-only, on device. |
 | `READ_SLEEP` | Sleep duration and stages power the sleep trends screen, "sleep vs your normal", the target bedtime suggestion, and journal insights (e.g. how late dinners affect the user's own sleep). Read-only, on device. |

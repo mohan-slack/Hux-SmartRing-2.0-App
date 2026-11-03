@@ -4,7 +4,12 @@
 /// agreeing, and can turn sharing off at any time.
 library;
 
+import '../checkin/sleep_checkin.dart';
 import '../cycle/cycle_service.dart';
+import '../meaning/day_plan.dart';
+import '../meaning/profile_tuning.dart';
+import '../meaning/sleep_debt.dart';
+import 'coach_notes.dart';
 import '../food/food_log_service.dart';
 import '../meaning/readout_service.dart';
 import '../profile/profile_service.dart';
@@ -53,6 +58,12 @@ class CoachContext {
   /// writing the same night); the sleep numbers are then left out.
   final bool sleepDataOdd;
 
+  /// Last 7 nights' shortfall vs need, in minutes (null = too few nights).
+  final int? sleepDebtMin;
+
+  /// Lines the user asked the coach to keep in mind (Coach notes).
+  final List<String> notes;
+
   const CoachContext({
     this.goals = const [],
     this.audience,
@@ -80,6 +91,8 @@ class CoachContext {
     this.mealsToday,
     this.lastMealMinAgo,
     this.sleepDataOdd = false,
+    this.sleepDebtMin,
+    this.notes = const [],
   });
 
   /// Sent to the backend. Only filled fields; flat and small.
@@ -109,6 +122,8 @@ class CoachContext {
       'mealsToday': mealsToday,
       'lastMealMinAgo': lastMealMinAgo,
       if (sleepDataOdd) 'sleepDataOdd': true,
+      'sleepDebtMin': sleepDebtMin,
+      if (notes.isNotEmpty) 'notes': notes,
     };
     m.removeWhere((_, v) => v == null);
     return m;
@@ -135,6 +150,8 @@ class CoachContext {
       if (cyclePhase != null) 'Cycle phase: $cyclePhase',
       if (mealsToday != null) 'Meals logged today: $mealsToday',
       if (sleepDataOdd) 'Sleep data: looked wrong, not shared',
+      if (sleepDebtMin != null) 'Sleep debt this week: ${hm(sleepDebtMin!)}',
+      for (final n in notes) 'You told the coach: $n',
       'Time: ${localTime ?? partOfDay}${weekday != null ? ', $weekday' : ''}',
     ];
   }
@@ -186,11 +203,11 @@ class CoachContextLoader {
       // No readout yet (new user): skip these fields.
     }
 
-    int? lastNight, usual;
+    int? lastNight, usual, debt;
     var odd = false;
     try {
       final utc = at.toUtc();
-      final sessions = await store.sleepSessionsBetween(utc.subtract(const Duration(days: 8)), utc);
+      final sessions = await SleepCheckInService.nightsBetween(store, utc.subtract(const Duration(days: 8)), utc);
       final byNight = <DateTime, int>{};
       for (final s in sessions) {
         final k = nightKeyFor(s.bedtime);
@@ -210,6 +227,11 @@ class CoachContextLoader {
         }
         final v = byNight.values.where(plausible).toList()..sort();
         if (v.length >= 3) usual = v[v.length ~/ 2];
+        if (usual != null) {
+          debt = SleepDebt.of([for (final k in keys) byNight[k]],
+                  need: DayPlanner.needFor(Duration(minutes: usual), minimum: ProfileTuning.of(p).minSleep))
+              ?.minutes;
+        }
       }
     } catch (_) {
       // Sleep is optional context.
@@ -274,7 +296,17 @@ class CoachContextLoader {
       mealsToday: meals,
       lastMealMinAgo: lastMealAgo,
       sleepDataOdd: odd,
+      sleepDebtMin: debt,
+      notes: await _notes(),
     );
+  }
+
+  Future<List<String>> _notes() async {
+    try {
+      return await CoachNotes(store).all();
+    } catch (_) {
+      return const [];
+    }
   }
 
   static String _clock(int h, int m) {

@@ -25,6 +25,9 @@ import 'core/ring/mock_ring_adapter.dart';
 import 'core/ring/ring_adapter.dart';
 import 'core/storage/db_location.dart';
 import 'core/storage/sqlite_health_store.dart';
+import 'core/storage/source_guard.dart';
+import 'core/ring/health_sources.dart';
+import 'core/nudges/smart_notifier.dart';
 import 'core/sync/sync_service.dart';
 import 'widgets/hux_intro.dart';
 import 'core/coach/coach_service.dart';
@@ -65,13 +68,20 @@ Future<void> main() async {
   switch (_sourceEnv) {
     case 'health':
       dataSource = RingDataSource.health;
-      ring = HealthStoreRingAdapter();
+      ring = HealthStoreRingAdapter(onReport: HealthSourcesStore(store).add);
     default:
       // chaosMode is off for this demo build so behaviour stays
       // predictable; flip it on locally to exercise the reconnect/
       // retry paths.
       dataSource = RingDataSource.mock;
       ring = MockRingAdapter(seed: 42);
+  }
+
+  // Switching demo <-> real health data: clear the other source's readings.
+  try {
+    await guardDataSource(store, dataSource);
+  } catch (_) {
+    // Never block startup over it.
   }
 
   // Health apps: re-read 3 whole days each sync (companion apps such as
@@ -106,14 +116,17 @@ Future<void> main() async {
   }
 
   final mealAnalyzer = RemoteMealAnalyzer(invokeFunction);
-  final notifier = LocalNotifier();
+  // Quiet hours follow your sleep; see core/nudges/smart_notifier.dart.
+  final notifier = SmartNotifier(LocalNotifier(), store);
   final nudgeService = NudgeService(store, notifier);
-  // Air & heat (Open-Meteo). Free tier is non-commercial only — set
-  // apiKey from a paid plan before a paid launch (see the service docs).
+  // Air & heat (Open-Meteo) through the HUX backend function `air-heat`:
+  // the commercial API key stays on the server (secret OPEN_METEO_API_KEY)
+  // and one cached answer per city serves everyone. Debug builds fall
+  // back to the free API if the function isn't deployed yet.
   final environmentService = EnvironmentService(
     store,
     notifier: notifier,
-    apiKey: SupabaseConfig.openMeteoApiKey.isEmpty ? null : SupabaseConfig.openMeteoApiKey,
+    remote: (body) => invokeFunction('air-heat', body),
   );
   environmentService.refreshAlert().catchError((Object _) {});
   // Rebuild the reminder schedule from saved settings (it can be lost on

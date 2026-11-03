@@ -13,6 +13,7 @@
 /// Wellness wording only — same medical-language ban as the rest of the
 /// app. Vegetarian-first, Indian-context register where food comes up.
 
+import '../checkin/sleep_checkin.dart';
 import '../modes/mode.dart';
 import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
@@ -72,9 +73,9 @@ class WeeklyStoryService {
     final lastWeekStart = reference.subtract(const Duration(days: 14));
 
     final thisWeek =
-        await _store.sleepSessionsBetween(thisWeekStart, reference);
+        await SleepCheckInService.nightsBetween(_store, thisWeekStart, reference);
     final lastWeek =
-        await _store.sleepSessionsBetween(lastWeekStart, thisWeekStart);
+        await SleepCheckInService.nightsBetween(_store, lastWeekStart, thisWeekStart);
     final thisSnapshots =
         await _store.snapshotsBetween(thisWeekStart, reference);
     final lastSnapshots =

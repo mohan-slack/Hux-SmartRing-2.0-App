@@ -95,14 +95,14 @@ class DailyReadout {
         date: date,
         state: RecoveryState.learning,
         headline: 'Still learning your body — steps work already',
-        meaning: "HUX hasn't received any sleep from your health app yet, so there's no Charge or sleep "
-            'insight. Your steps, plans, food and journal work right away.',
+        meaning: "HUX hasn't got any sleep yet, so there's no Charge. Tell HUX how you slept each morning "
+            '(two taps) and Charge starts after 3 nights. Steps, plans, food and journal work right away.',
         actions: [
           if (stepsToday != null && stepGoal != null)
             'Walk toward today\'s goal: $stepsToday of $stepGoal steps'
           else
             'Take a 10-minute walk after your next meal',
-          'For Charge and sleep: wear a watch or band to bed that syncs to your health app',
+          'Each morning, tell HUX when you slept and how rested you feel',
         ],
         dataQuality: DataQuality.sparse,
       );

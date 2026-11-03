@@ -67,6 +67,7 @@ class HuxApp extends StatelessWidget {
     return MaterialApp(
       title: 'HUX',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const _NoStretchScrollBehavior(),
       theme: buildHuxTheme(),
       builder: (context, child) => HuxIntro(mode: introMode, child: child ?? const SizedBox.shrink()),
       home: _AuthGate(
@@ -277,4 +278,14 @@ class _OwnedShellState extends State<_OwnedShell> {
       },
     );
   }
+}
+
+/// Android 12+ stretches cards when a list hits its edge, which looks
+/// like the layout is breaking. Keep the platform's scroll physics, just
+/// drop the stretch/glow effect.
+class _NoStretchScrollBehavior extends MaterialScrollBehavior {
+  const _NoStretchScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
 }

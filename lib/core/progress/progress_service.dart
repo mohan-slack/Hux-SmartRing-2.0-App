@@ -2,6 +2,7 @@
 /// the phone, and turns them into streaks and monthly reports.
 library;
 
+import '../checkin/sleep_checkin.dart';
 import '../food/food_log_service.dart';
 import '../journal/journal.dart';
 import '../meaning/step_goal_log.dart';
@@ -73,7 +74,7 @@ class ProgressService {
   Future<MonthlyReport> monthly(int year, int month) async {
     final from = DateTime.utc(year, month - 1); // the month before, for comparison
     final recs = await records(from);
-    final sleep = await _store.sleepSessionsBetween(
+    final sleep = await SleepCheckInService.nightsBetween(_store,
       from.subtract(const Duration(days: 1)),
       _now().toUtc().add(const Duration(days: 1)),
     );

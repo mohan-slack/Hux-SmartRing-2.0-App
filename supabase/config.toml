@@ -430,3 +430,6 @@ verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = false
+
+[functions.air-heat]
+verify_jwt = false

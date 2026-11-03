@@ -20,6 +20,7 @@ import 'package:health/health.dart' as hk;
 
 import '../ring_adapter.dart';
 import '../ring_models.dart';
+import '../health_sources.dart';
 import 'health_mappers.dart';
 
 class HealthStoreRingAdapter implements RingAdapter {
@@ -43,12 +44,21 @@ class HealthStoreRingAdapter implements RingAdapter {
   static const sleepLookBack = Duration(hours: 18);
 
   /// Types turned into running totals per day — fetched from `since`.
-  static const _cumulativeTypes = {
-    hk.HealthDataType.STEPS,
-    hk.HealthDataType.ACTIVE_ENERGY_BURNED,
-  };
+  static Set<hk.HealthDataType> get _cumulativeTypes => {
+        hk.HealthDataType.STEPS,
+        hk.HealthDataType.ACTIVE_ENERGY_BURNED,
+        _distanceType,
+      };
 
-  HealthStoreRingAdapter({hk.Health? health}) : _health = health ?? hk.Health();
+  /// Walking distance: a different type per platform (both metres).
+  static hk.HealthDataType get _distanceType =>
+      Platform.isIOS ? hk.HealthDataType.DISTANCE_WALKING_RUNNING : hk.HealthDataType.DISTANCE_DELTA;
+
+  /// After each sync: which app sent what, plus daily distance (see
+  /// health_sources.dart). Optional; failures never affect the sync.
+  final Future<void> Function(HealthSourceReport report)? onReport;
+
+  HealthStoreRingAdapter({hk.Health? health, this.onReport}) : _health = health ?? hk.Health();
 
   /// HRV type is platform-specific, not just differently-scaled data on
   /// a shared type (see the file-level HRV NOTE): querying
@@ -71,6 +81,7 @@ class HealthStoreRingAdapter implements RingAdapter {
         // Connect review rejects unused permissions).
         hk.HealthDataType.RESPIRATORY_RATE,
         hk.HealthDataType.ACTIVE_ENERGY_BURNED,
+        _distanceType,
         hk.HealthDataType.SLEEP_ASLEEP,
         hk.HealthDataType.SLEEP_AWAKE,
         hk.HealthDataType.SLEEP_DEEP,
@@ -189,6 +200,15 @@ class HealthStoreRingAdapter implements RingAdapter {
     List<hk.HealthDataPoint> byType(hk.HealthDataType type) =>
         points.where((p) => p.type == type).toList();
 
+    final report = onReport;
+    if (report != null) {
+      try {
+        await report(_sourceReport(points, now, since));
+      } catch (_) {
+        // A bonus summary: never fail the sync over it.
+      }
+    }
+
     final hrPoints = byType(hk.HealthDataType.HEART_RATE);
     final hrvPoints = byType(_hrvType);
     final spo2Points = byType(hk.HealthDataType.BLOOD_OXYGEN);
@@ -250,6 +270,58 @@ class HealthStoreRingAdapter implements RingAdapter {
       snapshots: snapshots,
       sleepSessions: [for (final mapped in mappedSessions) mapped.session],
       syncedUpTo: now,
+    );
+  }
+
+  /// Who sent each kind of data in [points], and walking distance per day
+  /// (from the one source with the most, like steps — never added up).
+  HealthSourceReport _sourceReport(List<hk.HealthDataPoint> points, DateTime now, DateTime since) {
+    HealthKind? kindOf(hk.HealthDataType t) {
+      if (_sleepTypes.contains(t)) return HealthKind.sleep;
+      if (t == _hrvType) return HealthKind.hrv;
+      if (t == _distanceType) return HealthKind.distance;
+      return switch (t) {
+        hk.HealthDataType.HEART_RATE => HealthKind.heartRate,
+        hk.HealthDataType.BLOOD_OXYGEN => HealthKind.spo2,
+        hk.HealthDataType.RESPIRATORY_RATE => HealthKind.breathing,
+        hk.HealthDataType.STEPS => HealthKind.steps,
+        hk.HealthDataType.ACTIVE_ENERGY_BURNED => HealthKind.activeEnergy,
+        _ => null,
+      };
+    }
+
+    final counts = <HealthKind, Map<String, int>>{};
+    final last = <HealthKind, DateTime>{};
+    final distance = <String, Map<String, double>>{}; // day -> source -> metres
+    for (final p in points) {
+      final k = kindOf(p.type);
+      if (k == null) continue;
+      final src = HealthSourceReport.friendlySource(p.sourceName.isEmpty ? p.sourceId : p.sourceName);
+      (counts[k] ??= {})[src] = (counts[k]![src] ?? 0) + 1;
+      final l = last[k];
+      if (l == null || p.dateTo.isAfter(l)) last[k] = p.dateTo;
+      // Same rule as steps: a sample from before `since` would land as a
+      // partial total on the previous day and overwrite the real one.
+      if (k == HealthKind.distance && !p.dateFrom.isBefore(since)) {
+        final v = p.value;
+        if (v is hk.NumericHealthValue) {
+          final day = HealthSourceReport.dayKey(p.dateFrom.toLocal());
+          (distance[day] ??= {})[src] = (distance[day]![src] ?? 0) + v.numericValue.toDouble();
+        }
+      }
+    }
+    return HealthSourceReport(
+      kinds: {
+        for (final e in counts.entries)
+          e.key: KindSources(
+            (e.value.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).map((x) => x.key).toList(),
+            last[e.key],
+          ),
+      },
+      distanceByDay: {
+        for (final e in distance.entries) e.key: e.value.values.reduce((a, b) => a > b ? a : b),
+      },
+      checkedAt: now,
     );
   }
 

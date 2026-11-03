@@ -8,9 +8,12 @@
 /// isn't practical to force via the iOS Simulator once a decision has
 /// already been recorded) reproducible and regression-proof.
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:health/health.dart' as hk;
 import 'package:hux_app/core/ring/health_adapter/health_store_ring_adapter.dart';
+import 'package:hux_app/core/ring/health_sources.dart';
 import 'package:hux_app/core/ring/ring_adapter.dart';
 import 'package:hux_app/core/ring/ring_models.dart';
 
@@ -280,5 +283,40 @@ void main() {
       await expectLater(adapter.vibrate(), completes);
       await adapter.dispose();
     });
+  });
+
+  test('reports which app sent each kind of data, and distance per day', () async {
+    final day = DateTime(2026, 7, 2, 10);
+    final distanceType =
+        Platform.isIOS ? hk.HealthDataType.DISTANCE_WALKING_RUNNING : hk.HealthDataType.DISTANCE_DELTA;
+    final fake = _FakeHealth(data: [
+      point(type: hk.HealthDataType.STEPS, from: day, value: 500),
+      point(type: distanceType, from: day, value: 400),
+      point(type: distanceType, from: day.add(const Duration(hours: 1)), value: 350),
+    ]);
+    HealthSourceReport? got;
+    final adapter = HealthStoreRingAdapter(health: fake, onReport: (r) async => got = r);
+    await adapter.connect();
+    await adapter.syncSince(DateTime(2026, 7, 1));
+
+    expect(got!.of(HealthKind.steps).sources, ['test']);
+    expect(got!.of(HealthKind.sleep).received, isFalse); // nothing sent sleep
+    expect(got!.distanceOn(day), 750);
+    await adapter.dispose();
+  });
+
+  test('friendly app names for Android package names', () {
+    expect(HealthSourceReport.friendlySource('com.eiot.be.ring'), 'AIZO RING');
+    expect(HealthSourceReport.friendlySource('com.sec.android.app.shealth'), 'Samsung Health');
+    expect(HealthSourceReport.friendlySource('Mohan’s iPhone'), 'Mohan’s iPhone');
+    expect(HealthSourceReport.friendlySource('com.acme.bandfit'), 'Bandfit');
+  });
+
+  test('a later sync with no sleep keeps the sleep source we already knew', () {
+    const old = HealthSourceReport(kinds: {HealthKind.sleep: KindSources(['Oura'], null)});
+    const newer = HealthSourceReport(kinds: {HealthKind.steps: KindSources(['iPhone'], null)});
+    final m = old.mergedWith(newer);
+    expect(m.of(HealthKind.sleep).sources, ['Oura']);
+    expect(m.of(HealthKind.steps).sources, ['iPhone']);
   });
 }

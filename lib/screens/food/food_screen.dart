@@ -46,6 +46,7 @@ class _FoodScreenState extends State<FoodScreen> {
   double _goal = ProteinGap.defaultGoalG.toDouble();
   bool _loading = true;
   bool _analysing = false;
+  List<UsualMeal> _usuals = const [];
 
   @override
   void initState() {
@@ -60,8 +61,13 @@ class _FoodScreenState extends State<FoodScreen> {
       final now = DateTime.now();
       final meals = await widget.foodLog.mealsFor(now);
       final goal = await widget.foodLog.proteinGoal();
+      var usuals = const <UsualMeal>[];
+      try {
+        usuals = await widget.foodLog.usuals(now: now);
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
+        _usuals = usuals;
         _meals = meals;
         _total = meals.fold(Nutrients.zero, (s, m) => s + m.total);
         _goal = goal;
@@ -174,6 +180,31 @@ class _FoodScreenState extends State<FoodScreen> {
       MealAnalysis(items: entries, confidence: confidence, questions: questions),
       unknown: unknown,
     );
+  }
+
+  /// One tap: the same meal again, now. Undo in the snackbar.
+  Future<void> _logUsual(UsualMeal u) async {
+    if (_analysing) return;
+    final meal = u.again(DateTime.now());
+    await widget.foodLog.addMeal(meal);
+    try {
+      await widget.onMealLogged?.call(meal);
+    } catch (_) {}
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Logged ${u.label} · ${meal.total.proteinG.round()} g protein'),
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () async {
+          final i = _meals.lastIndexWhere((m) => m.loggedAt.isAtSameMomentAs(meal.loggedAt));
+          if (i >= 0) {
+            await widget.foodLog.deleteMeal(meal.loggedAt, i);
+            await _load();
+          }
+        },
+      ),
+    ));
   }
 
   List<(String, String)> get _quickAdds {
@@ -307,10 +338,12 @@ class _FoodScreenState extends State<FoodScreen> {
       final kg = double.tryParse(w ?? '');
       if (kg == null) return;
       final goal = await widget.foodLog.setGoalFromWeight(kg);
+      final rule = await widget.foodLog.proteinRule();
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Protein goal set to ${goal.round()} g a day.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Protein goal set to ${goal.round()} g a day '
+              '(${rule.perKg.toStringAsFixed(1)} g per kg — ${rule.why}).')));
       return;
     }
     if (!mounted) return;
@@ -321,8 +354,8 @@ class _FoodScreenState extends State<FoodScreen> {
         initialText: _goal.round().toString(),
         keyboardType: TextInputType.number,
         confirmLabel: 'Save',
-        helper: 'A common guide is about 0.8 g per kg of body weight. '
-            'Ask your doctor or dietitian for your own target.',
+        helper: 'Guide: 0.8 g per kg for most adults, about 1.0 when losing weight or over 60, '
+            '1.2 if you exercise regularly. Ask your doctor or dietitian for your own target.',
       ),
     );
     final grams = double.tryParse(value ?? '');
@@ -622,6 +655,38 @@ class _FoodScreenState extends State<FoodScreen> {
                           ),
                         ),
                       ],
+                    if (_usuals.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      const HuxTileLabel('Your usuals'),
+                      const SizedBox(height: 10),
+                      for (final u in _usuals)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: HuxTile(
+                            onTap: _analysing ? null : () => _logUsual(u),
+                            padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(u.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
+                                      Text(
+                                          '${u.type.label} · ${u.timesLogged} times · ${u.total.proteinG.round()} g protein',
+                                          style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.add_circle_rounded, color: HuxColors.ringFood, size: 28),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                     const SizedBox(height: 20),
                     const HuxTileLabel('Quick add'),
                     const SizedBox(height: 10),

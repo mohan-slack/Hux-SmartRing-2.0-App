@@ -20,6 +20,10 @@ import 'outlook.dart';
 
 typedef JsonFetcher = Future<Map<String, Object?>> Function(Uri uri);
 
+/// Calls the HUX backend function `air-heat` with {lat, lon}; returns its
+/// JSON ({weather, air}). The commercial Open-Meteo key lives there.
+typedef RemoteOutlookFetcher = Future<Object?> Function(Map<String, Object?> body);
+
 /// Plain dart:io GET returning decoded JSON (no extra package needed).
 Future<Map<String, Object?>> httpGetJson(Uri uri) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -62,8 +66,12 @@ class EnvironmentService {
   final String? apiKey;
   final DateTime Function() _now;
 
+  /// Preferred source: the HUX backend (licensed, cached per city). When
+  /// set, Open-Meteo is called directly only as a debug-build fallback.
+  final RemoteOutlookFetcher? remote;
+
   EnvironmentService(this._store,
-      {Notifier? notifier, JsonFetcher fetch = httpGetJson, this.apiKey, DateTime Function()? now})
+      {Notifier? notifier, JsonFetcher fetch = httpGetJson, this.apiKey, this.remote, DateTime Function()? now})
       : _notifier = notifier,
         _fetch = fetch,
         _now = now ?? DateTime.now;
@@ -83,26 +91,46 @@ class EnvironmentService {
     return enabled;
   }
 
-  Uri _uri(String host, String path, IndiaCity c, String hourly) {
-    final paid = apiKey != null && apiKey!.isNotEmpty;
+  bool get _hasKey => apiKey != null && apiKey!.trim().isNotEmpty;
+
+  Uri _uri(String host, String path, IndiaCity c, String hourly, {bool paid = false}) {
     return Uri.https(paid ? 'customer-$host' : host, path, {
       'latitude': c.lat.toString(),
       'longitude': c.lon.toString(),
       'hourly': hourly,
       'timezone': 'auto',
       'forecast_days': '2',
-      if (paid) 'apikey': apiKey!,
+      if (paid) 'apikey': apiKey!.trim(),
     });
   }
 
   Future<Outlooks> outlooks(IndiaCity c, {DateTime? now}) async {
-    final Map<String, Object?> weather;
-    final Map<String, Object?> air;
-    try {
-      weather = await _fetch(_uri('api.open-meteo.com', '/v1/forecast', c, 'temperature_2m,apparent_temperature'));
-      air = await _fetch(_uri('air-quality-api.open-meteo.com', '/v1/air-quality', c, 'pm2_5,pm10'));
-    } catch (_) {
-      throw const EnvironmentException("Couldn't get today's air and heat — check your connection.");
+    Future<(Map<String, Object?>, Map<String, Object?>)> get(bool paid) async => (
+          await _fetch(_uri('api.open-meteo.com', '/v1/forecast', c, 'temperature_2m,apparent_temperature', paid: paid)),
+          await _fetch(_uri('air-quality-api.open-meteo.com', '/v1/air-quality', c, 'pm2_5,pm10', paid: paid)),
+        );
+
+    Map<String, Object?> weather;
+    Map<String, Object?> air;
+    final viaBackend = remote == null ? null : await _fromBackend(c);
+    if (viaBackend != null) {
+      (weather, air) = viaBackend;
+    } else if (remote != null && _isRelease) {
+      // Release builds never call the free (non-commercial) API.
+      throw const EnvironmentException("Air and heat service didn't answer right now. Try again in a bit.");
+    } else {
+      try {
+        (weather, air) = await get(_hasKey);
+      } catch (first) {
+        // A wrong or expired API key (HTTP 400/401/403) used to look like
+        // "no internet". Fall back to the free endpoint so the screen works.
+        if (!_hasKey) throw EnvironmentException(_failText(first));
+        try {
+          (weather, air) = await get(false);
+        } catch (second) {
+          throw EnvironmentException(_failText(second));
+        }
+      }
     }
     final hours = mergeHourly(weather, air);
     if (hours.isEmpty) throw const EnvironmentException('No forecast available for this city right now.');
@@ -112,6 +140,29 @@ class EnvironmentService {
     final tomorrow = DateTime(today.year, today.month, today.day + 1);
     const calc = OutlookCalculator();
     return Outlooks(c, calc.forDay(today, hours, c.terrain), calc.forDay(tomorrow, hours, c.terrain));
+  }
+
+  static const _isRelease = bool.fromEnvironment('dart.vm.product');
+
+  /// {weather, air} from the backend, or null if it failed.
+  Future<(Map<String, Object?>, Map<String, Object?>)?> _fromBackend(IndiaCity c) async {
+    try {
+      var raw = await remote!({'lat': c.lat, 'lon': c.lon});
+      if (raw is String) raw = jsonDecode(raw);
+      if (raw is! Map) return null;
+      final w = raw['weather'], a = raw['air'];
+      if (w is! Map || a is! Map) return null;
+      return (w.cast<String, Object?>(), a.cast<String, Object?>());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _failText(Object e) {
+    final base = e is HttpException
+        ? "Air and heat service didn't answer right now. Try again in a bit."
+        : "Couldn't get today's air and heat — check your connection.";
+    return _isRelease ? base : '$base\n[debug: $e]';
   }
 
   /// Joins the two hourly responses on their timestamps.

@@ -32,3 +32,4 @@ android/app/google-services.json
 
 # Local design previews
 .preview_tmp/
+.env.mock

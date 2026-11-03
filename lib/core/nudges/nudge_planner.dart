@@ -147,6 +147,13 @@ class NudgeIds {
 
   /// Cycle: one discreet heads-up (never says "period").
   static const cycleHeadsUp = 1401;
+
+  /// Sunday evening: "your week with HUX is ready".
+  static const weeklyCheckIn = 1501;
+
+  /// Tonight's timing, from the target bedtime.
+  static const lastCaffeine = 1601;
+  static const dinnerBy = 1602;
   static const walkLunch = 1001;
   static const walkDinner = 1002;
   static const walkAfterLogged = 1003;

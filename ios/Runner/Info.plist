@@ -91,7 +91,7 @@
 		<key>NSFaceIDUsageDescription</key>
 		<string>Face ID unlocks Cycle when you turn on the Cycle lock.</string>
 		<key>NSHealthShareUsageDescription</key>
-		<string>HUX reads your steps, heart rate, HRV, sleep, blood oxygen, breathing rate and active energy from Health to show your daily charge, sleep trends, step goals and plans. If you turn on Cycle, it also reads your period dates to estimate your cycle phase. Your Health data stays on this iPhone unless you turn on the HUX coach, and is never used for ads.</string>
+		<string>HUX reads your steps, walking distance, heart rate, HRV, sleep, blood oxygen, breathing rate and active energy from Health to show your daily charge, sleep trends, step goals and plans. If you turn on Cycle, it also reads your period dates to estimate your cycle phase. Your Health data stays on this iPhone unless you turn on the HUX coach, and is never used for ads.</string>
 		<key>NSHealthUpdateUsageDescription</key>
 		<string>HUX only reads from Health. It never writes or changes your Health data.</string>
 		<!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over

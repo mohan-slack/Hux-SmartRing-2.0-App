@@ -61,6 +61,39 @@ void main() {
     }
   }
 
+  testWidgets('"Continue without health data": Home works without syncing, with a way back',
+      (tester) async {
+    late SqliteHealthStore store;
+    late MockRingAdapter ring;
+    late SyncService syncService;
+    await tester.runAsync(() async {
+      store = await openStore();
+      await store.writeSetting('health_skipped', 'yes');
+      ring = MockRingAdapter(seed: 7);
+      syncService = SyncService(ring, store, maxAttempts: 1, baseBackoff: const Duration(milliseconds: 10));
+    });
+    addTearDown(() async {
+      await syncService.dispose();
+      await ring.dispose();
+      await store.close();
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: TodayScreen(
+        store: store,
+        syncService: syncService,
+        readoutService: ReadoutService(store),
+        modeService: ModeService(store),
+      ),
+    ));
+    await settle(tester);
+
+    expect(find.textContaining('steps work already'), findsOneWidget); // the no-sleep readout
+    expect(find.text('Connect Health Connect').evaluate().isNotEmpty || find.text('Connect Apple Health').evaluate().isNotEmpty,
+        isTrue);
+    expect(await tester.runAsync(store.lastSyncedUpTo), isNull); // never tried to sync
+  });
+
   testWidgets(
       'renders headline and actions once already synced',
       (tester) async {

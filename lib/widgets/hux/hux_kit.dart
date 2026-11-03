@@ -643,9 +643,12 @@ class HuxDayLine extends StatelessWidget {
       );
     }
     final scaler = MediaQuery.textScalerOf(context);
+    // A bedtime after midnight stretches the line to just past it.
+    final latest = sorted.isEmpty ? 0 : sorted.last.minuteOfDay;
+    final end = math.max(_end, math.min(latest + 45, 30 * 60));
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth;
-      double x(int m) => ((m.clamp(_start, _end) - _start) / (_end - _start)) * w;
+      double x(int m) => ((m.clamp(_start, end) - _start) / (end - _start)) * w;
       double measure(String t, TextStyle st) =>
           (TextPainter(text: TextSpan(text: t, style: st), textDirection: TextDirection.ltr, textScaler: scaler)
                 ..layout())
@@ -700,8 +703,21 @@ class HuxDayLine extends StatelessWidget {
         ));
         final style = TextStyle(fontSize: 13, fontWeight: past ? FontWeight.w500 : FontWeight.w700, color: past ? huxMuted : huxInk);
         final tw = measure(e.text, style);
-        final left = (ex - tw / 2).clamp(0.0, math.max(0.0, w - tw)).toDouble();
-        final row = free(1, left, left + tw) ? 1 : (free(0, left, left + tw) ? 0 : -1);
+        double fit(double l) => l.clamp(0.0, math.max(0.0, w - tw)).toDouble();
+        // Centred under the dot first, then starting or ending at it.
+        final options = {fit(ex - tw / 2), fit(ex - 6), fit(ex + 6 - tw)};
+        var row = -1;
+        var left = 0.0;
+        search:
+        for (final r in const [1, 0]) {
+          for (final l in options) {
+            if (free(r, l, l + tw)) {
+              row = r;
+              left = l;
+              break search;
+            }
+          }
+        }
         if (row < 0) continue;
         rows[row].add((left, left + tw));
         children.add(Positioned(

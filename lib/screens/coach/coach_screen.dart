@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/coach/coach_notes.dart';
 import '../../core/coach/coach_service.dart';
 import '../../core/coach/safety.dart';
 import '../../theme/hux_glass.dart';
@@ -61,7 +62,7 @@ class CoachScreen extends StatefulWidget {
   State<CoachScreen> createState() => _CoachScreenState();
 }
 
-enum _Menu { shared, clear, stop }
+enum _Menu { notes, shared, clear, stop }
 
 class _CoachScreenState extends State<CoachScreen> {
   final _input = TextEditingController();
@@ -253,6 +254,19 @@ class _CoachScreenState extends State<CoachScreen> {
 
   Future<void> _onMenu(_Menu m) async {
     switch (m) {
+      case _Menu.notes:
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          backgroundColor: Colors.white,
+          builder: (_) => _NotesSheet(notes: widget.coach.notes),
+        );
+        // The chips at the top show what's shared: refresh them.
+        try {
+          final shared = (await widget.coach.previewContext()).preview();
+          if (mounted) setState(() => _shared = shared);
+        } catch (_) {}
       case _Menu.shared:
         final lines = (await widget.coach.previewContext()).preview();
         if (!mounted) return;
@@ -321,6 +335,7 @@ class _CoachScreenState extends State<CoachScreen> {
             PopupMenuButton<_Menu>(
               onSelected: _onMenu,
               itemBuilder: (_) => const [
+                PopupMenuItem(value: _Menu.notes, child: Text('Coach notes')),
                 PopupMenuItem(value: _Menu.shared, child: Text('What HUX shares')),
                 PopupMenuItem(value: _Menu.clear, child: Text('Clear this chat')),
                 PopupMenuItem(value: _Menu.stop, child: Text('Stop sharing & delete chat')),
@@ -1106,4 +1121,115 @@ class _Message extends StatelessWidget {
           child: Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
         ),
       );
+}
+
+/// Coach notes: up to 5 lines the coach always keeps in mind. Only the
+/// user writes here; the coach never adds anything on its own.
+class _NotesSheet extends StatefulWidget {
+  final CoachNotes notes;
+
+  const _NotesSheet({required this.notes});
+
+  @override
+  State<_NotesSheet> createState() => _NotesSheetState();
+}
+
+class _NotesSheetState extends State<_NotesSheet> {
+  final _input = TextEditingController();
+  List<String> _list = const [];
+
+  static const _examples = ['Knee pain — no jumping', 'Vegetarian on Tuesdays', 'Night shift Mon–Wed', 'I walk with my dog at 7'];
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _reload() async {
+    final l = await widget.notes.all();
+    if (mounted) setState(() => _list = l);
+  }
+
+  Future<void> _add(String text) async {
+    final ok = await widget.notes.add(text);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_list.length >= CoachNotes.maxNotes
+              ? 'Up to ${CoachNotes.maxNotes} notes — remove one first.'
+              : 'Already there, or empty.')));
+      return;
+    }
+    _input.clear();
+    await _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final full = _list.length >= CoachNotes.maxNotes;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Coach notes', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+          const SizedBox(height: 4),
+          const Text(
+            'Things the coach should always keep in mind. Sent with each message, like the rest of what HUX shares. '
+            'Only you add or remove them.',
+            style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
+          ),
+          const SizedBox(height: 14),
+          for (final (i, n) in _list.indexed)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+              decoration: BoxDecoration(color: HuxColors.bg, borderRadius: BorderRadius.circular(14)),
+              child: Row(
+                children: [
+                  Expanded(child: Text(n, style: const TextStyle(fontSize: 15, color: huxInk))),
+                  IconButton(
+                    tooltip: 'Remove',
+                    icon: const Icon(Icons.close_rounded, size: 20, color: huxMuted),
+                    onPressed: () async {
+                      await widget.notes.remove(i);
+                      await _reload();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          if (!full) ...[
+            TextField(
+              controller: _input,
+              maxLength: CoachNotes.maxChars,
+              textInputAction: TextInputAction.done,
+              onSubmitted: _add,
+              decoration: InputDecoration(
+                hintText: 'e.g. ${_examples.first}',
+                suffixIcon: IconButton(icon: const Icon(Icons.add_rounded), onPressed: () => _add(_input.text)),
+              ),
+            ),
+            if (_list.isEmpty)
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [for (final e in _examples) ActionChip(label: Text(e), onPressed: () => _add(e))],
+              ),
+          ],
+          const SizedBox(height: 8),
+          const Text("Please don't add medicines or diagnoses — the coach gives wellness tips, not medical advice.",
+              style: TextStyle(fontSize: 12, color: huxMuted)),
+        ],
+      ),
+    );
+  }
 }

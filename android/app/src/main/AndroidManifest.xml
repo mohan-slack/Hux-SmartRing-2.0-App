@@ -23,6 +23,8 @@
          missing one makes requestAuthorization return false. -->
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE"/>
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED"/>
+    <!-- Walking distance (DISTANCE_DELTA): shown next to steps. -->
+    <uses-permission android:name="android.permission.health.READ_DISTANCE"/>
     <!-- Cycle (opt-in): read past period days, asked only from Cycle → Import. -->
     <uses-permission android:name="android.permission.health.READ_MENSTRUATION"/>
     <!-- No ACTIVITY_RECOGNITION: steps come from Health Connect, not the

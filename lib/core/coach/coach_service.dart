@@ -12,6 +12,7 @@ import 'dart:convert';
 
 import '../storage/health_store.dart';
 import 'coach_context.dart';
+import 'coach_notes.dart';
 import 'safety.dart';
 
 enum ChatRole { user, coach }
@@ -172,6 +173,9 @@ class CoachService {
 
   bool get hasBackend => _invoke != null;
 
+  /// What the user asked the coach to always keep in mind.
+  CoachNotes get notes => CoachNotes(_store);
+
   Future<bool> hasConsent() async => (await _store.readSetting(_consentKey)) == 'yes';
 
   Future<void> giveConsent() => _store.writeSetting(_consentKey, 'yes');
@@ -221,6 +225,13 @@ class CoachService {
   Future<void> _saveHistory(List<ChatMessage> all, CoachTopic topic) {
     final kept = all.length > keepMessages ? all.sublist(all.length - keepMessages) : all;
     return _store.writeSetting(historyKeyFor(topic), jsonEncode([for (final m in kept) m.toJson()]));
+  }
+
+  /// Adds a message FROM the coach that was written on the phone (the
+  /// weekly check-in) — nothing is sent anywhere.
+  Future<void> addLocalCoachMessage(String text, {CoachTopic topic = CoachTopic.general}) async {
+    final all = [...await history(topic: topic), ChatMessage(role: ChatRole.coach, text: text, at: _now())];
+    await _saveHistory(all, topic);
   }
 
   /// Sends [text]; returns the updated history (user message + reply).

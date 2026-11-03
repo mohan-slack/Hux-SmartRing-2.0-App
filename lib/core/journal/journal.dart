@@ -11,6 +11,7 @@ library;
 
 import 'dart:convert';
 
+import '../checkin/sleep_checkin.dart';
 import '../ring/ring_models.dart';
 import '../progress/activity_log.dart';
 import '../storage/health_store.dart';
@@ -274,7 +275,7 @@ class JournalService {
 
   Future<List<JournalInsight>> insights({DateTime? now}) async {
     final at = (now ?? DateTime.now()).toUtc();
-    final sessions = await _store.sleepSessionsBetween(at.subtract(insightWindow), at);
+    final sessions = await SleepCheckInService.nightsBetween(_store, at.subtract(insightWindow), at);
     return JournalInsights.compute(
       entries: await loadAll(),
       sessions: sessions,

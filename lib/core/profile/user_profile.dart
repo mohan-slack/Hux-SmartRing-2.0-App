@@ -122,6 +122,22 @@ class UserProfile {
   final CoachStyle? coachStyle;
   final AppLanguage? language;
 
+  /// What HUX calls you on Home ("Morning, Priya"). Stays on the phone;
+  /// never sent to the coach. Null = no greeting name.
+  final String? name;
+
+  /// Longest name kept (greeting has room for one word or two).
+  static const maxNameLength = 20;
+
+  /// Trims, collapses spaces, drops anything but letters/spaces/.'-,
+  /// caps the length. Empty -> null.
+  static String? cleanName(String? raw) {
+    if (raw == null) return null;
+    final t = raw.replaceAll(RegExp(r"[^\p{L}\p{M} .'-]", unicode: true), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (t.isEmpty) return null;
+    return t.length > maxNameLength ? t.substring(0, maxNameLength).trim() : t;
+  }
+
   const UserProfile({
     this.audience,
     this.goals = const [],
@@ -131,6 +147,7 @@ class UserProfile {
     this.wearable,
     this.coachStyle,
     this.language,
+    this.name,
   });
 
   /// True when the user skipped everything — still a valid profile.
@@ -153,6 +170,7 @@ class UserProfile {
     Wearable? wearable,
     CoachStyle? coachStyle,
     AppLanguage? language,
+    String? name,
   }) =>
       UserProfile(
         audience: audience ?? this.audience,
@@ -163,6 +181,20 @@ class UserProfile {
         wearable: wearable ?? this.wearable,
         coachStyle: coachStyle ?? this.coachStyle,
         language: language ?? this.language,
+        name: name ?? this.name,
+      );
+
+  /// Same answers, new (or no) name.
+  UserProfile withName(String? raw) => UserProfile(
+        audience: audience,
+        goals: goals,
+        dayType: dayType,
+        diet: diet,
+        fasting: fasting,
+        wearable: wearable,
+        coachStyle: coachStyle,
+        language: language,
+        name: cleanName(raw),
       );
 
   Map<String, Object?> toJson() => {
@@ -175,6 +207,7 @@ class UserProfile {
         'wearable': wearable?.name,
         'coachStyle': coachStyle?.name,
         'language': language?.name,
+        if (name != null) 'name': name,
       };
 
   /// Tolerant of unknown/removed enum values (an older or newer app
@@ -204,6 +237,7 @@ class UserProfile {
       wearable: pick(Wearable.values, json['wearable']),
       coachStyle: pick(CoachStyle.values, json['coachStyle']),
       language: pick(AppLanguage.values, json['language']),
+      name: cleanName(json['name'] is String ? json['name'] as String : null),
     );
   }
 }

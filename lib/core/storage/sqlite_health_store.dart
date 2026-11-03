@@ -553,6 +553,19 @@ class SqliteHealthStore implements HealthStore {
     });
   }
 
+  /// Deletes synced readings (snapshots, nights, the sync watermark) but
+  /// keeps settings: profile, food log, check-ins, consents. Used when
+  /// the data source changes (demo ring → real health app), so simulated
+  /// nights never mix with real ones.
+  Future<void> clearSyncedReadings() async {
+    await _db.transaction((txn) async {
+      await txn.delete('sleep_segments');
+      await txn.delete('sleep_sessions');
+      await txn.delete('snapshots');
+      await txn.delete('meta', where: 'key = ?', whereArgs: [_watermarkKey]);
+    });
+  }
+
   @override
   Future<void> close() => _db.close();
 }

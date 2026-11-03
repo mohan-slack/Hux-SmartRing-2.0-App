@@ -91,6 +91,7 @@ UserProfile _with(
       wearable: wearable != null ? wearable() : p.wearable,
       coachStyle: coachStyle != null ? coachStyle() : p.coachStyle,
       language: language != null ? language() : p.language,
+      name: p.name,
     );
 
 _Group<Object> _single<T extends Object>({
@@ -404,6 +405,13 @@ const _stepColors = <Color>[
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   late UserProfile _profile = widget.initial;
+  late final _name = TextEditingController(text: widget.initial.name ?? '');
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
   int _index = 0;
   bool _saving = false;
 
@@ -521,6 +529,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       const SizedBox(height: HuxSpacing.sm),
                       Text(step.subtitle, style: text.bodyMedium?.copyWith(color: HuxColors.mutedText)),
                       const SizedBox(height: HuxSpacing.xl),
+                      if (_index == 0) ...[
+                        TextField(
+                          controller: _name,
+                          enabled: !_saving,
+                          textCapitalization: TextCapitalization.words,
+                          maxLength: UserProfile.maxNameLength,
+                          textInputAction: TextInputAction.done,
+                          onChanged: (v) => _profile = _profile.withName(v),
+                          decoration: const InputDecoration(
+                            labelText: 'What should HUX call you? (optional)',
+                            hintText: 'e.g. Priya',
+                            counterText: '',
+                          ),
+                        ),
+                        const SizedBox(height: HuxSpacing.lg),
+                      ],
                       for (final group in step.groups) ...[
                         if (group.heading != null) ...[
                           Text(group.heading!, style: text.titleSmall),

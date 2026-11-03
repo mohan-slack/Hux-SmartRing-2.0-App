@@ -4,10 +4,12 @@
 /// import storage. Loads what [MeaningEngine] needs, calls it, hands
 /// back a [DailyReadout]. Contains no scoring logic itself.
 
+import '../checkin/sleep_checkin.dart';
 import '../cycle/cycle_models.dart';
 import '../cycle/cycle_service.dart';
 import '../modes/mode.dart';
 import '../modes/mode_service.dart';
+import '../profile/profile_service.dart';
 import '../ring/ring_models.dart';
 import '../storage/health_store.dart';
 import 'baseline.dart';
@@ -18,6 +20,7 @@ import 'step_target.dart';
 import 'content/fasting_content.dart';
 import 'daily_readout.dart';
 import 'meaning_engine.dart';
+import 'profile_tuning.dart';
 
 class ReadoutService {
   final HealthStore _store;
@@ -62,9 +65,15 @@ class ReadoutService {
   Future<DailyReadout> today({DateTime? now}) async {
     final reference = (now ?? DateTime.now()).toUtc();
 
-    final history = await _store.sleepSessionsBetween(
-      reference.subtract(baselineWindow),
-      reference,
+    // Synced nights plus morning check-ins for nights the health app
+    // doesn't have (phone-only users).
+    final checkIns = await _checkIns();
+    final history = SleepCheckInService.merge(
+      await _store.sleepSessionsBetween(reference.subtract(baselineWindow), reference),
+      [
+        for (final c in checkIns)
+          if (!c.wake.toUtc().isBefore(reference.subtract(baselineWindow)) && !c.wake.toUtc().isAfter(reference)) c,
+      ],
     );
     final baseline = await _cycleBaseline(reference) ?? PersonalBaseline.fromSleepSessions(history);
 
@@ -83,17 +92,37 @@ class ReadoutService {
         : await _modeService.activeContext(now: reference);
     final fastingToday = context.fastingActiveOn(reference);
 
+    Rested? feel;
+    if (lastNight != null) {
+      for (final c in checkIns.reversed) {
+        if (c.wake.difference(lastNight.wakeTime).abs() <= const Duration(hours: 3)) {
+          feel = c.feel;
+          break;
+        }
+      }
+    }
     final charge = const HuxChargeCalculator().calculate(
       baseline: baseline,
       lastNight: lastNight,
       todaySnapshots: todaySnapshots,
       now: reference,
+      feel: feel?.score,
     );
+    // Onboarding answers tune the plan (sleep minimum, gentler wording).
+    var tuning = ProfileTuning.standard;
+    try {
+      tuning = ProfileTuning.of(await ProfileService(_store).loadProfile());
+    } catch (_) {
+      // No profile yet: standard plan.
+    }
     final basePlan = const DayPlanner().plan(
       charge: charge,
       baseline: baseline,
       lastNight: lastNight,
       now: reference,
+      minSleep: tuning.minSleep,
+      usualWakeMinute: DayPlanner.usualWakeMinute(history),
+      gentle: tuning.gentleEffort,
     );
     // Steps: the last week of days plus today (cumulative per day).
     final stepSnapshots = await _store.snapshotsBetween(
@@ -124,6 +153,7 @@ class ReadoutService {
       todaySnapshots: todaySnapshots,
       nightShiftActive: context.nightShiftActive,
       excludeDaytimeFood: fastingToday,
+      stateOverride: charge.morningCharge == null ? null : MeaningEngine.stateForCharge(charge.morningCharge!),
     );
 
     // Never had ANY sleep: a phone-only user. Don't say "learning" with
@@ -205,9 +235,28 @@ class ReadoutService {
   /// rule [today] scores against, instead of duplicating it.
   Future<SleepSession?> lastNight({DateTime? now}) async {
     final reference = (now ?? DateTime.now()).toUtc();
-    final session = await _store.latestSleepSession();
-    if (session == null) return null;
-    final age = reference.difference(session.wakeTime.toUtc());
-    return age <= staleNightThreshold ? session : null;
+    bool fresh(SleepSession s) {
+      final age = reference.difference(s.wakeTime.toUtc());
+      return !age.isNegative && age <= staleNightThreshold;
+    }
+
+    final synced = await _store.latestSleepSession();
+    final checkIn = (await _checkIns()).where((c) => !c.fromDevice).lastOrNull?.toSession();
+    final s = synced != null && fresh(synced) ? synced : null;
+    final c = checkIn != null && fresh(checkIn) ? checkIn : null;
+    if (s == null) return c;
+    if (c == null) return s;
+    // Both: a synced night wins for the same night; a newer check-in
+    // (the watch missed last night) wins over an older synced one.
+    final overlap = s.bedtime.isBefore(c.wakeTime) && s.wakeTime.isAfter(c.bedtime);
+    return overlap || !c.wakeTime.isAfter(s.wakeTime) ? s : c;
+  }
+
+  Future<List<SleepCheckIn>> _checkIns() async {
+    try {
+      return await SleepCheckInService(_store).all();
+    } catch (_) {
+      return const [];
+    }
   }
 }

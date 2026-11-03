@@ -9,6 +9,15 @@
 /// recipe database). Home recipes vary a lot (oil, ghee, portion size),
 /// so the UI always says "approx." — never presents these as exact.
 ///
+/// CROSS-CHECK (Nov 2026, HUX team — not a nutritionist sign-off):
+/// every row's kcal agrees with 4·protein + 4·carbs + 9·fat within 15%
+/// (beer excepted: alcohol is 7 kcal/g) — enforced by a test. Staples
+/// (rice, roti, dal, curd, milk, paneer, egg, chicken breast, peanuts,
+/// nuts, fruit) were compared per 100 g with IFCT 2017 (ICMR-NIN) / USDA
+/// FoodData Central at the household weights in [IndianFoodDb.gramsPerUnit]; milk,
+/// walnuts, mango and soft drinks were corrected. `verified` stays false
+/// until a qualified nutritionist reviews the table.
+///
 /// To grow it: add rows here (or load a bigger licensed table later);
 /// matching, text parsing and protein suggestions pick them up as-is.
 library;
@@ -92,7 +101,7 @@ const indianFoods = <FoodItem>[
   FoodItem(id: 'sprouts', name: 'Sprouts salad', aliases: ['sprouts', 'moong sprouts', 'sprout salad'],
       unit: FoodUnit.katori, proteinSource: true,
       perUnit: Nutrients(kcal: 100, proteinG: 7, carbsG: 15, fatG: 1, fiberG: 4)),
-  FoodItem(id: 'soya_chunks', name: 'Soya chunks (cooked)', aliases: ['soya chunks', 'soya', 'meal maker', 'nutrela'],
+  FoodItem(id: 'soya_chunks', name: 'Soya chunks (cooked, from 30 g dry)', aliases: ['soya chunks', 'soya', 'meal maker', 'nutrela'],
       unit: FoodUnit.katori, proteinSource: true,
       perUnit: Nutrients(kcal: 105, proteinG: 15.6, carbsG: 10, fatG: 0.2, fiberG: 4)),
 
@@ -108,7 +117,7 @@ const indianFoods = <FoodItem>[
       perUnit: Nutrients(kcal: 90, proteinG: 5, carbsG: 7, fatG: 4.5)),
   FoodItem(id: 'milk', name: 'Milk (toned)', aliases: ['milk', 'doodh', 'paalu'],
       unit: FoodUnit.glass, proteinSource: true,
-      perUnit: Nutrients(kcal: 120, proteinG: 6, carbsG: 9.5, fatG: 6)),
+      perUnit: Nutrients(kcal: 145, proteinG: 7.5, carbsG: 11.5, fatG: 7.5)), // 250 ml toned (3% fat)
   FoodItem(id: 'chai', name: 'Chai (milk + sugar)', aliases: ['chai', 'tea', 'masala chai', 'cutting chai'],
       unit: FoodUnit.cup, perUnit: Nutrients(kcal: 90, proteinG: 2.5, carbsG: 13, fatG: 3)),
 
@@ -355,7 +364,7 @@ const indianFoods = <FoodItem>[
   FoodItem(id: 'cashews', name: 'Cashews (10)', aliases: ['cashews', 'kaju', 'cashew'],
       unit: FoodUnit.handful, perUnit: Nutrients(kcal: 90, proteinG: 3, carbsG: 5, fatG: 7, fiberG: 0.5)),
   FoodItem(id: 'walnuts', name: 'Walnuts', aliases: ['walnuts', 'akhrot', 'walnut'],
-      unit: FoodUnit.handful, perUnit: Nutrients(kcal: 130, proteinG: 3, carbsG: 3, fatG: 13, fiberG: 1.3)),
+      unit: FoodUnit.handful, perUnit: Nutrients(kcal: 195, proteinG: 4.5, carbsG: 4, fatG: 19.5, fiberG: 2)), // 30 g
   FoodItem(id: 'dates', name: 'Dates', aliases: ['dates', 'khajur', 'date'],
       unit: FoodUnit.piece, perUnit: Nutrients(kcal: 20, proteinG: 0.2, carbsG: 5, fatG: 0, fiberG: 0.6)),
   FoodItem(id: 'corn', name: 'Boiled corn', aliases: ['corn', 'sweet corn', 'bhutta', 'boiled corn', 'corn chaat', 'mokka jonna'],
@@ -367,7 +376,7 @@ const indianFoods = <FoodItem>[
   FoodItem(id: 'papaya', name: 'Papaya', aliases: ['papaya', 'papita', 'boppayi'],
       unit: FoodUnit.katori, perUnit: Nutrients(kcal: 60, proteinG: 0.7, carbsG: 15, fatG: 0.2, fiberG: 2.5)),
   FoodItem(id: 'mango', name: 'Mango', aliases: ['mango', 'aam', 'mamidi', 'maambazham'],
-      unit: FoodUnit.piece, perUnit: Nutrients(kcal: 200, proteinG: 2.8, carbsG: 50, fatG: 1.3, fiberG: 5)),
+      unit: FoodUnit.piece, perUnit: Nutrients(kcal: 150, proteinG: 2, carbsG: 37, fatG: 0.9, fiberG: 4)), // medium, ~250 g edible
   FoodItem(id: 'guava', name: 'Guava', aliases: ['guava', 'amrood', 'jama', 'koyya', 'perakka'],
       unit: FoodUnit.piece, perUnit: Nutrients(kcal: 70, proteinG: 2.6, carbsG: 14, fatG: 1, fiberG: 5)),
   FoodItem(id: 'watermelon', name: 'Watermelon', aliases: ['watermelon', 'tarbooz', 'puchakaya'],
@@ -407,7 +416,7 @@ const indianFoods = <FoodItem>[
   FoodItem(id: 'coconut_water', name: 'Coconut water', aliases: ['coconut water', 'nariyal pani', 'elaneer', 'kobbari neellu', 'tender coconut'],
       unit: FoodUnit.glass, perUnit: Nutrients(kcal: 45, proteinG: 1.7, carbsG: 9, fatG: 0.5, fiberG: 2.6)),
   FoodItem(id: 'soft_drink', name: 'Soft drink', aliases: ['coke', 'pepsi', 'cola', 'sprite', 'thums up', 'soft drink', 'cold drink', 'fanta', 'limca', 'mazaa', 'maaza', 'frooti'],
-      unit: FoodUnit.glass, perUnit: Nutrients(kcal: 140, proteinG: 0, carbsG: 38, fatG: 0, fiberG: 0)),
+      unit: FoodUnit.glass, perUnit: Nutrients(kcal: 110, proteinG: 0, carbsG: 27.5, fatG: 0, fiberG: 0)), // 250 ml
   FoodItem(id: 'sugarcane_juice', name: 'Sugarcane juice', aliases: ['sugarcane juice', 'ganne ka ras', 'cheruku rasam'],
       unit: FoodUnit.glass, perUnit: Nutrients(kcal: 180, proteinG: 0, carbsG: 45, fatG: 0, fiberG: 0)),
   FoodItem(id: 'nimbu_pani', name: 'Nimbu pani', aliases: ['nimbu pani', 'lemonade', 'shikanji', 'lemon juice', 'lemon water'],

@@ -18,6 +18,10 @@ import '../core/environment/environment_service.dart';
 import '../core/food/food_log_service.dart';
 import '../core/coach/coach_context.dart';
 import '../core/coach/coach_nudges.dart';
+import '../core/coach/weekly_checkin.dart';
+import '../core/meaning/daily_readout.dart';
+import '../core/nudges/smart_notifier.dart';
+import '../core/progress/week_score_loader.dart';
 import '../core/cycle/cycle_health_source.dart';
 import '../core/cycle/cycle_service.dart';
 import '../core/coach/coach_service.dart';
@@ -59,6 +63,7 @@ import 'coach/coach_screen.dart';
 import 'legal/privacy_account_screen.dart';
 import 'food/food_screen.dart';
 import 'for_you.dart';
+import 'health_sources_screen.dart';
 import 'journal_screen.dart';
 import 'plans/plans_screen.dart';
 import 'sit_nudge_screen.dart';
@@ -190,6 +195,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    _life?.dispose();
     _todayRefresh.dispose();
     _coachRefresh.dispose();
     _progressRefresh.dispose();
@@ -198,12 +204,89 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
-  /// First word of the email's name part, e.g. "mohan.r@…" → "Mohan".
+  /// The name the user gave in onboarding (loaded once, refreshed after
+  /// editing answers).
+  String? _profileName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadName();
+    if (widget.autoSync) {
+      // The app, not widget tests.
+      _runWeekly();
+      _life = AppLifecycleListener(
+        onResume: () => NudgeEngagement(widget.store).recordOpen().catchError((Object _) {}),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => _smartNudges());
+    }
+  }
+
+  late final WeeklyCheckIn _weekly = WeeklyCheckIn(
+    widget.store,
+    _coach,
+    score: () => loadWeekScore(widget.store, _progress),
+    sleepDebtMin: () async => (await _coach.previewContext()).sleepDebtMin,
+  );
+
+  /// Each readout: re-plan tonight's reminders and the sleep quiet hours.
+  void _onReadout(DailyReadout r) {
+    final n = widget.nudgeService;
+    final bed = r.plan?.bedtime;
+    if (n == null) return;
+    () async {
+      try {
+        await n.refreshEvening(bed?.bedtime);
+        if (bed != null) await n.learnQuiet(bed: bed.bedtime, wake: bed.bedtime.add(bed.sleepGoal));
+      } catch (_) {}
+    }();
+  }
+
+  /// Reminders the user never acts on get paused (and we say so).
+  Future<void> _smartNudges() async {
+    final n = widget.nudgeService;
+    if (n == null) return;
+    try {
+      await NudgeEngagement(widget.store).recordOpen();
+      if (!await n.backOffIgnored() || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 8),
+        content: const Text("Walk reminders paused — you weren't using them this week."),
+        action: SnackBarAction(label: 'Keep them', onPressed: () => n.resumeWalk()),
+      ));
+    } catch (_) {}
+  }
+
+  AppLifecycleListener? _life;
+
+  /// Sunday evening: the coach's weekly message, and next week's reminder.
+  Future<void> _runWeekly() async {
+    try {
+      if (await _weekly.postIfDue()) _coachRefresh.value++;
+      await widget.nudgeService?.setWeeklyCheckIn(await _coach.hasConsent());
+    } catch (_) {
+      // A bonus: never break the app over it.
+    }
+  }
+
+  Future<void> _loadName() async {
+    try {
+      final n = (await widget.profileService?.loadProfile())?.name;
+      if (mounted && n != _profileName) setState(() => _profileName = n);
+    } catch (_) {}
+  }
+
+  /// Greeting name: the one they told us; else the email's first word,
+  /// but ONLY when it's clearly a first name ("mohan.r@…" → "Mohan").
+  /// "mohanreddyt786@…" gives no name — better "Evening" than a wrong one.
   String? get _firstName {
+    final given = _profileName?.split(' ').first;
+    if (given != null && given.isNotEmpty) return given;
     final email = widget.authService?.currentUser?.email;
     if (email == null || !email.contains('@')) return null;
-    final word = RegExp(r'[A-Za-z]+').firstMatch(email.split('@').first)?.group(0);
-    if (word == null || word.length < 2 || word.length > 12) return null;
+    final m = RegExp(r'^([A-Za-z]{2,10})(?:[._-]|$)').firstMatch(email.split('@').first);
+    final word = m?.group(1);
+    if (word == null) return null;
     return word[0].toUpperCase() + word.substring(1).toLowerCase();
   }
 
@@ -211,7 +294,10 @@ class _AppShellState extends State<AppShell> {
     final changed = index != _index;
     setState(() => _index = index);
     if (index == 0) _todayRefresh.value++;
-    if (changed && index == _coachTab) _coachRefresh.value++;
+    if (changed && index == _coachTab) {
+      _coachRefresh.value++;
+      if (widget.autoSync) _runWeekly();
+    }
     if (changed && index == _progressTab) _progressRefresh.value++;
   }
 
@@ -389,11 +475,21 @@ class _AppShellState extends State<AppShell> {
         // No readout yet: the sheet explains it fills in with data.
       }
       if (!mounted) return;
+      final nudges = widget.nudgeService;
+      bool? evening;
+      try {
+        evening = await nudges?.eveningRemindersOn();
+      } catch (_) {}
+      if (!mounted) return;
       await showPlanSheet(
         context,
         id: id,
         plan: plan,
         onOpenWalks: () => _openFeature(FeatureId.beginnerWalkPlan),
+        eveningReminders: evening,
+        onEveningReminders: nudges == null
+            ? null
+            : (on) => nudges.setEveningReminders(on, bed: plan?.bedtime?.bedtime),
       );
       return;
     }
@@ -417,7 +513,8 @@ class _AppShellState extends State<AppShell> {
         },
       ),
     ));
-    // Featured cards depend on the answers: refresh Today.
+    // Featured cards and the greeting depend on the answers: refresh.
+    await _loadName();
     _todayRefresh.value++;
   }
 
@@ -565,6 +662,8 @@ class _AppShellState extends State<AppShell> {
         final rows = <Widget>[
           if (widget.nudgeService != null) row('briefing', 'Morning briefing', Hux3D.sun, HuxColors.ringHabit),
           if (showCycle) row('cycle', 'Cycle', Hux3D.drop, HuxColors.accentPink, detail: 'Private'),
+          if (widget.dataSource == RingDataSource.health)
+            row('sources', 'Data sources', Hux3D.phone, HuxColors.ringSteps),
           row('privacy', 'Privacy & account', Hux3D.shield, HuxColors.accentIndigo),
           if (widget.profileService != null) ...[
             row('answers', 'Edit my answers', Hux3D.person, HuxColors.accentPurple),
@@ -649,6 +748,16 @@ class _AppShellState extends State<AppShell> {
         ));
       case 'cycle':
         await _openCycle();
+      case 'sources':
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => HealthSourcesScreen(
+            store: widget.store,
+            onSync: () async {
+              await widget.syncService.syncNow();
+              _todayRefresh.value++;
+            },
+          ),
+        ));
       case 'privacy':
         await _openPrivacy();
       case 'answers':
@@ -704,6 +813,8 @@ class _AppShellState extends State<AppShell> {
                         autoSync: widget.autoSync,
                         onOpenJourney: _openJourneyToday,
                         onOpenCycle: _openCycle,
+                        morningCheckIn: widget.autoSync, // on in the app, off in widget tests
+                        onReadout: _onReadout,
                         onCoachNudge: (n) {
                           _coachDraft.value = CoachDraft(n.topic, n.prompt);
                           _onDestinationSelected(_coachTab);

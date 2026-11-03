@@ -62,16 +62,60 @@ void main() {
     final morning = at(wake).value!;
     final evening = at(wake.add(const Duration(hours: 12))).value!;
     expect(evening, lessThan(morning));
-    expect(morning - evening, 24); // 12 h × 2.0
+    expect(morning - evening, 15); // (12 h − 2 h grace) × 1.5
+    expect(at(wake.add(const Duration(hours: 2))).value, morning); // grace
   });
 
-  test('activity and stress drain extra', () {
+  test('stress drains extra; walking never does', () {
     final now = wake.add(const Duration(hours: 4));
     final quiet = at(now).value!;
-    final busy = at(now, snaps: [
-      HealthSnapshot(timestamp: now, activeEnergyKcal: 400, stressIndex: 100),
-    ]).value!;
-    expect(quiet - busy, 25); // 400/25 = 16 → capped at 15, + stress 10
+    final walked = at(now, snaps: [HealthSnapshot(timestamp: now, activeEnergyKcal: 600)]).value!;
+    expect(walked, quiet);
+    final stressed = at(now, snaps: [HealthSnapshot(timestamp: now, stressIndex: 100)]).value!;
+    expect(quiet - stressed, 10);
+  });
+
+  test('a usual short sleeper is not "Good to go" (7 h floor)', () {
+    const shortBase = PersonalBaseline(
+      medianHrvMs: 50,
+      medianRestingHeartRateBpm: 60,
+      medianTotalSleep: Duration(hours: 5),
+      medianSkinTempCelsius: 33.6,
+      daysOfData: 14,
+    );
+    HuxCharge usualNight(int minutes) =>
+        calc.calculate(baseline: shortBase, lastNight: night(minutes: minutes), todaySnapshots: const [], now: wake);
+    final five = usualNight(300);
+    expect(five.morningCharge, 45); // capped: 70 − 2 h × 25 + 25
+    expect(five.level, ChargeLevel.low);
+    expect(five.shortSleep, isTrue);
+    expect(five.reason, contains('under the 7 hours'));
+    // A usual 6 h sleeper: a small penalty only (70 − 8).
+    final sixHourUsual = calc.calculate(
+      baseline: const PersonalBaseline(
+        medianHrvMs: 50,
+        medianRestingHeartRateBpm: 60,
+        medianTotalSleep: Duration(hours: 6),
+        medianSkinTempCelsius: 33.6,
+        daysOfData: 14,
+      ),
+      lastNight: night(minutes: 360),
+      todaySnapshots: const [],
+      now: wake,
+    );
+    expect(sixHourUsual.morningCharge, 62);
+    expect(sixHourUsual.level, ChargeLevel.good);
+    // And the 5 h sleeper who got 6 h is still capped at 70, not "full".
+    expect(usualNight(360).morningCharge, 70);
+    // 7 h+: no penalty.
+    expect(at(wake).shortSleep, isFalse);
+  });
+
+  test('a long day after a good night reads "Winding down", not "Running low"', () {
+    final late = wake.add(const Duration(hours: 15));
+    final c = at(late, snaps: [HealthSnapshot(timestamp: late, stressIndex: 100)]);
+    expect(c.level, ChargeLevel.low);
+    expect(c.label, 'Winding down');
   });
 
   test('a stale wake time stops draining after a normal day', () {
@@ -85,8 +129,14 @@ void main() {
       HealthSnapshot(timestamp: wake.add(const Duration(hours: 17)), activeEnergyKcal: 2000, stressIndex: 100),
     ]).value!;
     expect(exhausted, HuxChargeCalculator.floor);
-    final great = at(wake, lastNight: night(minutes: 900, hrv: 200, hr: 30)).value!;
-    expect(great, 100);
+    final great = at(wake, lastNight: night(minutes: 700, hrv: 200, hr: 30)).value!;
+    expect(great, lessThanOrEqualTo(100));
+    // Over 10 h is not a bonus: the sleep signal reads as usual (70).
+    expect(great, 88); // (100×0.4 + 70×0.4 + 100×0.2)
+  });
+
+  test('a long night alone does not raise the charge', () {
+    expect(at(wake, lastNight: night(minutes: 660)).morningCharge, 70);
   });
 
   test('still learning -> no number, honest label', () {

@@ -8,8 +8,14 @@
 /// 1. MORNING CHARGE — last night's recovery vs the user's OWN baseline.
 ///    A night exactly at your usual reads as [usualNightCharge] (70),
 ///    better nights rise toward 100, harder nights fall toward 0.
-/// 2. DAYTIME DRAIN — from the morning charge, energy drains with time
-///    awake, active calories and daytime stress.
+/// 2. A FLOOR ON "USUAL": comparing only with yourself hides chronic
+///    short sleep (5 h every night would read "usual" = 70). Under
+///    [minHealthySleep] the morning charge is pulled down and capped, so
+///    habitually short nights never read "Good to go".
+/// 3. DAYTIME DRAIN — from the morning charge, energy drains gently with
+///    time awake (after a short morning grace) and daytime stress.
+///    Movement does NOT drain it: the app asks you to walk, so walking
+///    must never make the number worse.
 ///
 /// PURE DART, deterministic, no I/O: everything is passed in. Wellness
 /// wording only — it describes energy, never health conditions.
@@ -37,12 +43,17 @@ class HuxCharge {
   /// there's nothing to explain.
   final String? reason;
 
+  /// True when last night was under [HuxChargeCalculator.minHealthySleep]
+  /// and that pulled the morning charge down (even if it was "usual").
+  final bool shortSleep;
+
   const HuxCharge({
     required this.value,
     required this.morningCharge,
     required this.level,
     required this.label,
     this.reason,
+    this.shortSleep = false,
   });
 
   bool get hasValue => value != null;
@@ -63,22 +74,41 @@ class HuxChargeCalculator {
   static const sleepWeight = 0.4;
   static const restingHrWeight = 0.2;
 
+  /// How rested the user SAID they feel (morning check-in, 1–5). Sensors
+  /// can't see this; for phone-only users it's half of what we know.
+  static const feelWeight = 0.3;
+  static const feelScores = [25.0, 45.0, 65.0, 78.0, 90.0];
+
+  // Short-sleep floor (adult guide: 7–9 h; NSF / AASM).
+  /// Under this, the morning charge is lowered even if the night was
+  /// "usual" for you.
+  static const minHealthySleep = Duration(hours: 7);
+
+  /// Points off the morning charge per hour under [minHealthySleep].
+  static const shortSleepPenaltyPerHour = 8.0;
+
+  /// …and the morning charge can't be higher than this "absolute" score
+  /// + [shortSleepCapMargin], where the absolute score is 70 at 7 h and
+  /// falls [absolutePerHour] per hour short (5 h → 20 → cap 45).
+  static const absolutePerHour = 25.0;
+  static const shortSleepCapMargin = 25.0;
+
+  /// Over this, extra sleep is not a bonus (illness, catch-up, data
+  /// from two sources): the sleep signal reads as "usual".
+  static const longSleep = Duration(hours: 10);
+
   // Daytime drain.
-  /// Points lost per hour awake (16 h awake ≈ 32 points) — gentle
-  /// enough that a usual night (70) still reads "okay" in the evening.
-  static const drainPerHourAwake = 2.0;
+  /// Hours after waking with no drain (getting going isn't tiredness).
+  static const graceHours = 2.0;
+
+  /// Points lost per hour awake after the grace (16 h awake ≈ 21 points)
+  /// — a usual night (70) ends the day around 50, not "empty".
+  static const drainPerHourAwake = 1.5;
 
   /// Hours awake stop counting after this. A wake time older than a
   /// normal day (missed night, stale data) must not pin Charge at the
   /// floor — that reads as "you're exhausted" when we simply don't know.
   static const maxHoursAwake = 17.0;
-
-  /// Active calories per point lost (400 kcal ≈ 16 points)…
-  static const kcalPerPoint = 25.0;
-
-  /// …but movement never costs more than this, so walking more is not
-  /// punished harder than it should be (the app also asks you to move).
-  static const maxActivityDrain = 15.0;
 
   /// Daytime stress 0–100 drains up to this many points.
   static const maxStressDrain = 10.0;
@@ -98,6 +128,7 @@ class HuxChargeCalculator {
     required SleepSession? lastNight,
     required List<HealthSnapshot> todaySnapshots,
     required DateTime now,
+    int? feel,
   }) {
     if (baseline.insufficient) {
       return HuxCharge(
@@ -119,11 +150,11 @@ class HuxChargeCalculator {
     }
 
     final baseSleep = baseline.medianTotalSleep;
-    if (lastNight != null &&
-        lastNight.segments.isNotEmpty &&
-        baseSleep != null &&
-        baseSleep.inMinutes > 0) {
-      final diff = (lastNight.totalSleep.inMinutes - baseSleep.inMinutes) / baseSleep.inMinutes;
+    final slept = lastNight == null || lastNight.segments.isEmpty ? null : lastNight.totalSleep;
+    if (slept != null && baseSleep != null && baseSleep.inMinutes > 0) {
+      var diff = (slept.inMinutes - baseSleep.inMinutes) / baseSleep.inMinutes;
+      // Very long nights are not "better recovery".
+      if (slept > longSleep && diff > 0) diff = 0;
       parts.add((name: 'sleep', score: _component(diff, sleepSpanPct), weight: sleepWeight));
     }
 
@@ -133,6 +164,10 @@ class HuxChargeCalculator {
       // Lower resting HR than usual = better recovery.
       final diff = (baseHr - lastHr) / baseHr;
       parts.add((name: 'hr', score: _component(diff, restingHrSpanPct), weight: restingHrWeight));
+    }
+
+    if (feel != null && feel >= 1 && feel <= 5 && parts.isNotEmpty) {
+      parts.add((name: 'feel', score: feelScores[feel - 1], weight: feelWeight));
     }
 
     if (parts.isEmpty) {
@@ -145,38 +180,51 @@ class HuxChargeCalculator {
     }
 
     final totalWeight = parts.fold<double>(0, (s, p) => s + p.weight);
-    final morning = parts.fold<double>(0, (s, p) => s + p.score * p.weight) / totalWeight;
+    var morning = parts.fold<double>(0, (s, p) => s + p.score * p.weight) / totalWeight;
+
+    // ---- short-sleep floor (absolute, not just vs your usual) ----
+    var short = false;
+    if (slept != null && slept < minHealthySleep) {
+      final hoursShort = (minHealthySleep - slept).inMinutes / 60.0;
+      final absolute = (usualNightCharge - hoursShort * absolutePerHour).clamp(0.0, 100.0);
+      final lowered = morning - hoursShort * shortSleepPenaltyPerHour;
+      final capped = absolute + shortSleepCapMargin;
+      morning = lowered < capped ? lowered : capped;
+      short = hoursShort >= 0.25;
+    }
 
     // ---- daytime drain ----
     var drain = 0.0;
+    var hoursAwake = 0.0;
     final wake = lastNight?.wakeTime.toUtc();
     final nowUtc = now.toUtc();
     if (wake != null && nowUtc.isAfter(wake)) {
-      final hoursAwake = (nowUtc.difference(wake).inMinutes / 60.0).clamp(0.0, maxHoursAwake);
-      drain += hoursAwake * drainPerHourAwake;
+      hoursAwake = (nowUtc.difference(wake).inMinutes / 60.0).clamp(0.0, maxHoursAwake);
+      drain += (hoursAwake - graceHours).clamp(0.0, maxHoursAwake) * drainPerHourAwake;
     }
 
-    int? activeKcal;
+    // Latest daytime stress reading (movement deliberately not counted).
     int? stress;
     for (final s in todaySnapshots.reversed) {
-      activeKcal ??= s.activeEnergyKcal;
       stress ??= s.stressIndex;
-      if (activeKcal != null && stress != null) break;
-    }
-    if (activeKcal != null && activeKcal > 0) {
-      drain += (activeKcal / kcalPerPoint).clamp(0.0, maxActivityDrain);
+      if (stress != null) break;
     }
     if (stress != null && stress > 0) drain += (stress.clamp(0, 100) / 100) * maxStressDrain;
 
     final morningInt = morning.round().clamp(floor, 100).toInt();
     final value = (morning - drain).round().clamp(floor, 100).toInt();
 
+    final level = _level(value);
+    // A good morning that has simply been used up by a long day isn't
+    // "running low" — it's the normal end of a day.
+    final windingDown = level == ChargeLevel.low && morningInt >= goodAt && hoursAwake >= 11;
     return HuxCharge(
       value: value,
       morningCharge: morningInt,
-      level: _level(value),
-      label: _label(_level(value)),
-      reason: _reason(parts, drain),
+      level: level,
+      label: windingDown ? 'Winding down' : _label(level),
+      reason: _reason(parts, drain, short ? slept : null),
+      shortSleep: short,
     );
   }
 
@@ -200,18 +248,23 @@ class HuxChargeCalculator {
 
   /// The overnight signal furthest from usual explains the number; if the
   /// night was ordinary but the day was long, the drain does.
-  static String? _reason(List<({String name, double score, double weight})> parts, double drain) {
+  static String? _reason(List<({String name, double score, double weight})> parts, double drain, Duration? shortSleep) {
     final strongest = parts.reduce(
         (a, b) => (a.score - usualNightCharge).abs() >= (b.score - usualNightCharge).abs() ? a : b);
     final offBy = strongest.score - usualNightCharge;
 
     if (offBy.abs() < 8) {
-      return drain >= 25 ? 'A normal night — a long day is using it up.' : 'A normal night for you.';
+      if (shortSleep != null) {
+        final h = shortSleep.inMinutes ~/ 60, m = (shortSleep.inMinutes % 60).toString().padLeft(2, '0');
+        return 'Usual for you, but ${h}h ${m}m is under the 7 hours most adults need.';
+      }
+      return drain >= 18 ? 'A normal night — a long day is using it up.' : 'A normal night for you.';
     }
     final better = offBy > 0;
     return switch (strongest.name) {
       'hrv' => better ? 'Your body recovered better than usual overnight.' : 'Your body recovered less than usual overnight.',
       'sleep' => better ? 'You slept longer than usual.' : 'You slept less than usual.',
+      'feel' => better ? 'You said you feel rested.' : 'You said you feel tired.',
       _ => better ? 'Your heart rested more than usual overnight.' : 'Your heart worked harder than usual overnight.',
     };
   }

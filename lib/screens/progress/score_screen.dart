@@ -7,9 +7,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/food/food_log_service.dart';
 import '../../core/progress/goal_score.dart';
 import '../../core/progress/progress_service.dart';
+import '../../core/progress/week_score_loader.dart';
 import '../../core/storage/health_store.dart';
 import '../../theme/hux_tokens.dart';
 import '../../widgets/hux/hux_3d.dart';
@@ -59,21 +59,7 @@ class _ScoreScreenState extends State<ScoreScreen> {
     });
   }
 
-  Future<WeekScore> _load() async {
-    final now = (widget.now ?? DateTime.now)();
-    final today = widget.progress.today();
-    final utc = now.toUtc();
-    final sessions = await widget.store.sleepSessionsBetween(utc.subtract(const Duration(days: 30)), utc);
-    final records = await widget.progress.records(today.subtract(const Duration(days: 15)));
-    final food = FoodLogService(widget.store);
-    return const WeekScoreCalculator().calculate(
-      today: today,
-      sessions: sessions,
-      records: records,
-      mealsByDay: await food.allMeals(),
-      proteinGoalG: await food.proteinGoal(),
-    );
-  }
+  Future<WeekScore> _load() => loadWeekScore(widget.store, widget.progress, now: (widget.now ?? DateTime.now)());
 
   @override
   Widget build(BuildContext context) {

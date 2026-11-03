@@ -4,14 +4,20 @@
 /// still show (Home must never break because, say, the weather is down).
 library;
 
+import '../checkin/sleep_checkin.dart';
 import '../coach/coach_nudges.dart';
+import '../ring/health_sources.dart';
 import '../environment/environment_service.dart';
 import '../food/food_log_service.dart';
 import '../journal/journal.dart';
 import '../cycle/cycle_service.dart';
 import '../journeys/journey_service.dart';
 import 'home_insights.dart';
+import '../meaning/day_plan.dart';
+import '../meaning/profile_tuning.dart';
+import '../meaning/sleep_debt.dart';
 import '../meaning/step_target.dart';
+import '../profile/profile_service.dart';
 import '../nudges/nudge_planner.dart';
 import '../nudges/nudge_service.dart';
 import '../plans/plan_progress.dart';
@@ -85,6 +91,12 @@ class HomeExtras {
   /// "Coach noticed": one pattern from the user's history (null = none).
   final CoachNudge? coachNudge;
 
+  /// Last 7 nights' shortfall vs your need (null = fewer than 3 nights).
+  final SleepDebt? sleepDebt;
+
+  /// Today's walking distance in metres (null = no app sends it).
+  final double? distanceTodayM;
+
   const HomeExtras({
     this.agenda = const [],
     this.food,
@@ -94,6 +106,8 @@ class HomeExtras {
     this.cycle,
     this.insights = HomeInsights.empty,
     this.coachNudge,
+    this.sleepDebt,
+    this.distanceTodayM,
   });
 
   static const empty = HomeExtras();
@@ -121,6 +135,14 @@ class HomeExtrasLoader {
     this.cycle,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now;
+
+  Future<double?> _distanceToday(DateTime at) async {
+    try {
+      return (await HealthSourcesStore(store).load()).distanceOn(at.toLocal());
+    } catch (_) {
+      return null;
+    }
+  }
 
   // One weather/air fetch per hour is plenty for Home.
   static ({DateTime at, String city, Outlooks outlooks})? _airCache;
@@ -262,7 +284,7 @@ class HomeExtrasLoader {
     try {
       final utc = at.toUtc();
       final today = localDayKey(at);
-      final sessions = await store.sleepSessionsBetween(utc.subtract(const Duration(days: 9)), utc);
+      final sessions = await SleepCheckInService.nightsBetween(store, utc.subtract(const Duration(days: 9)), utc);
       final byNight = <DateTime, int>{};
       for (final s in sessions) {
         final k = nightKeyFor(s.bedtime);
@@ -299,12 +321,27 @@ class HomeExtrasLoader {
       final local = at.toLocal();
       final midnight = DateTime(local.year, local.month, local.day).toUtc();
       insights = HomeInsights.compute(
-        sessions: await store.sleepSessionsBetween(utc.subtract(const Duration(days: 24)), utc),
+        sessions: await SleepCheckInService.nightsBetween(store, utc.subtract(const Duration(days: 24)), utc),
         todaySnapshots: await store.snapshotsBetween(midnight, utc.add(const Duration(minutes: 1))),
         now: at,
       );
     } catch (_) {
       // Optional: Home falls back to fewer tiles.
+    }
+
+    SleepDebt? debt;
+    try {
+      final known = sleep7.whereType<int>().toList()..sort();
+      if (known.isNotEmpty) {
+        var tuning = ProfileTuning.standard;
+        try {
+          tuning = ProfileTuning.of(await ProfileService(store).loadProfile());
+        } catch (_) {}
+        final usual = Duration(minutes: known[known.length ~/ 2]);
+        debt = SleepDebt.of(sleep7, need: DayPlanner.needFor(usual, minimum: tuning.minSleep));
+      }
+    } catch (_) {
+      // Optional.
     }
 
     CoachNudge? nudge;
@@ -325,6 +362,8 @@ class HomeExtrasLoader {
 
     return HomeExtras(
         coachNudge: nudge,
+        sleepDebt: debt,
+        distanceTodayM: await _distanceToday(at),
         agenda: agenda,
         food: food,
         sleep7: sleep7,
