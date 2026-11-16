@@ -39,7 +39,7 @@ class QuietWindow {
 }
 
 /// Wraps the real [Notifier] and applies rule 1.
-class SmartNotifier implements Notifier {
+class SmartNotifier implements Notifier, WakeNotifier {
   static const _quietKey = 'sleep_quiet_v1';
 
   final Notifier _inner;
@@ -67,12 +67,21 @@ class SmartNotifier implements Notifier {
 
   /// Times the user picked themselves (an alarm-like briefing, the
   /// journey wake-up) are never silenced.
-  static const _userTimed = {NudgeIds.morningBriefing, NudgeIds.journeyWake};
+  static const _userTimed = {NudgeIds.morningBriefing, NudgeIds.journeyWake, ...NudgeIds.allWake};
 
   @override
   Future<void> scheduleDaily(DailyNudge nudge) async {
     if (!_userTimed.contains(nudge.id) && (await quiet()).contains(nudge.at.hour * 60 + nudge.at.minute)) return;
     await _inner.scheduleDaily(nudge);
+  }
+
+  /// The wake alarm is the user's own time: never silenced by quiet hours.
+  @override
+  Future<bool> scheduleWake(DailyNudge nudge, {required bool chime}) async {
+    final inner = _inner;
+    if (inner is WakeNotifier) return (inner as WakeNotifier).scheduleWake(nudge, chime: chime);
+    await inner.scheduleDaily(nudge);
+    return false;
   }
 
   @override

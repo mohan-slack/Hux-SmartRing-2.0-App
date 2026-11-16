@@ -4,10 +4,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/meaning/day_plan.dart';
 import '../../core/meaning/evening_timing.dart';
 import '../../core/meaning/step_target.dart';
+import '../../core/nudges/nudge_planner.dart';
+import '../../core/nudges/wake_alarm.dart';
 import '../../core/profile/feature_catalog.dart';
 import '../../theme/hux_tokens.dart';
 import '../../widgets/hux/hux_3d.dart';
@@ -22,6 +25,8 @@ Future<bool> showPlanSheet(
   VoidCallback? onOpenWalks,
   bool? eveningReminders,
   Future<bool> Function(bool on)? onEveningReminders,
+  WakeAlarmSettings? wakeAlarm,
+  Future<WakeSaveResult> Function(WakeAlarmSettings s)? onWakeAlarm,
 }) async {
   final Widget body;
   switch (id) {
@@ -30,7 +35,13 @@ Future<bool> showPlanSheet(
     case FeatureId.effortTarget:
       body = _EffortBody(effort: plan?.effort);
     case FeatureId.targetBedtime:
-      body = _BedBody(bed: plan?.bedtime, reminders: eveningReminders, onReminders: onEveningReminders);
+      body = _BedBody(
+        bed: plan?.bedtime,
+        reminders: eveningReminders,
+        onReminders: onEveningReminders,
+        wake: wakeAlarm,
+        onWake: onWakeAlarm,
+      );
     default:
       return false;
   }
@@ -63,8 +74,8 @@ class _Header extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: huxInk)),
-                if (sub != null) Text(sub!, style: const TextStyle(fontSize: 15, color: huxMuted)),
+                Text(title, style: huxSora(textStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: huxInk))),
+                if (sub != null) Text(sub!, style: TextStyle(fontSize: 15, color: huxMuted)),
               ],
             ),
           ),
@@ -79,7 +90,7 @@ class _Why extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => HuxTile(
-        child: Text(text, style: const TextStyle(fontSize: 15, height: 1.4, color: huxInk)),
+        child: Text(text, style: TextStyle(fontSize: 15, height: 1.4, color: huxInk)),
       );
 }
 
@@ -119,7 +130,7 @@ class _StepsBody extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text('of ${StepTargetCalculator.formatSteps(s.target)}',
-                          style: const TextStyle(fontSize: 17, color: huxMuted)),
+                          style: TextStyle(fontSize: 17, color: huxMuted)),
                     ),
                   ],
                 ),
@@ -130,7 +141,7 @@ class _StepsBody extends StatelessWidget {
                   s.done
                       ? 'Done for today.'
                       : '${StepTargetCalculator.formatSteps(s.remaining)} to go — about ${s.minutesToGo} min of walking.',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk),
                 ),
               ],
             ),
@@ -198,7 +209,7 @@ class _EffortBody extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('easy', style: TextStyle(fontSize: 13, color: huxMuted)),
@@ -226,7 +237,11 @@ class _BedBody extends StatefulWidget {
   final bool? reminders;
   final Future<bool> Function(bool on)? onReminders;
 
-  const _BedBody({required this.bed, this.reminders, this.onReminders});
+  /// Gentle wake alarm (null = not offered).
+  final WakeAlarmSettings? wake;
+  final Future<WakeSaveResult> Function(WakeAlarmSettings s)? onWake;
+
+  const _BedBody({required this.bed, this.reminders, this.onReminders, this.wake, this.onWake});
 
   @override
   State<_BedBody> createState() => _BedBodyState();
@@ -234,6 +249,35 @@ class _BedBody extends StatefulWidget {
 
 class _BedBodyState extends State<_BedBody> {
   late bool? _on = widget.reminders;
+  late WakeAlarmSettings? _wake = widget.wake;
+  String? _wakeNote;
+
+  Future<void> _saveWake(WakeAlarmSettings next) async {
+    final save = widget.onWake;
+    if (save == null) return;
+    final r = await save(next);
+    if (!mounted) return;
+    setState(() {
+      _wake = next.copyWith(enabled: r == WakeSaveResult.exact || r == WakeSaveResult.approximate);
+      _wakeNote = switch (r) {
+        WakeSaveResult.exact => 'Set for ${next.at.label}, every day.',
+        WakeSaveResult.approximate =>
+          'Set for ${next.at.label}. Your phone may ring it a few minutes late — allow "Alarms & reminders" for HUX in Settings to make it exact.',
+        WakeSaveResult.refused => 'Notifications are off for HUX, so the alarm can\'t ring. Allow them in Settings.',
+        WakeSaveResult.off => null,
+      };
+    });
+  }
+
+  Future<void> _pickWake() async {
+    final w = _wake!;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: w.at.hour, minute: w.at.minute),
+      helpText: 'Wake time',
+    );
+    if (t != null) await _saveWake(w.copyWith(enabled: true, at: TimeOfDayHm(t.hour, t.minute)));
+  }
 
   static String _clock(DateTime t) {
     final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
@@ -260,7 +304,7 @@ class _BedBodyState extends State<_BedBody> {
                 HuxTileValue(_clock(at), size: 40),
                 const SizedBox(height: 6),
                 Text('for ${b.sleepGoal.inHours}h ${(b.sleepGoal.inMinutes % 60).toString().padLeft(2, '0')}m of sleep',
-                    style: const TextStyle(fontSize: 16, color: huxMuted)),
+                    style: TextStyle(fontSize: 16, color: huxMuted)),
                 const SizedBox(height: 14),
                 for (final (time, what) in [
                   (t!.lastCaffeine, 'Last chai or coffee'),
@@ -275,9 +319,9 @@ class _BedBodyState extends State<_BedBody> {
                         SizedBox(
                           width: 92,
                           child: Text(_clock(time),
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
                         ),
-                        Expanded(child: Text(what, style: const TextStyle(fontSize: 16, color: huxInk))),
+                        Expanded(child: Text(what, style: TextStyle(fontSize: 16, color: huxInk))),
                       ],
                     ),
                   ),
@@ -295,7 +339,7 @@ class _BedBodyState extends State<_BedBody> {
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _on!,
-                title: const Text('Remind me', style: TextStyle(fontWeight: FontWeight.w700, color: huxInk)),
+                title: Text('Remind me', style: TextStyle(fontWeight: FontWeight.w700, color: huxInk)),
                 subtitle: const Text('30 min before the last chai and before dinner, moving with your bedtime.'),
                 onChanged: (v) async {
                   final ok = await widget.onReminders!(v);
@@ -304,6 +348,53 @@ class _BedBodyState extends State<_BedBody> {
               ),
             ),
           ],
+        ],
+        if (_wake != null && widget.onWake != null) ...[
+          const SizedBox(height: 10),
+          HuxTile(
+            padding: const EdgeInsets.fromLTRB(16, 6, 8, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _wake!.enabled,
+                  title: Text('Gentle wake alarm', style: TextStyle(fontWeight: FontWeight.w700, color: huxInk)),
+                  subtitle: const Text('A quiet note 10 min before, then a soft rising chime — no jolt.'),
+                  onChanged: (v) => _saveWake(_wake!.copyWith(enabled: v)),
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    ActionChip(
+                      avatar: const Icon(Icons.alarm_rounded, size: 18),
+                      label: Text(_wake!.at.label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      onPressed: _pickWake,
+                    ),
+                    if (at != null && b != null)
+                      for (final s in WakeTimes.suggest(at, goal: b.sleepGoal))
+                        if (s.at.minutesOfDay != _wake!.at.minutesOfDay)
+                          ActionChip(
+                            label: Text(s.label),
+                            onPressed: () => _saveWake(_wake!.copyWith(enabled: true, at: s.at)),
+                          ),
+                  ],
+                ),
+                if (_wakeNote != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_wakeNote!, style: TextStyle(fontSize: 13, height: 1.35, color: huxInk)),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  'It rings as a notification: silent mode or Do Not Disturb can mute it. '
+                  'Keep your phone\'s own alarm for mornings you can\'t miss.',
+                  style: TextStyle(fontSize: 12, height: 1.35, color: huxMuted),
+                ),
+              ],
+            ),
+          ),
         ],
       ],
     );

@@ -33,7 +33,11 @@ void main() {
 
   /// UI 2.0: actions and body numbers live in the Why sheet. Opens it.
   Future<void> openWhy(WidgetTester tester) async {
-    await tester.tap(find.textContaining(RegExp(r'^(Why |What HUX)')).first);
+    final why = find.textContaining(RegExp(r'^(Why |What HUX)')).first;
+    // The hero is taller now: bring the button fully on screen first.
+    await Scrollable.ensureVisible(tester.element(why), alignment: 0.5);
+    await tester.pumpAndSettle();
+    await tester.tap(why);
     await tester.pumpAndSettle();
   }
 

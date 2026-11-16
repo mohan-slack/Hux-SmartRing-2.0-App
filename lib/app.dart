@@ -3,6 +3,7 @@
 /// a RingAdapter, HealthStore, or service itself.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/auth/auth_models.dart';
 import 'core/auth/auth_service.dart';
@@ -24,9 +25,10 @@ import 'screens/auth/welcome_screen.dart';
 import 'screens/legal/privacy_consent_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'theme/hux_theme.dart';
+import 'theme/hux_theme_controller.dart';
 import 'widgets/hux_intro.dart';
 
-class HuxApp extends StatelessWidget {
+class HuxApp extends StatefulWidget {
   final AuthService authService;
   final HealthStore store;
   final SyncService syncService;
@@ -63,26 +65,66 @@ class HuxApp extends StatelessWidget {
   });
 
   @override
+  State<HuxApp> createState() => _HuxAppState();
+}
+
+class _HuxAppState extends State<HuxApp> {
+  final _theme = HuxThemeController.instance;
+  late final AppLifecycleListener _life;
+
+  @override
+  void initState() {
+    super.initState();
+    _theme.addListener(_onTheme);
+    // Auto theme follows the clock: re-check when the app comes back.
+    _life = AppLifecycleListener(onResume: _theme.refresh);
+  }
+
+  @override
+  void dispose() {
+    _theme.removeListener(_onTheme);
+    _life.dispose();
+    super.dispose();
+  }
+
+  /// Colours are read when a widget builds, so a theme change rebuilds
+  /// every widget on screen (state is kept).
+  void _onTheme() {
+    if (!mounted) return;
+    setState(() {});
+    void rebuild(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(rebuild);
+    }
+
+    (context as Element).visitChildren(rebuild);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'HUX',
       debugShowCheckedModeBanner: false,
       scrollBehavior: const _NoStretchScrollBehavior(),
       theme: buildHuxTheme(),
-      builder: (context, child) => HuxIntro(mode: introMode, child: child ?? const SizedBox.shrink()),
+      // Status-bar icons: light on the dark theme, dark on the light one.
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _theme.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        child: HuxIntro(mode: widget.introMode, child: child ?? const SizedBox.shrink()),
+      ),
       home: _AuthGate(
-        authService: authService,
-        store: store,
-        syncService: syncService,
-        readoutService: readoutService,
-        storyService: storyService,
-        modeService: modeService,
-        dataSource: dataSource,
-        profileService: profileService,
-        mealAnalyzer: mealAnalyzer,
-        coachInvoke: coachInvoke,
-        nudgeService: nudgeService,
-        environmentService: environmentService,
+        authService: widget.authService,
+        store: widget.store,
+        syncService: widget.syncService,
+        readoutService: widget.readoutService,
+        storyService: widget.storyService,
+        modeService: widget.modeService,
+        dataSource: widget.dataSource,
+        profileService: widget.profileService,
+        mealAnalyzer: widget.mealAnalyzer,
+        coachInvoke: widget.coachInvoke,
+        nudgeService: widget.nudgeService,
+        environmentService: widget.environmentService,
       ),
     );
   }

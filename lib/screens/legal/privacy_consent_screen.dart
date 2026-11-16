@@ -146,7 +146,7 @@ class DataUseList extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < PrivacyNotice.uses.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: HuxColors.hairline),
+            if (i > 0) Divider(height: 1, color: HuxColors.hairline),
             Builder(builder: (context) {
               final u = PrivacyNotice.uses[i];
               final (icon, color) = _look(u.what);

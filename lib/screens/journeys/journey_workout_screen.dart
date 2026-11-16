@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/journeys/journey_content.dart';
@@ -205,7 +206,7 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: Colors.white,
+      backgroundColor: HuxColors.card,
       builder: (c) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -213,7 +214,7 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(move.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+              Text(move.name, style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
               const SizedBox(height: 12),
               _Line(icon: Icons.south_rounded, label: 'Easier', value: move.easier),
               _Line(icon: Icons.north_rounded, label: 'Harder', value: move.harder),
@@ -306,8 +307,8 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
                                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xDDFFFFFF))),
                               const SizedBox(height: 4),
                               Text(shown.name,
-                                  style: const TextStyle(
-                                      fontSize: 30, fontWeight: FontWeight.w800, height: 1.1, color: Colors.white)),
+                                  style: huxSora(textStyle: const TextStyle(
+                                      fontSize: 30, fontWeight: FontWeight.w800, height: 1.1, color: Colors.white))),
                               if (!_resting) ...[
                                 const SizedBox(height: 4),
                                 Text(stepAmount(_step),
@@ -318,13 +319,13 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
                         ),
                         if (_resting || timed)
                           Text(_clock(_left),
-                              style: const TextStyle(
+                              style: huxSora(textStyle: const TextStyle(
                                 fontSize: 56,
                                 fontWeight: FontWeight.w800,
                                 height: 1,
                                 color: Colors.white,
                                 fontFeatures: [FontFeature.tabularFigures()],
-                              )),
+                              ))),
                       ],
                     ),
                   ),
@@ -339,7 +340,7 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 children: [
                   if (_resting)
-                    const Text('Breathe. Shake out your arms and legs.',
+                    Text('Breathe. Shake out your arms and legs.',
                         style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: huxInk))
                   else ...[
                     for (final (i, c) in move.cues.indexed)
@@ -358,7 +359,7 @@ class _JourneyWorkoutScreenState extends State<JourneyWorkoutScreen> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                                child: Text(c, style: const TextStyle(fontSize: 16, height: 1.35, color: huxInk))),
+                                child: Text(c, style: TextStyle(fontSize: 16, height: 1.35, color: huxInk))),
                           ],
                         ),
                       ),

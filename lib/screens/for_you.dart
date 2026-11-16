@@ -55,7 +55,7 @@ class ForYouSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text('For you', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
             ),
             TextButton(onPressed: onSeeAll, child: const Text('See all')),
@@ -84,7 +84,7 @@ class FeatureCard extends StatelessWidget {
       label: '${info.title}. ${info.blurb}${info.isAvailable ? '' : ' Coming soon.'}',
       excludeSemantics: true,
       child: Material(
-        color: Color.alphaBlend(color.withValues(alpha: 0.13), Colors.white),
+        color: Color.alphaBlend(color.withValues(alpha: 0.13), HuxColors.card),
         borderRadius: BorderRadius.circular(22),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -99,12 +99,12 @@ class FeatureCard extends StatelessWidget {
                 Text(info.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.2, color: huxInk)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.2, color: huxInk)),
                 const SizedBox(height: 2),
                 Text(info.blurb,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, height: 1.3, color: huxMuted)),
+                    style: TextStyle(fontSize: 13, height: 1.3, color: huxMuted)),
               ],
             ),
           ),
@@ -252,8 +252,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   showCheckmark: false,
                   shape: const StadiumBorder(),
                   side: BorderSide.none,
-                  backgroundColor: Colors.white,
-                  selectedColor: huxInk,
+                  backgroundColor: HuxColors.card,
+                  selectedColor: huxSolid,
                   labelStyle: TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w700, color: selected ? Colors.white : huxInk),
                 ),
@@ -294,7 +294,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 for (final c in cats) ...[
                   Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 10),
-                    child: Text(c.label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: huxInk)),
+                    child: Text(c.label, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: huxInk)),
                   ),
                   _grid(inCategory(c)),
                   const SizedBox(height: 12),
@@ -324,7 +324,7 @@ class _FeatureTile extends StatelessWidget {
       label: '${info.title}. ${info.blurb}${on ? '' : ' Coming soon.'}',
       excludeSemantics: true,
       child: Material(
-        color: Color.alphaBlend(color.withValues(alpha: on ? 0.13 : 0.06), Colors.white),
+        color: Color.alphaBlend(color.withValues(alpha: on ? 0.13 : 0.06), HuxColors.card),
         borderRadius: BorderRadius.circular(22),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -345,8 +345,8 @@ class _FeatureTile extends StatelessWidget {
                     if (!on)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
-                        child: const Text('Soon', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: huxMuted)),
+                        decoration: BoxDecoration(color: HuxColors.card, borderRadius: BorderRadius.circular(999)),
+                        child: Text('Soon', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: huxMuted)),
                       ),
                   ],
                 ),

@@ -28,7 +28,15 @@ abstract class Notifier {
   Future<void> cancelAll();
 }
 
-class LocalNotifier implements Notifier {
+/// Optional extra: an alarm-like daily notification (own channel, soft
+/// chime, on-the-minute when the phone allows it).
+abstract class WakeNotifier {
+  /// [chime] false = a quiet heads-up. Returns true when the phone will
+  /// deliver it on the minute, false when it may run a few minutes late.
+  Future<bool> scheduleWake(DailyNudge nudge, {required bool chime});
+}
+
+class LocalNotifier implements Notifier, WakeNotifier {
   static const _channelId = 'hux_nudges';
   static const _channelName = 'Gentle nudges';
   static const _channelDescription = 'Walk reminders and other small, helpful nudges';
@@ -104,6 +112,72 @@ class LocalNotifier implements Notifier {
       body: nudge.body,
       matchDateTimeComponents: DateTimeComponents.time,
     );
+  }
+
+  static const _wakeDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'hux_wake',
+      'Gentle wake alarm',
+      channelDescription: 'A soft rising chime at the wake time you set',
+      importance: Importance.max,
+      priority: Priority.high,
+      category: AndroidNotificationCategory.alarm,
+      // res/raw/hux_gentle_wake.ogg (kept by res/raw/keep.xml).
+      sound: RawResourceAndroidNotificationSound('hux_gentle_wake'),
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+      visibility: NotificationVisibility.public,
+      icon: 'ic_stat_hux',
+      color: Color(0xFFF567B5),
+    ),
+    iOS: DarwinNotificationDetails(presentSound: true),
+  );
+
+  static const _wakeQuietDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'hux_wake_quiet',
+      'Wake heads-up',
+      channelDescription: 'A silent note 10 minutes before your wake alarm',
+      importance: Importance.low,
+      priority: Priority.low,
+      playSound: false,
+      enableVibration: false,
+      icon: 'ic_stat_hux',
+      color: Color(0xFFF567B5),
+    ),
+    iOS: DarwinNotificationDetails(presentSound: false),
+  );
+
+  @override
+  Future<bool> scheduleWake(DailyNudge nudge, {required bool chime}) async {
+    await init();
+    // On-the-minute timing needs the user's OK on Android 12+; without it
+    // the alarm still fires, possibly a few minutes late.
+    var exact = true;
+    final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      try {
+        exact = await android.canScheduleExactNotifications() ?? false;
+        if (!exact && chime) {
+          await android.requestExactAlarmsPermission();
+          exact = await android.canScheduleExactNotifications() ?? false;
+        }
+      } catch (_) {
+        exact = false;
+      }
+    }
+    final now = tz.TZDateTime.now(tz.local);
+    var next = tz.TZDateTime(tz.local, now.year, now.month, now.day, nudge.at.hour, nudge.at.minute);
+    if (!next.isAfter(now)) next = next.add(const Duration(days: 1));
+    await _plugin.zonedSchedule(
+      id: nudge.id,
+      scheduledDate: next,
+      notificationDetails: chime ? _wakeDetails : _wakeQuietDetails,
+      androidScheduleMode: exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexactAllowWhileIdle,
+      title: nudge.title,
+      body: nudge.body,
+      matchDateTimeComponents: DateTimeComponents.time,
+    );
+    return exact;
   }
 
   @override

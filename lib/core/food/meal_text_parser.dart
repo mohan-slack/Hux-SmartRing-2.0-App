@@ -49,6 +49,76 @@ class MealTextParser {
     'scoop', 'scoops', 'g', 'gm', 'gms', 'grams',
   };
 
+  /// Speech has no commas: "two roti dal and a glass of milk". Splits a
+  /// run-on sentence into one chunk per food by finding known dish names
+  /// (longest first, up to 4 words) — quantities and units stay with the
+  /// dish they come before. Words that aren't a known dish stay together
+  /// as their own chunk (the AI look-up can still handle them).
+  static String splitRunOn(String spoken) {
+    final words = spoken.toLowerCase().replaceAll(RegExp(r"[^\p{L}\p{N}\s.'-]", unicode: true), ' ').split(RegExp(r'\s+'))
+      ..removeWhere((w) => w.isEmpty);
+    final aliases = <String>{
+      for (final f in indianFoods) ...f.aliases.map((a) => a.toLowerCase()),
+    };
+    bool isLead(String w) =>
+        _numberWords.containsKey(w) || _sizeWords.containsKey(w) || _unitWords.contains(w) || double.tryParse(w) != null || w == 'of';
+    final chunks = <String>[];
+    var pending = <String>[]; // number / unit words waiting for their dish
+    var loose = <String>[]; // words that aren't a known dish
+    void flushLoose() {
+      if (loose.isNotEmpty) chunks.add([...pending, ...loose].join(' '));
+      if (loose.isNotEmpty) pending = [];
+      loose = [];
+    }
+
+    // Unknown words right after a dish describe THAT dish ("mutton kola
+    // urundai" is one dish, not mutton + something) — they join it.
+    var open = false;
+    var i = 0;
+    while (i < words.length) {
+      final w = words[i];
+      if (w == 'and' || w == 'aur' || w == 'with' || w == 'plus' || w == 'mariyu' || w == 'matthu') {
+        flushLoose();
+        open = false;
+        i++;
+        continue;
+      }
+      var matched = 0;
+      for (var n = 4; n >= 1 && matched == 0; n--) {
+        if (i + n > words.length) continue;
+        if (aliases.contains(words.sublist(i, i + n).join(' '))) matched = n;
+      }
+      if (matched > 0) {
+        flushLoose();
+        chunks.add([...pending, ...words.sublist(i, i + matched)].join(' '));
+        pending = [];
+        open = true;
+        i += matched;
+      } else if (_spokenFiller.contains(w)) {
+        i++; // "I had…", "for lunch", "today"
+      } else if (isLead(w)) {
+        flushLoose(); // a number starts the next food
+        open = false;
+        pending.add(w);
+        i++;
+      } else if (open && pending.isEmpty) {
+        chunks[chunks.length - 1] = '${chunks.last} $w';
+        i++;
+      } else {
+        loose.add(w);
+        i++;
+      }
+    }
+    flushLoose();
+    return chunks.where((c) => c.trim().isNotEmpty).join(', ');
+  }
+
+  static const _spokenFiller = {
+    'i', 'had', 'have', 'ate', 'eaten', 'just', 'some', 'my', 'for', 'at', 'the', 'today', 'tonight',
+    'breakfast', 'lunch', 'dinner', 'snack', 'morning', 'evening', 'night', 'um', 'uh', 'okay', 'ok',
+    'tinnanu', 'thinnanu', 'khaya', 'khaayi', 'saapten', 'sapten', 'maine', 'nenu',
+  };
+
   static ParsedMeal parse(String text) {
     final chunks = text
         .toLowerCase()

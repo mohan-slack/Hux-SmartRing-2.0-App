@@ -188,7 +188,7 @@ class HuxAskBar extends StatelessWidget {
                   child: Text(hint,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: HuxColors.mutedText)),
                 ),
-                const Icon(Icons.arrow_upward_rounded, size: 18, color: HuxColors.mutedText),
+                Icon(Icons.arrow_upward_rounded, size: 18, color: HuxColors.mutedText),
               ],
             ),
           ),
@@ -217,7 +217,7 @@ class HuxSectionTitle extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: HuxColors.ink)),
+            child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: HuxColors.ink)),
           ),
           if (actionLabel != null && onAction != null)
             TextButton(
@@ -274,7 +274,7 @@ class HuxAvatar extends StatelessWidget {
             shape: BoxShape.circle,
             color: HuxColors.card,
             border: Border.all(color: HuxColors.glassStroke),
-            boxShadow: const [BoxShadow(color: HuxColors.shadow, blurRadius: 10, offset: Offset(0, 3))],
+            boxShadow: [BoxShadow(color: HuxColors.shadow, blurRadius: 10, offset: const Offset(0, 3))],
           ),
           child: Text(initial,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -355,7 +355,7 @@ class HuxAgendaItem extends StatelessWidget {
                 ],
               ),
             ),
-            if (onTap != null) const Icon(Icons.chevron_right, color: HuxColors.mutedText, size: 20),
+            if (onTap != null) Icon(Icons.chevron_right, color: HuxColors.mutedText, size: 20),
           ],
         ),
       ),
@@ -400,7 +400,7 @@ class HuxStatGrid extends StatelessWidget {
             ),
           );
       rows.add(Row(children: [cell(stats[i]), if (i + 1 < stats.length) cell(stats[i + 1]) else const Spacer()]));
-      if (i + 2 < stats.length) rows.add(const Divider(height: 1, color: HuxColors.hairline));
+      if (i + 2 < stats.length) rows.add(Divider(height: 1, color: HuxColors.hairline));
     }
     return Column(children: rows);
   }
@@ -450,7 +450,7 @@ class HuxPillNavBar extends StatelessWidget {
                   color: HuxColors.card,
                   borderRadius: BorderRadius.circular(HuxRadii.chip),
                   border: Border.all(color: HuxColors.glassStroke),
-                  boxShadow: const [BoxShadow(color: HuxColors.shadow, blurRadius: 24, offset: Offset(0, 8))],
+                  boxShadow: [BoxShadow(color: HuxColors.shadow, blurRadius: 24, offset: const Offset(0, 8))],
                 ),
                 child: Row(
                   children: [
@@ -516,14 +516,14 @@ class HuxPillNavBar extends StatelessWidget {
                   child: Container(
                     width: 56,
                     height: 56,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
+                      gradient: const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [HuxColors.ringCharge, HuxColors.accentPurple],
                       ),
-                      boxShadow: [BoxShadow(color: HuxColors.shadow, blurRadius: 16, offset: Offset(0, 6))],
+                      boxShadow: [BoxShadow(color: HuxColors.shadow, blurRadius: 16, offset: const Offset(0, 6))],
                     ),
                     child: const Icon(Icons.add_rounded, color: HuxColors.onVivid, size: 30),
                   ),

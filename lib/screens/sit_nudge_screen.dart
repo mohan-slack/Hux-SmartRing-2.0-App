@@ -143,7 +143,7 @@ class _SitNudgeScreenState extends State<SitNudgeScreen> {
                     trailing: HuxPill(label: s.start.label, color: HuxColors.ringSteps),
                     onTap: editable ? () => _pickTime(s.start, (t) => _save(s.copyWith(start: t))) : null,
                   ),
-                  const Divider(height: 1, color: HuxColors.hairline),
+                  Divider(height: 1, color: HuxColors.hairline),
                   HuxListRow(
                     icon: Icons.nights_stay_outlined,
                     color: HuxColors.ringSleep,

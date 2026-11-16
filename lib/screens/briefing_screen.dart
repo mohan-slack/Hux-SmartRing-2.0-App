@@ -98,7 +98,7 @@ class _BriefingScreenState extends State<BriefingScreen> {
                           onChanged: _saving ? null : (v) => _save(s.copyWith(enabled: v)),
                         ),
                       ),
-                      const Divider(height: 1, color: HuxColors.hairline),
+                      Divider(height: 1, color: HuxColors.hairline),
                       HuxListRow(
                         icon: Icons.schedule_rounded,
                         color: HuxColors.ringSleep,

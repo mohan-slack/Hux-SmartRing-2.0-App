@@ -4,8 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Walk nudges: re-create scheduled notifications after a reboot.
          POST_NOTIFICATIONS is declared by flutter_local_notifications.
-         No exact-alarm permission: nudges are scheduled inexactly. -->
+         Nudges are scheduled inexactly (no exact alarm needed). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Gentle wake alarm ONLY: on-the-minute delivery at the wake time
+         the user sets. Asked when they turn the alarm on; if refused the
+         alarm still works, a few minutes late. Walk nudges stay inexact. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <!-- Health Connect, READ-ONLY (the v1 launch data source: HUX reads
          what the user's phone/watch/ring app already saved). Every
@@ -13,6 +17,9 @@
          → Health apps declaration (see docs/release/STORE_FORMS.md), and
          must match HealthStoreRingAdapter._readTypes exactly. HUX never
          requests WRITE permissions. -->
+    <!-- Voice meal logging: the mic is used only while you hold the
+         "Say it" sheet open; HUX keeps no audio. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY"/>
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
@@ -120,6 +127,10 @@
         <!-- So HUX can check whether Health Connect is installed before
              requesting permissions. -->
         <package android:name="com.google.android.apps.healthdata"/>
+        <!-- Voice meal logging uses the phone's speech recognizer. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
         <!-- Guided plans speak cues via the phone's text-to-speech engine
              (required for Android 11+ package visibility). -->
         <intent>

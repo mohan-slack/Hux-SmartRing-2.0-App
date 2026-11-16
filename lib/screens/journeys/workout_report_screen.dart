@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/journeys/workout_log.dart';
@@ -136,7 +137,7 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                     const SizedBox(height: 12),
                     _KcalBars(days: kcalByDay),
                     const SizedBox(height: 8),
-                    const Text('Estimates from move type, time and your weight.',
+                    Text('Estimates from move type, time and your weight.',
                         style: TextStyle(fontSize: 12, color: huxMuted)),
                   ],
                 ),
@@ -160,11 +161,11 @@ class _WorkoutReportScreenState extends State<WorkoutReportScreen> {
                             children: [
                               Expanded(
                                 child: Text(w.title,
-                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
                               ),
                               Text(
                                 '${_date(w.at.toLocal())} · ${(w.seconds / 60).round()} min · ≈${w.kcal.round()} kcal',
-                                style: const TextStyle(fontSize: 13, color: huxMuted),
+                                style: TextStyle(fontSize: 13, color: huxMuted),
                               ),
                             ],
                           ),
@@ -199,10 +200,10 @@ class _Big extends StatelessWidget {
             children: [
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: huxInk)),
+                child: Text(value, style: huxSora(textStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: huxInk))),
               ),
               const SizedBox(height: 2),
-              Text(label, style: const TextStyle(fontSize: 12, height: 1.25, color: huxMuted)),
+              Text(label, style: TextStyle(fontSize: 12, height: 1.25, color: huxMuted)),
             ],
           ),
         ),
@@ -232,7 +233,7 @@ class _KcalBars extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(d.kcal > 0 ? '${d.kcal.round()}' : '',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: huxMuted)),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: huxMuted)),
                     const SizedBox(height: 4),
                     Container(
                       height: top <= 0 || d.kcal <= 0 ? 6 : 6 + 84 * d.kcal / top,
@@ -247,7 +248,7 @@ class _KcalBars extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(_letters[d.day.weekday - 1],
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: huxInk)),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: huxInk)),
                   ],
                 ),
               ),
@@ -283,8 +284,8 @@ class _WeightCard extends StatelessWidget {
             ),
           ),
           if (last == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: Text('Add your weight once a week, same time of day — morning, before food, works best.',
                   style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted)),
             )
@@ -298,7 +299,7 @@ class _WeightCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text('${diff < 0 ? '−' : '+'}${diff.abs().toStringAsFixed(1)} kg since ${_short(weights.first.at)}',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxMuted)),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxMuted)),
                   ),
               ],
             ),
@@ -356,7 +357,7 @@ class _BmiCard extends StatelessWidget {
                     heightCm == null
                         ? 'Add your height${hasWeight ? '' : ' and weight'} to see where you sit on the scale.'
                         : 'Add your weight to see your BMI.',
-                    style: const TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
+                    style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
                   ),
                 ),
               ],
@@ -408,7 +409,7 @@ class _BmiCard extends StatelessWidget {
                         width: 32,
                         top: 30,
                         child: Text(cut == cut.roundToDouble() ? '${cut.round()}' : '$cut',
-                            textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: huxMuted)),
+                            textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: huxMuted)),
                       ),
                     Positioned(
                       left: (x - 8).clamp(0, w - 16).toDouble(),
@@ -417,7 +418,7 @@ class _BmiCard extends StatelessWidget {
                         width: 16,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: HuxColors.card,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: huxInk, width: 2),
                         ),
@@ -431,10 +432,10 @@ class _BmiCard extends StatelessWidget {
           if (range != null) ...[
             const SizedBox(height: 10),
             Text('Healthy range for ${heightCm!.round()} cm: ${range.$1.round()}–${range.$2.round()} kg',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
           ],
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Uses the Asian cut-offs followed in India (healthy 18.5–22.9). BMI is a rough guide — it can\'t tell muscle from fat.',
             style: TextStyle(fontSize: 12, height: 1.35, color: huxMuted),
           ),

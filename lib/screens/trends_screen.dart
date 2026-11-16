@@ -468,7 +468,7 @@ class _ChartCard extends StatelessWidget {
               Hux3DObject(_objectFor(icon), color: color, size: 34),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
+                child: Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
               ),
               if (hint != null) Text(hint!, style: textTheme.labelSmall?.copyWith(color: HuxColors.mutedText)),
             ],
@@ -553,7 +553,7 @@ class _SleepBarChart extends StatelessWidget {
     // doesn't make its bars tower misleadingly.
     final maxY = (dataMax + 1).clamp(8.0, double.infinity);
 
-    const greyBar = LinearGradient(
+    final greyBar = LinearGradient(
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
       colors: [HuxColors.chartBarGreyBottom, HuxColors.chartBarGreyTop],
@@ -739,7 +739,7 @@ class _MetricLineChart extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (_) => const FlLine(color: HuxColors.hairline, strokeWidth: 1),
+            getDrawingHorizontalLine: (_) => FlLine(color: HuxColors.hairline, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(

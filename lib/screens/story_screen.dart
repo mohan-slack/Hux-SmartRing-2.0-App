@@ -171,7 +171,7 @@ class _Observations extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < observations.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: HuxColors.hairline),
+            if (i > 0) Divider(height: 1, color: HuxColors.hairline),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: HuxSpacing.md),
               child: Row(

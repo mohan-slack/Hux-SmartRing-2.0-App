@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/journeys/workout_log.dart';
 import '../../widgets/hux/hux_3d.dart';
@@ -66,9 +67,9 @@ class WorkoutDoneScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text('Workout done!',
+                Text('Workout done!',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)),
+                    style: huxSora(textStyle: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white))),
                 const SizedBox(height: 6),
                 Text(record.title,
                     textAlign: TextAlign.center,
@@ -112,7 +113,7 @@ class WorkoutDoneScreen extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pop(),
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: huxInk,
+                    foregroundColor: const Color(0xFF1B1925),
                     minimumSize: const Size.fromHeight(56),
                     shape: const StadiumBorder(),
                   ),
@@ -148,12 +149,12 @@ class _Stat extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(value,
-                  style: const TextStyle(
+                  style: huxSora(textStyle: const TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                     fontFeatures: [FontFeature.tabularFigures()],
-                  )),
+                  ))),
             ),
             const SizedBox(height: 2),
             Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white70)),

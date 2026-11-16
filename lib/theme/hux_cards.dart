@@ -383,8 +383,8 @@ class SliderRangeCard extends StatelessWidget {
                             top: 0,
                             child: Opacity(
                               opacity: t,
-                              child: const CustomPaint(
-                                size: Size(12, 8),
+                              child: CustomPaint(
+                                size: const Size(12, 8),
                                 painter: _TriangleMarkerPainter(color: HuxColors.ink),
                               ),
                             ),

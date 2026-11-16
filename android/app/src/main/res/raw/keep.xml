@@ -2,4 +2,4 @@
 <!-- The notification icon is referenced only from Dart by name, so R8's
      resource shrinker can't see it. Keep it explicitly. -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_stat_hux" />
+    tools:keep="@drawable/ic_stat_hux,@raw/hux_gentle_wake" />

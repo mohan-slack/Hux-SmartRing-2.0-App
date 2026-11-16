@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
+import 'theme/hux_theme_controller.dart';
 import 'core/auth/supabase_auth_service.dart';
 import 'core/auth/supabase_config.dart';
 import 'core/food/meal_analyzer.dart';
@@ -57,6 +58,9 @@ Future<void> main() async {
   // Kept out of iCloud / Google backups — see db_location.dart.
   final dbPath = await huxDatabasePath();
   final store = await SqliteHealthStore.open(dbPath);
+
+  // Light / dark: the saved choice, or Auto by the clock.
+  await HuxThemeController.instance.load(store);
 
   // The ONE place the source is chosen. Everything below this line
   // only ever talks to the RingAdapter interface — nothing branches on

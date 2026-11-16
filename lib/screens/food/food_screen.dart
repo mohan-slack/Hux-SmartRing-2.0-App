@@ -3,9 +3,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/food/calorie_budget.dart';
+import '../../core/food/calorie_budget_service.dart';
 import '../../core/food/food_log_service.dart';
+import '../../core/food/indian_food_db.dart';
 import '../../core/food/meal_analyzer.dart';
 import '../../core/food/meal_text_parser.dart';
 import '../../core/food/nutrients.dart';
@@ -18,6 +22,8 @@ import '../../widgets/hux/hux_3d.dart';
 import '../../widgets/hux/hux_kit.dart';
 import '../../core/food/photo_privacy.dart';
 import 'meal_review_screen.dart';
+import 'plate_sheet.dart';
+import 'voice_log_sheet.dart';
 import '../../widgets/text_prompt.dart';
 
 class FoodScreen extends StatefulWidget {
@@ -30,11 +36,14 @@ class FoodScreen extends StatefulWidget {
   /// From onboarding, to suggest veg / egg / non-veg protein foods.
   final Diet? diet;
 
+  /// The user's app language: picks the voice-logging language.
+  final AppLanguage? language;
+
   /// Called after a meal is saved (e.g. to schedule a walk nudge).
   /// Failures here never block saving.
   final Future<void> Function(Meal meal)? onMealLogged;
 
-  const FoodScreen({super.key, required this.foodLog, this.analyzer, this.diet, this.onMealLogged});
+  const FoodScreen({super.key, required this.foodLog, this.analyzer, this.diet, this.language, this.onMealLogged});
 
   @override
   State<FoodScreen> createState() => _FoodScreenState();
@@ -47,6 +56,8 @@ class _FoodScreenState extends State<FoodScreen> {
   bool _loading = true;
   bool _analysing = false;
   List<UsualMeal> _usuals = const [];
+  CalorieTarget? _target;
+  late final CalorieBudgetService _budget = CalorieBudgetService(widget.foodLog.store);
 
   @override
   void initState() {
@@ -61,12 +72,17 @@ class _FoodScreenState extends State<FoodScreen> {
       final now = DateTime.now();
       final meals = await widget.foodLog.mealsFor(now);
       final goal = await widget.foodLog.proteinGoal();
+      CalorieTarget? target;
+      try {
+        target = await _budget.target();
+      } catch (_) {}
       var usuals = const <UsualMeal>[];
       try {
         usuals = await widget.foodLog.usuals(now: now);
       } catch (_) {}
       if (!mounted) return;
       setState(() {
+        _target = target;
         _usuals = usuals;
         _meals = meals;
         _total = meals.fold(Nutrients.zero, (s, m) => s + m.total);
@@ -102,6 +118,33 @@ class _FoodScreenState extends State<FoodScreen> {
   }
 
   // ---- type it ----
+
+  static bool _riceFirst(AppLanguage? l) => const {
+        AppLanguage.telugu, AppLanguage.tamil, AppLanguage.kannada, AppLanguage.malayalam,
+        AppLanguage.tenglish, AppLanguage.tanglish, AppLanguage.kanglish,
+      }.contains(l);
+
+  Future<void> _setUpBudget() async {
+    final a = await _budget.answers();
+    final h = await _budget.heightCm();
+    final w = await _budget.weightKg() ?? await widget.foodLog.bodyWeightKg();
+    if (!mounted) return;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: HuxColors.bg,
+      builder: (_) => _BudgetSetupSheet(service: _budget, sex: a?.sex, age: a?.age, activity: a?.activity, heightCm: h, weightKg: w),
+    );
+    if (saved == true) await _load();
+  }
+
+  Future<void> _sayIt() async {
+    final words = await showVoiceLogSheet(context, language: widget.language);
+    if (words == null || words.isEmpty || !mounted) return;
+    // Speech has no commas: split "two roti dal and curd" into foods.
+    await _logText(MealTextParser.splitRunOn(words));
+  }
 
   Future<void> _typeIt() async {
     final text = await showDialog<String>(
@@ -413,8 +456,8 @@ class _FoodScreenState extends State<FoodScreen> {
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk))),
-                  Text('${grams.round()} g', style: const TextStyle(fontSize: 14, color: huxMuted)),
+                  Expanded(child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk))),
+                  Text('${grams.round()} g', style: TextStyle(fontSize: 14, color: huxMuted)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -453,7 +496,7 @@ class _FoodScreenState extends State<FoodScreen> {
                       HuxTile(
                         child: Row(
                           children: [
-                            Expanded(child: Text(_loadError!, style: const TextStyle(fontSize: 15, color: huxInk))),
+                            Expanded(child: Text(_loadError!, style: TextStyle(fontSize: 15, color: huxInk))),
                             TextButton(onPressed: _load, child: const Text('Retry')),
                           ],
                         ),
@@ -491,7 +534,7 @@ class _FoodScreenState extends State<FoodScreen> {
                                     children: [
                                       HuxTileValue('${_total.proteinG.round()}', unit: 'g', size: 30),
                                       Text('protein of ${_goal.round()}',
-                                          style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                          style: TextStyle(fontSize: 13, color: huxMuted)),
                                     ],
                                   ),
                                 ],
@@ -516,25 +559,35 @@ class _FoodScreenState extends State<FoodScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // ---- calories: target, what's left, a plate that fits ----
+                    _CalorieCard(
+                      target: _target,
+                      eaten: _total.kcal,
+                      diet: widget.diet,
+                      riceBase: _riceFirst(widget.language),
+                      onSetUp: _setUpBudget,
+                    ),
+                    const SizedBox(height: 12),
+
                     // ---- the gap, as a number + two foods ----
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: gap.done ? const Color(0xFFE3F5EA) : const Color(0xFFFCE8F3),
+                        color: gap.done ? HuxColors.softGood : HuxColors.softPink,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
                         children: [
                           Text(gap.done ? 'Done' : '+${gap.remainingG.round()} g',
-                              style: TextStyle(
+                              style: huxSora(textStyle: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800,
                                 color: gap.done ? const Color(0xFF17804B) : const Color(0xFFA1306B),
-                              )),
+                              ))),
                           const SizedBox(width: 12),
                           Expanded(
                             child: gap.done
-                                ? const Text('Protein goal reached',
+                                ? Text('Protein goal reached',
                                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk))
                                 : Semantics(
                                     label: 'Add: ${gap.suggestions.map((s) => s.text).join(', ')}',
@@ -547,17 +600,17 @@ class _FoodScreenState extends State<FoodScreen> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                             decoration: BoxDecoration(
-                                              color: Colors.white,
+                                              color: HuxColors.card,
                                               borderRadius: BorderRadius.circular(999),
                                             ),
                                             child: Text.rich(TextSpan(children: [
                                               TextSpan(
                                                   text: s.food.name,
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                       fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
                                               TextSpan(
                                                   text: '  +${s.proteinG.round()}',
-                                                  style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                                  style: TextStyle(fontSize: 13, color: huxMuted)),
                                             ])),
                                           ),
                                       ],
@@ -570,7 +623,17 @@ class _FoodScreenState extends State<FoodScreen> {
                     const SizedBox(height: 20),
 
                     // ---- meals ----
-                    HuxTileLabel('Meals today', trailing: Text('${_meals.length}', style: const TextStyle(fontSize: 15, color: huxMuted))),
+                    HuxTileLabel(
+                      'Meals today',
+                      trailing: _meals.isEmpty
+                          ? Text('0', style: TextStyle(fontSize: 15, color: huxMuted))
+                          : TextButton.icon(
+                              onPressed: () => showPlateSheet(context,
+                                  title: "Today's plate", entries: [for (final m in _meals) ...m.items]),
+                              icon: const Icon(Icons.filter_vintage_rounded, size: 18),
+                              label: Text('Plate view · ${_meals.length}'),
+                            ),
+                    ),
                     const SizedBox(height: 10),
                     if (_meals.isEmpty)
                       ClipRRect(
@@ -616,6 +679,7 @@ class _FoodScreenState extends State<FoodScreen> {
                       for (var i = 0; i < _meals.length; i++) ...[
                         if (i > 0) const SizedBox(height: 8),
                         HuxTile(
+                          onTap: () => showPlateSheet(context, title: _meals[i].type.label, entries: _meals[i].items),
                           padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
                           child: Row(
                             children: [
@@ -626,12 +690,12 @@ class _FoodScreenState extends State<FoodScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(_meals[i].type.label,
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
                                     Text(
                                       _meals[i].items.map((e) => e.name).join(', '),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 14, color: huxMuted),
+                                      style: TextStyle(fontSize: 14, color: huxMuted),
                                     ),
                                   ],
                                 ),
@@ -641,14 +705,14 @@ class _FoodScreenState extends State<FoodScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text('${_meals[i].total.proteinG.round()} g',
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
                                   Text('${_meals[i].total.kcal.round()} kcal',
-                                      style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                      style: TextStyle(fontSize: 13, color: huxMuted)),
                                 ],
                               ),
                               IconButton(
                                 tooltip: 'Delete meal',
-                                icon: const Icon(Icons.close_rounded, color: huxMuted, size: 20),
+                                icon: Icon(Icons.close_rounded, color: huxMuted, size: 20),
                                 onPressed: () => _deleteMeal(i),
                               ),
                             ],
@@ -674,10 +738,10 @@ class _FoodScreenState extends State<FoodScreen> {
                                       Text(u.label,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
+                                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
                                       Text(
                                           '${u.type.label} · ${u.timesLogged} times · ${u.total.proteinG.round()} g protein',
-                                          style: const TextStyle(fontSize: 13, color: huxMuted)),
+                                          style: TextStyle(fontSize: 13, color: huxMuted)),
                                     ],
                                   ),
                                 ),
@@ -698,16 +762,16 @@ class _FoodScreenState extends State<FoodScreen> {
                           ActionChip(
                             label: Text('+ $label'),
                             onPressed: _analysing ? null : () => _logText(text),
-                            backgroundColor: Colors.white,
+                            backgroundColor: HuxColors.card,
                             side: BorderSide.none,
                             shape: const StadiumBorder(),
-                            labelStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk),
+                            labelStyle: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk),
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                           ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Approximate home-style values.',
                       style: TextStyle(fontSize: 13, color: huxMuted),
                       textAlign: TextAlign.center,
@@ -740,15 +804,22 @@ class _FoodScreenState extends State<FoodScreen> {
                         IconButton.filledTonal(
                           tooltip: 'Pick from gallery',
                           onPressed: _analysing ? null : () => _photo(ImageSource.gallery),
-                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: Colors.white),
-                          icon: const Icon(Icons.photo_library_outlined, color: huxInk),
+                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: HuxColors.card),
+                          icon: Icon(Icons.photo_library_outlined, color: huxInk),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          tooltip: 'Say what you ate',
+                          onPressed: _analysing ? null : _sayIt,
+                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: HuxColors.card),
+                          icon: Icon(Icons.mic_none_rounded, color: huxInk),
                         ),
                         const SizedBox(width: 8),
                         IconButton.filledTonal(
                           tooltip: 'Type what you ate',
                           onPressed: _analysing ? null : _typeIt,
-                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: Colors.white),
-                          icon: const Icon(Icons.edit_outlined, color: huxInk),
+                          style: IconButton.styleFrom(minimumSize: const Size(56, 56), backgroundColor: HuxColors.card),
+                          icon: Icon(Icons.edit_outlined, color: huxInk),
                         ),
                       ],
                     ),
@@ -757,6 +828,211 @@ class _FoodScreenState extends State<FoodScreen> {
                 if (_analysing) const HuxBusyOverlay(message: 'Reading your meal…'),
               ],
             ),
+    );
+  }
+}
+
+
+class _CalorieCard extends StatelessWidget {
+  final CalorieTarget? target;
+  final double eaten;
+  final Diet? diet;
+  final bool riceBase;
+  final VoidCallback onSetUp;
+
+  const _CalorieCard({required this.target, required this.eaten, required this.diet, required this.riceBase, required this.onSetUp});
+
+  static String _n(num v) {
+    final s = v.round().toString();
+    return s.length > 3 ? '${s.substring(0, s.length - 3)},${s.substring(s.length - 3)}' : s;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = target;
+    if (t == null) {
+      return HuxTile(
+        onTap: onSetUp,
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            const Hux3DObject(Hux3D.bowl, color: HuxColors.ringFood, size: 40, animate: false),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('How much should I eat?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                  Text('Set a daily calorie target — then HUX shows what\'s left and a plate that fits.',
+                      style: TextStyle(fontSize: 13, height: 1.3, color: huxMuted)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: huxMuted),
+          ],
+        ),
+      );
+    }
+    final left = t.kcal - eaten;
+    final over = left < 0;
+    final plate = over ? const <(FoodItem, double)>[] : CalorieBudget.plateFor(left, diet: diet, riceBase: riceBase);
+    return HuxTile(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: HuxTileLabel('Calories today')),
+              InkWell(
+                onTap: onSetUp,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Text('${_n(eaten)} of ${_n(t.kcal)}',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxMuted)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: LinearProgressIndicator(
+              value: (eaten / t.kcal).clamp(0.0, 1.0),
+              minHeight: 10,
+              color: over ? HuxColors.stretched : HuxColors.ringFood,
+              backgroundColor: huxTrack,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            over ? '${_n(-left)} kcal over today' : '${_n(left)} kcal left',
+            style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: over ? HuxColors.stretched : huxInk)),
+          ),
+          const SizedBox(height: 4),
+          if (over)
+            Text('No problem — a 15-minute walk after dinner and a lighter breakfast tomorrow evens it out.',
+                style: TextStyle(fontSize: 14, height: 1.35, color: huxInk))
+          else if (plate.isEmpty)
+            Text('Nearly there — fruit, buttermilk or a few nuts if you\'re hungry.',
+                style: TextStyle(fontSize: 14, height: 1.35, color: huxInk))
+          else
+            Text('A plate that fits: ${CalorieBudget.describe(plate)} (≈${_n(CalorieBudget.kcalOf(plate))} kcal)',
+                style: TextStyle(fontSize: 14, height: 1.35, color: huxInk)),
+          const SizedBox(height: 6),
+          Text(t.why, style: TextStyle(fontSize: 12, height: 1.3, color: huxMuted)),
+        ],
+      ),
+    );
+  }
+}
+
+class _BudgetSetupSheet extends StatefulWidget {
+  final CalorieBudgetService service;
+  final BodySex? sex;
+  final int? age;
+  final ActivityLevel? activity;
+  final double? heightCm;
+  final double? weightKg;
+
+  const _BudgetSetupSheet({required this.service, this.sex, this.age, this.activity, this.heightCm, this.weightKg});
+
+  @override
+  State<_BudgetSetupSheet> createState() => _BudgetSetupSheetState();
+}
+
+class _BudgetSetupSheetState extends State<_BudgetSetupSheet> {
+  late BodySex? _sex = widget.sex;
+  late ActivityLevel _activity = widget.activity ?? ActivityLevel.light;
+  late final _age = TextEditingController(text: widget.age?.toString() ?? '');
+  late final _height = TextEditingController(text: widget.heightCm?.round().toString() ?? '');
+  late final _weight = TextEditingController(text: widget.weightKg?.toStringAsFixed(0) ?? '');
+  String? _error;
+
+  @override
+  void dispose() {
+    _age.dispose();
+    _height.dispose();
+    _weight.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final age = int.tryParse(_age.text.trim());
+    final h = double.tryParse(_height.text.trim());
+    final w = double.tryParse(_weight.text.trim());
+    if (_sex == null || age == null || h == null || w == null) {
+      setState(() => _error = 'Please fill in all four.');
+      return;
+    }
+    if (age < CalorieBudget.minAge) {
+      setState(() => _error = 'Calorie targets are for adults (18+). HUX still tracks your protein and meals.');
+      return;
+    }
+    if (age > 100 || h < 120 || h > 230 || w < 30 || w > 250) {
+      setState(() => _error = 'Check the numbers: age 18–100, height 120–230 cm, weight 30–250 kg.');
+      return;
+    }
+    await widget.service.save(sex: _sex!, age: age, activity: _activity, heightCm: h, weightKg: w);
+    if (mounted) Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget field(TextEditingController c, String label, String suffix) => Expanded(
+          child: TextField(
+            controller: c,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: label, suffixText: suffix),
+          ),
+        );
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Your calorie target', style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
+            const SizedBox(height: 4),
+            Text('Four answers for the standard formula (Mifflin-St Jeor). Stays on this phone.',
+                style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted)),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final (s, l) in const [(BodySex.female, 'Woman'), (BodySex.male, 'Man'), (BodySex.unsaid, 'Prefer not to say')])
+                  ChoiceChip(label: Text(l), selected: _sex == s, onSelected: (_) => setState(() => _sex = s)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(children: [field(_age, 'Age', 'yrs'), const SizedBox(width: 10), field(_height, 'Height', 'cm'), const SizedBox(width: 10), field(_weight, 'Weight', 'kg')]),
+            const SizedBox(height: 14),
+            Text('How active is a usual day?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final a in ActivityLevel.values)
+                  ChoiceChip(label: Text(a.label), selected: _activity == a, onSelected: (_) => setState(() => _activity = a)),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: const TextStyle(fontSize: 14, color: HuxColors.rundown)),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _save,
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), shape: const StadiumBorder()),
+              child: const Text('Save', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(height: 6),
+            Text('Pregnant, breastfeeding, or managing a health condition? Ask your doctor for your target.',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: huxMuted)),
+          ],
+        ),
+      ),
     );
   }
 }

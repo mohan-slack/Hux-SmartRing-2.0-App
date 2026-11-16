@@ -8,6 +8,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../theme/hux_fonts.dart';
 
 import '../core/modes/mode.dart';
 import '../core/modes/mode_service.dart';
@@ -367,7 +368,7 @@ class _ActiveModeCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxNightMuted)),
           const SizedBox(height: 6),
-          Text(countdown, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
+          Text(countdown, style: huxSora(textStyle: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white))),
           const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
@@ -403,8 +404,8 @@ class _Heading extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk))),
-          Text(note, style: const TextStyle(fontSize: 14, color: huxMuted)),
+          Expanded(child: Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk))),
+          Text(note, style: TextStyle(fontSize: 14, color: huxMuted)),
         ],
       );
 }

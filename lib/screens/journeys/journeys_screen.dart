@@ -3,11 +3,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/cycle/cycle_service.dart';
 
 import '../../core/journeys/journey_content.dart';
 import '../../core/journeys/journey_models.dart';
+import '../../core/food/food_log_service.dart';
 import '../../core/journeys/journey_service.dart';
 import '../../core/nudges/nudge_service.dart';
 import '../../core/profile/user_profile.dart';
@@ -30,7 +32,21 @@ class JourneysScreen extends StatefulWidget {
   /// Optional: gentle period-day options in Journeys.
   final CycleService? cycle;
 
-  const JourneysScreen({super.key, required this.journeys, this.nudges, this.diet, this.cycle});
+  /// Passed on to the Today screen (adapting to Charge and meals).
+  final int? morningCharge;
+  final bool shortSleep;
+  final FoodLogService? food;
+
+  const JourneysScreen({
+    super.key,
+    required this.journeys,
+    this.nudges,
+    this.diet,
+    this.cycle,
+    this.morningCharge,
+    this.shortSleep = false,
+    this.food,
+  });
 
   @override
   State<JourneysScreen> createState() => _JourneysScreenState();
@@ -60,7 +76,14 @@ class _JourneysScreenState extends State<JourneysScreen> {
 
   Future<void> _openToday() async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => JourneyTodayScreen(journeys: widget.journeys, nudges: widget.nudges, cycle: widget.cycle),
+      builder: (_) => JourneyTodayScreen(
+        journeys: widget.journeys,
+        nudges: widget.nudges,
+        cycle: widget.cycle,
+        morningCharge: widget.morningCharge,
+        shortSleep: widget.shortSleep,
+        food: widget.food,
+      ),
     ));
     await _load();
   }
@@ -154,7 +177,7 @@ class _JourneyCard extends StatelessWidget {
     final color = journeyColor(def.id);
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+      decoration: BoxDecoration(color: HuxColors.card, borderRadius: BorderRadius.circular(24)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -186,7 +209,7 @@ class _JourneyCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(def.title,
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
+                                style: huxSora(textStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white))),
                             Text(def.subtitle,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -198,7 +221,7 @@ class _JourneyCard extends StatelessWidget {
                       Column(
                         children: [
                           Text('${def.days}',
-                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, height: 1, color: Colors.white)),
+                              style: huxSora(textStyle: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, height: 1, color: Colors.white))),
                           const Text('days', style: TextStyle(fontSize: 13, color: Color(0xE6FFFFFF))),
                         ],
                       ),
@@ -225,7 +248,7 @@ class _JourneyCard extends StatelessWidget {
                           margin: const EdgeInsets.only(top: 6, right: 10),
                           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                         ),
-                        Expanded(child: Text(h, style: const TextStyle(fontSize: 15, height: 1.35, color: huxInk))),
+                        Expanded(child: Text(h, style: TextStyle(fontSize: 15, height: 1.35, color: huxInk))),
                       ],
                     ),
                   ),

@@ -97,6 +97,10 @@
 		<!-- AIZO BLE adapter (HUX_SOURCE=aizo): connects to a real ring over
 	     the PROVISIONAL, reverse-engineered protocol in
 	     lib/core/ring/aizo_ble/aizo_protocol.dart. -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>HUX uses the microphone only while you say what you ate, to log your meal. No audio is kept.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>HUX turns what you say into a meal entry using Apple's speech recognition. No audio is kept by HUX.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>HUX uses the camera only when you choose to photograph a meal, to estimate its protein and calories.</string>
 		<key>NSPhotoLibraryUsageDescription</key>

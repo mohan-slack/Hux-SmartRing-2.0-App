@@ -6,6 +6,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/progress/goal_score.dart';
 import '../../core/progress/progress_service.dart';
@@ -14,6 +15,9 @@ import '../../core/storage/health_store.dart';
 import '../../theme/hux_tokens.dart';
 import '../../widgets/hux/hux_3d.dart';
 import '../../widgets/hux/hux_kit.dart';
+import '../../core/share/summary_text.dart';
+import '../../widgets/weight_card.dart';
+import '../../widgets/whatsapp_share.dart';
 
 ({Hux3D object, Color color}) scorePartLook(ScorePart p) => switch (p) {
       ScorePart.sleep => (object: Hux3D.bed, color: HuxColors.ringSleep),
@@ -87,6 +91,16 @@ class _ScoreScreenState extends State<ScoreScreen> {
                     : _PartView(part: score.parts[_tab]!),
               ),
             ),
+            if (_tab == null) ...[
+              const SizedBox(height: 12),
+              WeightCard(store: widget.store, refreshSignal: widget.refreshSignal, now: widget.now),
+              const SizedBox(height: 4),
+              WhatsAppShareButton(
+                label: 'Share my week on WhatsApp',
+                emptyMessage: 'Not enough data for a week summary yet.',
+                text: () async => SummaryText.weekly(score),
+              ),
+            ],
           ],
         );
       },
@@ -112,9 +126,9 @@ class _Tabs extends StatelessWidget {
           showCheckmark: false,
           onSelected: (_) => onSelect(value),
           labelStyle: TextStyle(fontWeight: FontWeight.w700, color: on ? Colors.white : huxInk),
-          selectedColor: huxInk,
+          selectedColor: huxSolid,
           backgroundColor: HuxColors.card,
-          shape: const StadiumBorder(side: BorderSide(color: HuxColors.glassStroke)),
+          shape: StadiumBorder(side: BorderSide(color: HuxColors.glassStroke)),
         ),
       );
     }
@@ -162,9 +176,9 @@ class _Overall extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(overall?.toString() ?? '–',
-                            style: const TextStyle(
-                                fontSize: 52, fontWeight: FontWeight.w800, height: 1, color: huxInk)),
-                        const Text('out of 100', style: TextStyle(fontSize: 13, color: huxMuted)),
+                            style: huxSora(textStyle: TextStyle(
+                                fontSize: 52, fontWeight: FontWeight.w800, height: 1, color: huxInk))),
+                        Text('out of 100', style: TextStyle(fontSize: 13, color: huxMuted)),
                         if (change != null) ...[
                           const SizedBox(height: 6),
                           Container(
@@ -191,7 +205,7 @@ class _Overall extends StatelessWidget {
                     ? 'Your score starts after 3 days of sleep, steps or meals.'
                     : 'Each colour is the points that part added. Tap a part to see its 7 days.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
+                style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
               ),
             ],
           ),
@@ -230,12 +244,12 @@ class _PartRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(part.part.label,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
                   const SizedBox(height: 2),
                   Text(part.facts.first,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, color: huxMuted)),
+                      style: TextStyle(fontSize: 13, color: huxMuted)),
                   const SizedBox(height: 6),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
@@ -254,9 +268,9 @@ class _PartRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(part.score?.toString() ?? '–',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                    style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
                 Text(points == null ? 'no data' : '+${points!.round()} pts',
-                    style: const TextStyle(fontSize: 12, color: huxMuted)),
+                    style: TextStyle(fontSize: 12, color: huxMuted)),
               ],
             ),
           ],
@@ -293,9 +307,9 @@ class _PartView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('${part.part.label} this week',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
                         Text(part.score == null ? 'Not enough data' : '${part.score} / 100',
-                            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: huxInk)),
+                            style: huxSora(textStyle: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: huxInk))),
                       ],
                     ),
                   ),
@@ -318,7 +332,7 @@ class _PartView extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.fade,
                                   softWrap: false,
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: huxMuted)),
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: huxMuted)),
                               const SizedBox(height: 4),
                               Container(
                                 height: d.value == null ? 6 : math.max(6.0, 100 * d.value!),
@@ -329,7 +343,7 @@ class _PartView extends StatelessWidget {
                               ),
                               const SizedBox(height: 6),
                               Text(_days[d.day.weekday - 1],
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: huxInk)),
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: huxInk)),
                             ],
                           ),
                         ),
@@ -360,12 +374,12 @@ class _PartView extends StatelessWidget {
                         decoration: BoxDecoration(color: look.color, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(child: Text(f, style: const TextStyle(fontSize: 15, height: 1.35, color: huxInk))),
+                      Expanded(child: Text(f, style: TextStyle(fontSize: 15, height: 1.35, color: huxInk))),
                     ],
                   ),
                 ),
               const SizedBox(height: 4),
-              Text('How it works: ${part.part.how}.', style: const TextStyle(fontSize: 13, color: huxMuted)),
+              Text('How it works: ${part.part.how}.', style: TextStyle(fontSize: 13, color: huxMuted)),
             ],
           ),
         ),

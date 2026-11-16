@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'hux_fonts.dart';
 import 'package:flutter/services.dart';
 
 import 'hux_motion.dart';
@@ -56,11 +57,11 @@ class HuxHeroCard extends StatelessWidget {
                       if (eyebrow != null)
                         Text(eyebrow!, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: label)),
                       Text(title,
-                          style: const TextStyle(
-                              fontSize: 22, fontWeight: FontWeight.w800, height: 1.2, color: HuxColors.ink)),
+                          style: huxSora(textStyle: TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.w800, height: 1.2, color: HuxColors.ink))),
                       if (subtitle != null) ...[
                         const SizedBox(height: 4),
-                        Text(subtitle!, style: const TextStyle(fontSize: 15, height: 1.35, color: HuxColors.mutedText)),
+                        Text(subtitle!, style: TextStyle(fontSize: 15, height: 1.35, color: HuxColors.mutedText)),
                       ],
                     ],
                   ),
@@ -95,7 +96,7 @@ class HuxCard extends StatelessWidget {
         color: HuxColors.card,
         borderRadius: radius,
         border: Border.all(color: HuxColors.glassStroke),
-        boxShadow: const [BoxShadow(color: HuxColors.shadow, blurRadius: 20, offset: Offset(0, 6))],
+        boxShadow: [BoxShadow(color: HuxColors.shadow, blurRadius: 20, offset: const Offset(0, 6))],
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -221,7 +222,7 @@ class HuxListRow extends StatelessWidget {
               if (trailing != null)
                 trailing!
               else if (onTap != null)
-                const Icon(Icons.chevron_right, color: HuxColors.mutedText, size: 20),
+                Icon(Icons.chevron_right, color: HuxColors.mutedText, size: 20),
             ],
           ),
         ),

@@ -70,7 +70,7 @@ class _HealthSourcesScreenState extends State<HealthSourcesScreen> {
                 Text(
                   'What your apps send to $app, and so to HUX. A band or ring only shows here if its own app '
                   'WRITES that data to $app.',
-                  style: const TextStyle(fontSize: 14, height: 1.4, color: huxMuted),
+                  style: TextStyle(fontSize: 14, height: 1.4, color: huxMuted),
                 ),
                 const SizedBox(height: 12),
                 if (r.checkedAt == null)
@@ -105,10 +105,10 @@ class _HealthSourcesScreenState extends State<HealthSourcesScreen> {
                             : '1. In your band\'s app, turn on Health Connect sync.\n'
                                 '2. Settings → Health Connect → App permissions → that app → allow WRITE.\n'
                                 '3. Same place → HUX → Allow all.',
-                        style: const TextStyle(fontSize: 14, height: 1.5, color: huxInk),
+                        style: TextStyle(fontSize: 14, height: 1.5, color: huxInk),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Some apps only send steps (no sleep or heart rate) — that\'s the app\'s choice, not a HUX setting. '
                         'HUX then uses your morning check-in for sleep.',
                         style: TextStyle(fontSize: 13, height: 1.35, color: huxMuted),
@@ -163,7 +163,7 @@ class _Row extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(kind.label,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
                       ),
                       Icon(ok ? Icons.check_circle_rounded : Icons.cancel_outlined,
                           size: 20, color: ok ? HuxColors.ringFood : huxMuted),
@@ -175,7 +175,7 @@ class _Row extends StatelessWidget {
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ok ? huxInk : huxMuted),
                   ),
                   const SizedBox(height: 2),
-                  Text(kind.usedFor, style: const TextStyle(fontSize: 13, height: 1.3, color: huxMuted)),
+                  Text(kind.usedFor, style: TextStyle(fontSize: 13, height: 1.3, color: huxMuted)),
                 ],
               ),
             ),

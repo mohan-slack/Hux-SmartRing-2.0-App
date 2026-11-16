@@ -8,10 +8,13 @@ import '../checkin/sleep_checkin.dart';
 import '../coach/coach_nudges.dart';
 import '../ring/health_sources.dart';
 import '../environment/environment_service.dart';
+import '../environment/outlook.dart';
 import '../food/food_log_service.dart';
 import '../journal/journal.dart';
 import '../cycle/cycle_service.dart';
 import '../journeys/journey_service.dart';
+import '../journeys/workout_log.dart';
+import '../water/water_log.dart';
 import 'home_insights.dart';
 import '../meaning/day_plan.dart';
 import '../meaning/profile_tuning.dart';
@@ -97,6 +100,9 @@ class HomeExtras {
   /// Today's walking distance in metres (null = no app sends it).
   final double? distanceTodayM;
 
+  /// Water glasses today and the goal (null = Home has no water tile).
+  final WaterToday? water;
+
   const HomeExtras({
     this.agenda = const [],
     this.food,
@@ -108,6 +114,7 @@ class HomeExtras {
     this.coachNudge,
     this.sleepDebt,
     this.distanceTodayM,
+    this.water,
   });
 
   static const empty = HomeExtras();
@@ -152,6 +159,7 @@ class HomeExtrasLoader {
   Future<HomeExtras> load() async {
     final at = now();
     final agenda = <AgendaEntry>[];
+    var heat = HeatLevel.none;
 
     // Best time to walk (air & heat), when a city is set.
     try {
@@ -166,6 +174,7 @@ class HomeExtrasLoader {
           o = await env.outlooks(city);
           _airCache = (at: at, city: city.name, outlooks: o);
         }
+        heat = o.today.heat;
         final walk = o.today.bestWalk;
         if (walk != null) {
           agenda.add(AgendaEntry(
@@ -360,7 +369,18 @@ class HomeExtrasLoader {
       // Optional.
     }
 
+    WaterToday? water;
+    try {
+      water = WaterToday(
+        glasses: await WaterLog(store, now: now).today(),
+        goal: WaterGoal.of(weightKg: await WorkoutLog(store, now: now).latestWeight(), heat: heat),
+      );
+    } catch (_) {
+      // Optional.
+    }
+
     return HomeExtras(
+        water: water,
         coachNudge: nudge,
         sleepDebt: debt,
         distanceTodayM: await _distanceToday(at),

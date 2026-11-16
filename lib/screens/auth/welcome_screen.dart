@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../theme/hux_motion.dart';
@@ -50,11 +51,11 @@ class WelcomeScreen extends StatelessWidget {
                     child: Image.asset('assets/images/brand/hux-wordmark-white.png', height: 30, semanticLabel: 'HUX'),
                   ),
                   const Expanded(child: _OrbitScene()),
-                  const HuxEntrance(
+                  HuxEntrance(
                     child: Text(
                       'Know your\ncharge.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 44, fontWeight: FontWeight.w800, height: 1.02, color: Colors.white),
+                      style: huxSora(textStyle: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800, height: 1.02, color: Colors.white)),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -73,7 +74,7 @@ class WelcomeScreen extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(56),
                         backgroundColor: Colors.white,
-                        foregroundColor: huxInk,
+                        foregroundColor: const Color(0xFF1B1925),
                         shape: const StadiumBorder(),
                       ),
                       onPressed: () => Navigator.of(context).push(MaterialPageRoute(

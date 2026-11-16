@@ -23,30 +23,172 @@ import 'package:flutter/material.dart';
 
 import '../core/meaning/daily_readout.dart';
 
+/// The colours that change between the light and dark theme. Everything
+/// else in [HuxColors] (brand accents, ring colours, states) is the same
+/// in both. [current] is swapped by HuxThemeController, which then
+/// rebuilds the app.
+class HuxPalette {
+  final bool dark;
+  final Color bg;
+  final Color card;
+  final Color cardElevated;
+  final Color ink;
+  final Color mutedText;
+  final Color glassFillTop;
+  final Color glassFillBottom;
+  final Color glassStroke;
+  final Color glassHighlight;
+  final Color hairline;
+  final Color chartTrack;
+  final Color chartBarGreyTop;
+  final Color chartBarGreyBottom;
+  final Color shadow;
+  final Color bgTop;
+  final Color bgGlowPink;
+  final Color bgGlowPurple;
+  final Color muted;
+  final Color track;
+  final Color solid;
+  final Color softGood;
+  final Color onSoftGood;
+  final Color softWatch;
+  final Color onSoftWatch;
+  final Color softNeutral;
+  final Color onSoftNeutral;
+  final Color softPink;
+
+  const HuxPalette._({
+    required this.dark,
+    required this.bg,
+    required this.card,
+    required this.cardElevated,
+    required this.ink,
+    required this.mutedText,
+    required this.glassFillTop,
+    required this.glassFillBottom,
+    required this.glassStroke,
+    required this.glassHighlight,
+    required this.hairline,
+    required this.chartTrack,
+    required this.chartBarGreyTop,
+    required this.chartBarGreyBottom,
+    required this.shadow,
+    required this.bgTop,
+    required this.bgGlowPink,
+    required this.bgGlowPurple,
+    required this.muted,
+    required this.track,
+    required this.solid,
+    required this.softGood,
+    required this.onSoftGood,
+    required this.softWatch,
+    required this.onSoftWatch,
+    required this.softNeutral,
+    required this.onSoftNeutral,
+    required this.softPink,
+  });
+
+  static const light = HuxPalette._(
+    dark: false,
+    bg: Color(0xFFF6F4FA),
+    card: Color(0xFFFFFFFF),
+    cardElevated: Color(0xFFF1EEF7),
+    ink: Color(0xFF1B1925),
+    mutedText: Color(0xFF6E6A7C),
+    glassFillTop: Color(0xFFFFFFFF),
+    glassFillBottom: Color(0xFFFFFFFF),
+    glassStroke: Color(0xFFE8E5EF),
+    glassHighlight: Color(0xFFFFFFFF),
+    hairline: Color(0xFFECE9F2),
+    chartTrack: Color(0xFFECE9F2),
+    chartBarGreyTop: Color(0xFFC9C5D3),
+    chartBarGreyBottom: Color(0xFFE6E3EC),
+    shadow: Color(0x141E1640),
+    bgTop: Color(0xFFEDE7FB),
+    bgGlowPink: Color(0x33F7B6D9),
+    bgGlowPurple: Color(0x40C9B8F5),
+    muted: Color(0xFF5F5A6E),
+    track: Color(0xFFEFEDF5),
+    solid: Color(0xFF1B1925),
+    softGood: Color(0xFFE3F5EA),
+    onSoftGood: Color(0xFF17804B),
+    softWatch: Color(0xFFFDF1DE),
+    onSoftWatch: Color(0xFF8A5100),
+    softNeutral: Color(0xFFF1EEF7),
+    onSoftNeutral: Color(0xFF3A3646),
+    softPink: Color(0xFFFCE8F3),
+  );
+
+  static const night = HuxPalette._(
+    dark: true,
+    bg: Color(0xFF0F0B1A),
+    card: Color(0xFF1B1528),
+    cardElevated: Color(0xFF261E38),
+    ink: Color(0xFFF3F0FA),
+    mutedText: Color(0xFFB3ACC6),
+    glassFillTop: Color(0xFF1B1528),
+    glassFillBottom: Color(0xFF1B1528),
+    glassStroke: Color(0xFF3A3150),
+    glassHighlight: Color(0xFF2E2640),
+    hairline: Color(0xFF2E2640),
+    chartTrack: Color(0xFF2E2640),
+    chartBarGreyTop: Color(0xFF5A5270),
+    chartBarGreyBottom: Color(0xFF3A3350),
+    shadow: Color(0x66000000),
+    bgTop: Color(0xFF1A1230),
+    bgGlowPink: Color(0x30F567B5),
+    bgGlowPurple: Color(0x308B3FD0),
+    muted: Color(0xFFB3ACC6),
+    track: Color(0xFF2E2640),
+    solid: Color(0xFFC93B86),
+    softGood: Color(0xFF14331F),
+    onSoftGood: Color(0xFF7BE8A9),
+    softWatch: Color(0xFF3A2A10),
+    onSoftWatch: Color(0xFFFFC46B),
+    softNeutral: Color(0xFF261E38),
+    onSoftNeutral: Color(0xFFD9D4E8),
+    softPink: Color(0xFF3A1830),
+  );
+
+  static HuxPalette current = light;
+}
+
 class HuxColors {
   const HuxColors._();
+
+  /// Solid fill for dark buttons and selected chips (white text on it).
+  static Color get solid => HuxPalette.current.solid;
+
+  /// Soft tinted chip backgrounds and their text.
+  static Color get softGood => HuxPalette.current.softGood;
+  static Color get onSoftGood => HuxPalette.current.onSoftGood;
+  static Color get softWatch => HuxPalette.current.softWatch;
+  static Color get onSoftWatch => HuxPalette.current.onSoftWatch;
+  static Color get softNeutral => HuxPalette.current.softNeutral;
+  static Color get onSoftNeutral => HuxPalette.current.onSoftNeutral;
+  static Color get softPink => HuxPalette.current.softPink;
 
   // ---- the dark stage -------------------------------------------------
   /// App background — near-black, not charcoal-grey: the vivid cards
   /// are the light sources now, so the stage recedes further than the
   /// first (glass) pass needed it to.
-  static const bg = Color(0xFFF6F4FA);
+  static Color get bg => HuxPalette.current.bg;
 
   /// Elevated OPAQUE surface: dialogs, sheets, pickers, snackbars, and
   /// any card not yet repainted to a bespoke gradient (see
   /// [accentIndigo]'s doc comment for which Today/Modes cards use one).
-  static const card = Color(0xFFFFFFFF);
+  static Color get card => HuxPalette.current.card;
 
   /// A step above [card] for the snackbar, so it reads as floating.
-  static const cardElevated = Color(0xFFF1EEF7);
+  static Color get cardElevated => HuxPalette.current.cardElevated;
 
   // ---- text -----------------------------------------------------------
   /// Primary text — near-white with a faint warm/violet cast to match
   /// the new palette. ~17:1 on [bg].
-  static const ink = Color(0xFF1B1925);
+  static Color get ink => HuxPalette.current.ink;
 
   /// Secondary text — ~7.5:1 on [bg].
-  static const mutedText = Color(0xFF6E6A7C);
+  static Color get mutedText => HuxPalette.current.mutedText;
 
   /// Text ON a bright accent fill (Hot Pink buttons, the amber banner):
   /// a near-black ink of its own, kept for exactly this job.
@@ -77,28 +219,28 @@ class HuxColors {
   /// Translucent white layers that make a surface read as glass over
   /// the dark stage. Pre-baked alphas (not `withValues` at call sites)
   /// so "how glassy" stays a single tunable per role.
-  static const glassFillTop = Color(0xFFFFFFFF);
-  static const glassFillBottom = Color(0xFFFFFFFF);
-  static const glassStroke = Color(0xFFE8E5EF);
-  static const glassHighlight = Color(0xFFFFFFFF);
+  static Color get glassFillTop => HuxPalette.current.glassFillTop;
+  static Color get glassFillBottom => HuxPalette.current.glassFillBottom;
+  static Color get glassStroke => HuxPalette.current.glassStroke;
+  static Color get glassHighlight => HuxPalette.current.glassHighlight;
 
   /// Hairline for dividers/tracks on dark — white 10%.
-  static const hairline = Color(0xFFECE9F2);
+  static Color get hairline => HuxPalette.current.hairline;
 
   /// Faint full-height slot track behind chart bars — white 7%.
-  static const chartTrack = Color(0xFFECE9F2);
+  static Color get chartTrack => HuxPalette.current.chartTrack;
 
   /// The "misty" grey bars on the sleep chart (every night EXCEPT the
   /// highlighted latest one, per the analytics-card reference): lit at
   /// the top, fading toward the base.
-  static const chartBarGreyTop = Color(0xFFC9C5D3);
-  static const chartBarGreyBottom = Color(0xFFE6E3EC);
+  static Color get chartBarGreyTop => HuxPalette.current.chartBarGreyTop;
+  static Color get chartBarGreyBottom => HuxPalette.current.chartBarGreyBottom;
 
   // ---- background glows --------------------------------------------------
   /// The two soft radial glows painted once behind the whole app
   /// (see HuxBackground) — pink top-left, purple bottom-right.
-  static const bgGlowPink = Color(0x33F7B6D9); // pink 14%
-  static const bgGlowPurple = Color(0x40C9B8F5); // purple 20%
+  static Color get bgGlowPink => HuxPalette.current.bgGlowPink; // pink 14%
+  static Color get bgGlowPurple => HuxPalette.current.bgGlowPurple; // purple 20%
 
   // ---- recovery states (dot, header glow, chart accents) -----------------
   /// A SEPARATE semantic system from the brand accents above — these
@@ -146,7 +288,7 @@ class HuxColors {
   static const onVivid = Color(0xFFFFFFFF);
 
   /// Soft card shadow on the light background.
-  static const shadow = Color(0x141E1640);
+  static Color get shadow => HuxPalette.current.shadow;
 
   /// Score-ring colours (Home): charge, sleep, steps, heart.
   static const ringCharge = Color(0xFFC93B86);
@@ -157,7 +299,7 @@ class HuxColors {
   static const ringHabit = Color(0xFFE9B400);
 
   /// Top of the page background gradient (soft lavender).
-  static const bgTop = Color(0xFFEDE7FB);
+  static Color get bgTop => HuxPalette.current.bgTop;
 
   // ---- Modes/Lifestyle image cards (modes_screen.dart) -------------------
   /// The bottom-scrim end color on a photo mode card — [bg] at ~80%,

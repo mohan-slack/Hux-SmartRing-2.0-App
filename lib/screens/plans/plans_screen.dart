@@ -84,7 +84,7 @@ class _PlansScreenState extends State<PlansScreen> {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: HuxColors.mutedText),
+                Icon(Icons.chevron_right, color: HuxColors.mutedText),
               ],
             ),
             const SizedBox(height: HuxSpacing.md),

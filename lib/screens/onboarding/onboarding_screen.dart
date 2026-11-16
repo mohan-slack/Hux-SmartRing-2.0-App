@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/profile/user_profile.dart';
 import '../../theme/hux_tokens.dart';
@@ -274,7 +275,7 @@ class _WearableReadout extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('With ${w.label.toLowerCase()}, HUX reads',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
             const SizedBox(height: 12),
             for (var i = 0; i < _rows.length; i++)
               Padding(
@@ -283,7 +284,7 @@ class _WearableReadout extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 92,
-                      child: Text(_rows[i], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: huxInk)),
+                      child: Text(_rows[i], style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: huxInk)),
                     ),
                     Expanded(
                       child: Row(
@@ -316,7 +317,7 @@ class _WearableReadout extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 6),
-            const Text('Through Apple Health or Health Connect, when your device syncs to it.',
+            Text('Through Apple Health or Health Connect, when your device syncs to it.',
                 style: TextStyle(fontSize: 13, height: 1.35, color: huxMuted)),
           ],
         ),
@@ -348,7 +349,7 @@ class _OptionCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: selected ? Color.alphaBlend(color.withValues(alpha: 0.14), Colors.white) : Colors.white,
+          color: selected ? Color.alphaBlend(color.withValues(alpha: 0.14), HuxColors.card) : HuxColors.card,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: selected ? color : Colors.transparent, width: 2),
         ),
@@ -522,10 +523,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     children: [
                       const SizedBox(height: HuxSpacing.xl),
                       Text('${_index + 1} of ${_steps.length}',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: HuxColors.mutedText)),
                       const SizedBox(height: HuxSpacing.xs),
                       Text(step.title,
-                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.15, color: HuxColors.ink)),
+                          style: huxSora(textStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.15, color: HuxColors.ink))),
                       const SizedBox(height: HuxSpacing.sm),
                       Text(step.subtitle, style: text.bodyMedium?.copyWith(color: HuxColors.mutedText)),
                       const SizedBox(height: HuxSpacing.xl),

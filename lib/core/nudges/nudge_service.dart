@@ -9,6 +9,7 @@ import 'notifier.dart';
 import 'nudge_planner.dart';
 import 'sit_planner.dart';
 import 'smart_notifier.dart';
+import 'wake_alarm.dart';
 
 class NudgeService {
   static const _walkKey = 'walk_nudge_v1';
@@ -181,6 +182,49 @@ class NudgeService {
 
   // ---- evening timing (last chai, dinner) --------------------------------
 
+  // ---- gentle wake alarm ---------------------------------------------
+
+  static const _wakeKey = 'wake_alarm_v1';
+
+  Future<WakeAlarmSettings> wakeSettings() async {
+    final raw = await _store.readSetting(_wakeKey);
+    if (raw == null || raw.isEmpty) return WakeAlarmSettings.defaults;
+    try {
+      return WakeAlarmSettings.fromJson(jsonDecode(raw) as Map<String, Object?>);
+    } catch (_) {
+      return WakeAlarmSettings.defaults;
+    }
+  }
+
+  /// Saves and (re)schedules the alarm. Asks permission when turning on.
+  Future<WakeSaveResult> saveWakeSettings(WakeAlarmSettings s) async {
+    var settings = s;
+    if (settings.enabled && !await _notifier.requestPermission()) settings = settings.copyWith(enabled: false);
+    await _store.writeSetting(_wakeKey, jsonEncode(settings.toJson()));
+    final exact = await _applyWake(settings);
+    if (!settings.enabled) return s.enabled ? WakeSaveResult.refused : WakeSaveResult.off;
+    return exact ? WakeSaveResult.exact : WakeSaveResult.approximate;
+  }
+
+  /// True when every chime is on-the-minute.
+  Future<bool> _applyWake(WakeAlarmSettings s) async {
+    for (final id in NudgeIds.allWake) {
+      await _notifier.cancel(id);
+    }
+    var exact = true;
+    final n = _notifier;
+    for (final w in s.nudges()) {
+      if (n is WakeNotifier) {
+        final ok = await (n as WakeNotifier).scheduleWake(w.nudge, chime: w.chime);
+        if (w.chime && !ok) exact = false;
+      } else {
+        await n.scheduleDaily(w.nudge);
+        exact = false;
+      }
+    }
+    return exact;
+  }
+
   static const _eveningKey = 'evening_timing_on';
 
   Future<bool> eveningRemindersOn() async => (await _store.readSetting(_eveningKey)) == 'yes';
@@ -300,6 +344,7 @@ class NudgeService {
     await _applyWalk(walk);
     await _applySit(await sitSettings(), walk);
     await _applyBriefing(await briefingSettings());
+    await _applyWake(await wakeSettings());
   }
 
   Future<void> _applyWalk(WalkNudgeSettings s) async {

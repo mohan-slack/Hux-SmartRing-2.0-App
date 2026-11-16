@@ -6,9 +6,12 @@
 /// sheets, never on the card.
 library;
 
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../theme/hux_tokens.dart';
 import 'hux_3d.dart';
@@ -17,18 +20,25 @@ import 'hux_3d.dart';
 const huxNight = Color(0xFF1C0D30);
 const huxNightTrack = Color(0xFF33244A);
 const huxNightMuted = Color(0xFFBFB1D3);
-const huxTileBg = Color(0xFFFFFFFF);
-const huxTrack = Color(0xFFEFEDF5);
-const huxInk = Color(0xFF1B1925);
-const huxMuted = Color(0xFF5F5A6E);
+Color get huxTileBg => HuxPalette.current.card;
+Color get huxTrack => HuxPalette.current.track;
+Color get huxInk => HuxPalette.current.ink;
+Color get huxMuted => HuxPalette.current.muted;
+
+/// Solid fill for dark buttons and selected chips (white text on it).
+Color get huxSolid => HuxPalette.current.solid;
 
 const huxChargeGradient = [Color(0xFFFF8FCB), Color(0xFFF567B5), Color(0xFFC93B86), Color(0xFF8B3FD0), Color(0xFF5B6CF0)];
 
-TextStyle _num(double size, {Color color = huxInk}) => TextStyle(
+/// Big numbers and screen titles: the display face (Sora).
+TextStyle huxDisplay(double size, {Color? color, FontWeight weight = FontWeight.w700, double height = 1.15}) =>
+    huxSora(fontSize: size, fontWeight: weight, height: height, color: color ?? huxInk);
+
+TextStyle _num(double size, {Color? color}) => huxSora(
       fontSize: size,
-      fontWeight: FontWeight.w800,
+      fontWeight: FontWeight.w700,
       height: 1,
-      color: color,
+      color: color ?? huxInk,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
@@ -62,7 +72,7 @@ class HuxTileLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted));
+    final label = Text(text, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted));
     if (trailing == null) return label;
     return Row(children: [Expanded(child: label), trailing!]);
   }
@@ -81,7 +91,7 @@ class HuxTileValue extends StatelessWidget {
         TextSpan(children: [
           TextSpan(text: value, style: _num(size)),
           if (unit != null)
-            TextSpan(text: ' $unit', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: huxMuted)),
+            TextSpan(text: ' $unit', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: huxMuted)),
         ]),
       );
 }
@@ -98,21 +108,47 @@ class HuxChargeOrb extends StatelessWidget {
   final String caption;
   final bool onDark;
 
-  const HuxChargeOrb({super.key, required this.value, this.size = 148, this.caption = 'Charge', this.onDark = true});
+  /// The ring draws in and the number counts up when the orb appears (or
+  /// the value changes). Off in tests and with "reduce motion".
+  final bool animate;
+
+  const HuxChargeOrb({
+    super.key,
+    required this.value,
+    this.size = 148,
+    this.caption = 'Charge',
+    this.onDark = true,
+    this.animate = false,
+  });
+
+  static final bool _inTest = !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
 
   @override
   Widget build(BuildContext context) {
+    final v = value;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (!animate || v == null || reduce || _inTest) return _orb(v);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: v.toDouble()),
+      duration: const Duration(milliseconds: 1400),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, _) => _orb(t.round(), progress: t / 100),
+    );
+  }
+
+  Widget _orb(int? shown, {double? progress}) {
     final fg = onDark ? Colors.white : huxInk;
     return SizedBox(
       width: size,
       height: size,
       child: CustomPaint(
-        painter: _OrbPainter(progress: (value ?? 0) / 100, track: onDark ? huxNightTrack : huxTrack, stroke: size * 0.08),
+        painter: _OrbPainter(
+            progress: progress ?? (shown ?? 0) / 100, track: onDark ? huxNightTrack : huxTrack, stroke: size * 0.08),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(value == null ? '—' : '$value', style: _num(size * 0.36, color: fg)),
+              Text(shown == null ? '—' : '$shown', style: _num(size * 0.36, color: fg)),
               const SizedBox(height: 2),
               Text(caption,
                   style: TextStyle(fontSize: math.max(12, size * 0.095), color: onDark ? huxNightMuted : huxMuted)),
@@ -182,9 +218,9 @@ class HuxStatChip extends StatelessWidget {
     final (bg, fg) = onDark
         ? (const Color(0xFF2E1E45), Colors.white)
         : switch (tone) {
-            HuxTone.good => (const Color(0xFFE3F5EA), const Color(0xFF17804B)),
-            HuxTone.watch => (const Color(0xFFFDF1DE), const Color(0xFF8A5100)),
-            HuxTone.neutral => (const Color(0xFFF1EEF7), const Color(0xFF3A3646)),
+            HuxTone.good => (HuxColors.softGood, HuxColors.onSoftGood),
+            HuxTone.watch => (HuxColors.softWatch, HuxColors.onSoftWatch),
+            HuxTone.neutral => (HuxColors.softNeutral, HuxColors.onSoftNeutral),
           };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -361,7 +397,7 @@ class HuxSleepWindow extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         DefaultTextStyle(
-          style: const TextStyle(fontSize: 13, color: huxMuted),
+          style: TextStyle(fontSize: 13, color: huxMuted),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [const Text('9 PM'), Text('${huxClock(bed)} → ${huxClock(wake)}'), const Text('9 AM')],
@@ -447,7 +483,7 @@ class HuxBedtimeWeek extends StatelessWidget {
                       for (var k = 0; k < _ticks.length; k++)
                         Positioned(
                           top: (h * k / (_ticks.length - 1) - 7).clamp(-2.0, h - 14),
-                          child: Text(_ticks[k], style: const TextStyle(fontSize: 11, color: huxMuted)),
+                          child: Text(_ticks[k], style: TextStyle(fontSize: 11, color: huxMuted)),
                         ),
                     ],
                   ),
@@ -487,7 +523,7 @@ class HuxBedtimeWeek extends StatelessWidget {
                 const SizedBox(width: 14),
                 Container(width: 14, height: 2, color: color.withValues(alpha: 0.6)),
                 const SizedBox(width: 6),
-                Text('bed ${huxClock(targetBed!)}', style: const TextStyle(fontSize: 12, color: huxMuted)),
+                Text('bed ${huxClock(targetBed!)}', style: TextStyle(fontSize: 12, color: huxMuted)),
               ],
             ],
           ),
@@ -509,7 +545,7 @@ class _Key extends StatelessWidget {
         children: [
           Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontSize: 12, color: huxMuted)),
+          Text(label, style: TextStyle(fontSize: 12, color: huxMuted)),
         ],
       );
 }
@@ -526,7 +562,7 @@ class _WeekPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Hour grid every 3 h.
     final grid = Paint()
-      ..color = const Color(0xFFECE9F2)
+      ..color = HuxColors.hairline
       ..strokeWidth = 1;
     for (var k = 0; k <= 4; k++) {
       final y = size.height * k / 4;
@@ -655,7 +691,7 @@ class HuxDayLine extends StatelessWidget {
               .width;
 
       final nowX = x(nowMinute);
-      const nowStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxInk);
+      final nowStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxInk);
       final nowW = measure('Now', nowStyle);
       final nowLeft = (nowX - nowW / 2).clamp(0.0, math.max(0.0, w - nowW)).toDouble();
 
@@ -670,14 +706,14 @@ class HuxDayLine extends StatelessWidget {
       bool free(int row, double a, double b) => rows[row].every((r) => b + gap <= r.$1 || a >= r.$2 + gap);
 
       final children = <Widget>[
-        Positioned(left: 0, right: 0, top: 38, child: Container(height: 2, color: const Color(0xFFE6E2EC))),
+        Positioned(left: 0, right: 0, top: 38, child: Container(height: 2, color: HuxColors.hairline)),
         Positioned(
             left: 0,
             top: 37,
             child: Container(
                 width: nowX, height: 4, decoration: BoxDecoration(color: huxInk, borderRadius: BorderRadius.circular(2)))),
         Positioned(left: nowX - 1, top: 28, child: Container(width: 2, height: 22, color: huxInk)),
-        Positioned(left: nowLeft, top: 6, child: const Text('Now', style: nowStyle)),
+        Positioned(left: nowLeft, top: 6, child: Text('Now', style: nowStyle)),
       ];
 
       // Upcoming events first, so they win the label space.
@@ -696,7 +732,7 @@ class HuxDayLine extends StatelessWidget {
             height: 12,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: past ? huxInk : Colors.white,
+              color: past ? huxInk : huxTileBg,
               border: Border.all(color: past ? huxInk : e.color, width: 3),
             ),
           ),
@@ -773,8 +809,8 @@ class HuxNextUp extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: huxInk)),
-                Text(subtitle, style: const TextStyle(fontSize: 15, color: huxMuted)),
+                Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: huxInk)),
+                Text(subtitle, style: TextStyle(fontSize: 15, color: huxMuted)),
               ],
             ),
           ),
@@ -782,7 +818,7 @@ class HuxNextUp extends StatelessWidget {
             FilledButton(
               onPressed: onAction,
               style: FilledButton.styleFrom(
-                backgroundColor: huxInk,
+                backgroundColor: huxSolid,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(76, 44),
                 shape: const StadiumBorder(),
@@ -848,9 +884,9 @@ class HuxProgramPill extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxInk)),
                   Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, color: huxMuted)),
+                      style: TextStyle(fontSize: 13, color: huxMuted)),
                 ],
               ),
             ),

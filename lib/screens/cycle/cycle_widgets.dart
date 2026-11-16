@@ -110,7 +110,7 @@ class CyclePrivacyNote extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.lock_outline_rounded, size: 18, color: HuxColors.mutedText),
+        Icon(Icons.lock_outline_rounded, size: 18, color: HuxColors.mutedText),
         const SizedBox(width: HuxSpacing.sm),
         Expanded(
           child: Text(

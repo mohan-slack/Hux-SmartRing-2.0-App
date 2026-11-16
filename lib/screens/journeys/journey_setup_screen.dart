@@ -131,7 +131,7 @@ class _JourneySetupScreenState extends State<JourneySetupScreen> {
               children: [
                 timeRow(Icons.alarm_rounded, 'Wake-up time', 'Keep it the same every day', _wake, (v) => _wake = v),
                 if (_isSleep) ...[
-                  const Divider(height: 1, color: HuxColors.hairline),
+                  Divider(height: 1, color: HuxColors.hairline),
                   timeRow(Icons.bedtime_outlined, 'When you usually fall asleep', 'We move it 15 min every 3 days',
                       _usualBed, (v) => _usualBed = v),
                 ],
@@ -165,7 +165,7 @@ class _JourneySetupScreenState extends State<JourneySetupScreen> {
                   trailing: Switch(value: _rWake, onChanged: (v) => setState(() => _rWake = v)),
                 ),
                 if (!_isSleep) ...[
-                  const Divider(height: 1, color: HuxColors.hairline),
+                  Divider(height: 1, color: HuxColors.hairline),
                   HuxListRow(
                     icon: Icons.fitness_center_rounded,
                     color: color,
@@ -180,7 +180,7 @@ class _JourneySetupScreenState extends State<JourneySetupScreen> {
                     trailing: Switch(value: _rMove, onChanged: (v) => setState(() => _rMove = v)),
                   ),
                 ],
-                const Divider(height: 1, color: HuxColors.hairline),
+                Divider(height: 1, color: HuxColors.hairline),
                 HuxListRow(
                   icon: Icons.nights_stay_outlined,
                   color: color,

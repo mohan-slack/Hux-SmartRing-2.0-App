@@ -49,7 +49,7 @@ class PrivacyNotice {
   /// Change this when the notice's meaning changes (forces re-consent).
   // v2: names the AI provider (Groq, USA) and its retention.
   // v3: adds Cycle (period data, on this phone only).
-  static const noticeVersion = '2026-11-v6';
+  static const noticeVersion = '2026-11-v9';
 
   static const uses = <DataUse>[
     DataUse(
@@ -63,9 +63,15 @@ class PrivacyNotice {
       where: 'Read from Apple Health / Health Connect and kept on this phone only',
     ),
     DataUse(
-      what: 'Your answers, journal, meals, plans and settings',
+      what: 'Your answers, journal, meals, water glasses, plans and settings',
       why: 'To personalise the app',
       where: 'On this phone only',
+    ),
+    DataUse(
+      what: 'Sex (for the formula), age, height, weight and activity — only if you set a calorie target',
+      why: 'To work out your daily calorie target and a plate that fits',
+      where: 'On this phone only. The coach gets only the target number and calories logged today',
+      optional: true,
     ),
     DataUse(
       what: 'Period dates, flow and symptoms — only if you turn on Cycle',
@@ -92,6 +98,12 @@ class PrivacyNotice {
       why: 'To estimate dishes not in HUX\'s food list (only when you tap Estimate)',
       where: 'HUX server, then Groq Inc. (AI provider, USA). Only the typed food words; '
           'neither stores them (Groq zero data retention)',
+      optional: true,
+    ),
+    DataUse(
+      what: 'What you say when you log a meal by voice',
+      why: 'To turn speech into a meal entry (only while the mic sheet is open)',
+      where: "Your phone's speech service (Google on Android, Apple on iPhone). HUX keeps the words, never audio",
       optional: true,
     ),
     DataUse(

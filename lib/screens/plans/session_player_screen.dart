@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/plans/plan_models.dart';
@@ -282,10 +283,10 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
                           Row(
                             children: [
                               Text('${_clock(_elapsed.clamp(0, total))} done',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxInk)),
                               const Spacer(),
                               Text('${_clock((total - _elapsed).clamp(0, total))} left',
-                                  style: const TextStyle(fontSize: 14, color: huxMuted)),
+                                  style: TextStyle(fontSize: 14, color: huxMuted)),
                             ],
                           ),
                           const Spacer(),
@@ -293,12 +294,12 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
                           // ---- now ----
                           Text(_label(seg.kind),
                               textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: ink)),
+                              style: huxSora(textStyle: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: ink))),
                           const SizedBox(height: 4),
                           Text(
                             effortNo > 0 ? '${_feel(seg.kind)}  ·  $effortNo of ${efforts.length}' : _feel(seg.kind),
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 15, color: huxMuted),
+                            style: TextStyle(fontSize: 15, color: huxMuted),
                           ),
                           const SizedBox(height: 18),
                           Semantics(
@@ -342,7 +343,7 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
                             const SizedBox(height: 14),
                             Text(seg.instruction!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 16, height: 1.35, color: huxInk)),
+                                style: TextStyle(fontSize: 16, height: 1.35, color: huxInk)),
                           ],
                           const SizedBox(height: 18),
                           if (next != null)
@@ -352,22 +353,22 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
                                 children: [
                                   Hux3DObject(_object(next.kind), color: _color(next.kind), size: 44, animate: false),
                                   const SizedBox(width: 10),
-                                  const Text('Next', style: TextStyle(fontSize: 14, color: huxMuted)),
+                                  Text('Next', style: TextStyle(fontSize: 14, color: huxMuted)),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(_label(next.kind),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
                                   ),
                                   Text(_clock(next.seconds),
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
                                 ],
                               ),
                             ),
                           if (!_voiceAvailable)
-                            const Padding(
-                              padding: EdgeInsets.only(top: HuxSpacing.md),
+                            Padding(
+                              padding: const EdgeInsets.only(top: HuxSpacing.md),
                               child: Text('No voice on this phone — follow the timer.',
                                   style: TextStyle(fontSize: 13, color: huxMuted)),
                             ),
@@ -417,7 +418,7 @@ class _SessionPlayerScreenState extends State<SessionPlayerScreen> {
                               ],
                             ),
                           const SizedBox(height: HuxSpacing.sm),
-                          const Text('Stop if you feel chest pain, dizziness or severe breathlessness.',
+                          Text('Stop if you feel chest pain, dizziness or severe breathlessness.',
                               textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: huxMuted)),
                         ],
                       ),

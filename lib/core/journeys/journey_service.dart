@@ -81,6 +81,9 @@ class JourneyState {
   final bool paused;
   final String? lastSeenOn;
 
+  /// Journey day whose workout was moved to the next day (low Charge).
+  final int? movedDay;
+
   const JourneyState({
     required this.setup,
     required this.startedOn,
@@ -90,6 +93,7 @@ class JourneyState {
     this.restPassDays = const [],
     this.paused = false,
     this.lastSeenOn,
+    this.movedDay,
   });
 
   JourneyDef get def => journeyDef(setup.id);
@@ -104,6 +108,8 @@ class JourneyState {
     List<String>? restPassDays,
     bool? paused,
     String? lastSeenOn,
+    int? movedDay,
+    bool clearMoved = false,
   }) =>
       JourneyState(
         setup: setup ?? this.setup,
@@ -114,6 +120,7 @@ class JourneyState {
         restPassDays: restPassDays ?? this.restPassDays,
         paused: paused ?? this.paused,
         lastSeenOn: lastSeenOn ?? this.lastSeenOn,
+        movedDay: clearMoved ? null : movedDay ?? this.movedDay,
       );
 
   Map<String, Object?> toJson() => {
@@ -125,6 +132,7 @@ class JourneyState {
         'rest': restPassDays,
         'paused': paused,
         if (lastSeenOn != null) 'lastSeen': lastSeenOn,
+        if (movedDay != null) 'moved': movedDay,
       };
 
   static JourneyState fromJson(Map<String, Object?> j) => JourneyState(
@@ -139,6 +147,7 @@ class JourneyState {
         restPassDays: [for (final d in (j['rest'] as List? ?? const [])) d.toString()],
         paused: j['paused'] == true,
         lastSeenOn: j['lastSeen'] as String?,
+        movedDay: (j['moved'] as num?)?.toInt(),
       );
 }
 
@@ -258,6 +267,7 @@ class JourneyService {
         restPassDays: s.restPassDays,
         paused: s.paused,
         lastSeenOn: _today,
+        movedDay: s.movedDay,
       );
       if (next.finished) await _recordFinished(next);
     }
@@ -279,6 +289,7 @@ class JourneyService {
       restPassDays: [...s.restPassDays, _today],
       paused: s.paused,
       lastSeenOn: _today,
+      movedDay: s.movedDay,
     );
     if (next.finished) await _recordFinished(next);
     await _save(next);
@@ -315,14 +326,70 @@ class JourneyService {
     return usual.plusMinutes(-(moved < late ? moved : late));
   }
 
-  /// Today's plan for the active journey.
-  JourneyDay today(JourneyState s) => journeyDay(s.setup.id, s.currentDay, s.setup.level);
+  /// Today's plan for the active journey (with a moved workout applied).
+  JourneyDay today(JourneyState s) {
+    final planned = journeyDay(s.setup.id, s.currentDay, s.setup.level);
+    final moved = s.movedDay;
+    if (moved == null || s.setup.id != JourneyId.fitIn30) return planned;
+    if (moved == s.currentDay) {
+      final title = journeyDay(s.setup.id, moved, s.setup.level).workout.title;
+      return JourneyDay(
+        day: s.currentDay,
+        focus: 'Easy day for a low Charge. $title moves to tomorrow.',
+        workout: recoveryWorkout,
+      );
+    }
+    if (moved == s.currentDay - 1) {
+      return JourneyDay(
+        day: s.currentDay,
+        focus: 'Moved from yesterday — you should be fresher today.',
+        workout: journeyDay(s.setup.id, moved, s.setup.level).workout,
+      );
+    }
+    return planned;
+  }
 
-  Map<MealSlot, List<MealOption>> mealsToday(JourneyState s) => mealsForDay(
+  /// Today's workout was moved to tomorrow (today is easy recovery).
+  bool isMovedDay(JourneyState s) => s.movedDay == s.currentDay;
+
+  /// Today's workout can move to tomorrow: Fit in 30 only, a regular
+  /// training day, tomorrow isn't a challenge, and nothing moved in.
+  bool canMoveToday(JourneyState s) {
+    if (s.setup.id != JourneyId.fitIn30 || s.paused || s.finished || doneToday(s)) return false;
+    final moved = s.movedDay;
+    if (s.ticks.contains(DayItem.move) || (moved != null && moved >= s.currentDay - 1)) return false;
+    if (s.currentDay >= s.def.days) return false;
+    final today = journeyDay(s.setup.id, s.currentDay, s.setup.level);
+    final next = journeyDay(s.setup.id, s.currentDay + 1, s.setup.level);
+    if (today.challenge || next.challenge) return false;
+    if (today.workout.title == recoveryWorkout.title) return false;
+    return true;
+  }
+
+  /// Moves today's workout to tomorrow; today becomes easy recovery.
+  Future<JourneyState?> moveToTomorrow() async {
+    final s = await active();
+    if (s == null || !canMoveToday(s)) return s;
+    final next = s.copyWith(movedDay: s.currentDay, lastSeenOn: _today);
+    await _save(next);
+    return next;
+  }
+
+  /// Undo [moveToTomorrow] (same day, before the move is ticked).
+  Future<JourneyState?> undoMove() async {
+    final s = await active();
+    if (s == null || !isMovedDay(s) || s.ticks.contains(DayItem.move)) return s;
+    final next = s.copyWith(clearMoved: true);
+    await _save(next);
+    return next;
+  }
+
+  /// [lightDinner] = a big meal earlier today (see DinnerAdvice).
+  Map<MealSlot, List<MealOption>> mealsToday(JourneyState s, {bool lightDinner = false}) => mealsForDay(
         day: s.currentDay,
         diet: s.setup.diet,
         budget: s.setup.budget,
-        lightDinner: s.setup.id == JourneyId.sleepReset21,
+        lightDinner: lightDinner || s.setup.id == JourneyId.sleepReset21,
       );
 
   /// The reminders the user chose (max 3) — scheduled by NudgeService.

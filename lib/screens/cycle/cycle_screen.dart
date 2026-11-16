@@ -5,6 +5,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/cycle/cycle_content.dart';
 import '../../core/cycle/cycle_models.dart';
@@ -218,7 +219,7 @@ class _CycleScreenState extends State<CycleScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                  Text(title, style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
                   const SizedBox(height: 8),
                   Text(body, style: const TextStyle(fontSize: 16, height: 1.45, color: Color(0xFF3A3646))),
                 ],
@@ -309,7 +310,7 @@ class _CycleScreenState extends State<CycleScreen> {
               children: [
                 const Icon(Icons.info_outline_rounded, color: HuxColors.accentPurple),
                 const SizedBox(width: 10),
-                Expanded(child: Text(n, style: const TextStyle(fontSize: 15, color: huxInk, height: 1.4))),
+                Expanded(child: Text(n, style: TextStyle(fontSize: 15, color: huxInk, height: 1.4))),
               ],
             ),
           ),
@@ -342,7 +343,7 @@ class _CycleScreenState extends State<CycleScreen> {
         ],
         if (CycleContent.scoreNote(phase) != null) ...[
           const SizedBox(height: 12),
-          Text(CycleContent.scoreNote(phase)!, style: const TextStyle(fontSize: 13, color: huxMuted)),
+          Text(CycleContent.scoreNote(phase)!, style: TextStyle(fontSize: 13, color: huxMuted)),
         ],
         const SizedBox(height: 16),
         const CyclePrivacyNote(),
@@ -382,7 +383,7 @@ class _PhaseDial extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Day', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxMuted)),
+                Text('Day', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxMuted)),
                 HuxTileValue(centerTitle, size: 58),
                 const SizedBox(height: 4),
                 Text(centerSub, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: HuxColors.accentPurple)),
@@ -462,7 +463,7 @@ class _MiniStat extends StatelessWidget {
           children: [
             HuxTileLabel(label),
             const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
+            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
           ],
         ),
       );
@@ -488,7 +489,7 @@ class _HelpTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(value,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: huxInk)),
             ],
           ),
         ),
@@ -530,7 +531,7 @@ class _HistoryRow extends StatelessWidget {
             tooltip: 'Remove',
             visualDensity: VisualDensity.compact,
             onPressed: onRemove,
-            icon: const Icon(Icons.close_rounded, size: 18, color: HuxColors.mutedText),
+            icon: Icon(Icons.close_rounded, size: 18, color: HuxColors.mutedText),
           ),
         ],
       ),
@@ -554,12 +555,12 @@ class _Intro extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      backgroundColor: Colors.white,
+      backgroundColor: HuxColors.card,
       builder: (c) => ListView(
         shrinkWrap: true,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         children: [
-          const Text('How Cycle works', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+          Text('How Cycle works', style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
           const SizedBox(height: 12),
           for (final (title, body) in _points)
             Padding(
@@ -567,9 +568,9 @@ class _Intro extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                  Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
                   const SizedBox(height: 2),
-                  Text(body, style: const TextStyle(fontSize: 15, height: 1.4, color: huxMuted)),
+                  Text(body, style: TextStyle(fontSize: 15, height: 1.4, color: huxMuted)),
                 ],
               ),
             ),
@@ -587,9 +588,9 @@ class _Intro extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
+                Text(value, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
                 const SizedBox(height: 2),
-                Text(label, style: const TextStyle(fontSize: 13, color: huxMuted)),
+                Text(label, style: TextStyle(fontSize: 13, color: huxMuted)),
               ],
             ),
           ),
@@ -598,8 +599,8 @@ class _Intro extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.xxl),
       children: [
-        const Text('Your phase, in your scores',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: huxInk, height: 1.15)),
+        Text('Your phase, in your scores',
+            style: huxSora(textStyle: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: huxInk, height: 1.15))),
         const SizedBox(height: 20),
         const Center(
           child: _PhaseDial(day: 9, cycleDays: 28, periodDays: 5, centerTitle: '9', centerSub: 'Follicular'),
@@ -623,7 +624,7 @@ class _Intro extends StatelessWidget {
         const SizedBox(height: 4),
         Center(child: TextButton(onPressed: () => _howItWorks(context), child: const Text('How it works'))),
         const SizedBox(height: 8),
-        const Text('Wellness estimates. Not for contraception or diagnosis.',
+        Text('Wellness estimates. Not for contraception or diagnosis.',
             textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: huxMuted)),
       ],
     );

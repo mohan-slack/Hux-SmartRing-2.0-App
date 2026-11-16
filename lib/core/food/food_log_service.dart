@@ -30,6 +30,9 @@ class FoodLogService {
 
   FoodLogService(this._store, {Duration? utcOffset}) : _utcOffset = utcOffset;
 
+  /// The store this log reads from (other food helpers share it).
+  HealthStore get store => _store;
+
   DateTime dayKey(DateTime t) => localDayKey(t, utcOffset: _utcOffset);
 
   Future<Map<DateTime, List<Meal>>> _loadAll() async {

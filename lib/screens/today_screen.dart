@@ -16,10 +16,14 @@ import '../core/coach/coach_nudges.dart';
 import '../core/coach/coach_service.dart';
 import '../core/food/nutrients.dart' show MealTypeLabel;
 import '../core/home/home_extras.dart';
+import '../core/water/water_log.dart';
+import '../core/share/summary_text.dart';
+import '../widgets/weight_card.dart';
+import '../widgets/whatsapp_share.dart';
 import '../core/home/home_insights.dart';
 import '../core/meaning/daily_readout.dart';
 import '../core/meaning/day_plan.dart';
-import '../core/meaning/hux_charge.dart' show ChargeLevel;
+import '../core/meaning/hux_charge.dart' show ChargeLevel, HuxCharge;
 import '../core/meaning/evening_timing.dart';
 import '../core/meaning/sleep_debt.dart';
 import '../core/meaning/step_target.dart';
@@ -35,6 +39,7 @@ import '../core/sync/sync_service.dart';
 import '../theme/hux_cards.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_motion.dart';
+import '../theme/hux_theme_controller.dart';
 import '../theme/hux_tokens.dart';
 import '../theme/hux_ui.dart';
 import 'coach/coach_screen.dart' show coachTopicLook;
@@ -170,6 +175,9 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   /// point reading, not last night's stored average (that comes from
   /// [_lastNight] instead). Null between readings is normal.
   double? _heartRateBpm;
+
+  /// When the last LIVE heart reading arrived (a connected ring only).
+  DateTime? _heartLiveAt;
   StreamSubscription<int?>? _heartRateSub;
 
   @override
@@ -184,7 +192,12 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
     // REAL non-null tick updates the display; it never regresses an
     // already-known-good reading back to a blank dash.
     _heartRateSub = widget.syncService.heartRateBpm.listen((bpm) {
-      if (mounted && bpm != null) setState(() => _heartRateBpm = bpm.toDouble());
+      if (mounted && bpm != null) {
+        setState(() {
+          _heartRateBpm = bpm.toDouble();
+          _heartLiveAt = DateTime.now();
+        });
+      }
     });
     _bootstrap();
   }
@@ -424,6 +437,32 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
     await _loadReadout();
   }
 
+  /// Today as a WhatsApp message (built when the user taps share).
+  Future<String?> _todaySummary() async {
+    final r = _readout;
+    if (r == null) return null;
+    final food = _extras.food;
+    var water = _extras.water?.glasses;
+    try {
+      water = await WaterLog(widget.store).today(); // the tile counts taps itself
+    } catch (_) {}
+    final steps = r.plan?.steps;
+    return SummaryText.daily(
+      now: DateTime.now(),
+      name: widget.greetingName,
+      charge: r.charge?.value,
+      chargeLabel: r.charge?.value == null ? null : r.charge?.label,
+      sleepMin: _lastNight?.totalSleep.inMinutes,
+      steps: steps?.today,
+      stepGoal: steps?.target,
+      proteinG: food?.proteinG.round(),
+      proteinGoalG: food?.proteinGoalG.round(),
+      kcal: food?.kcal.round(),
+      waterGlasses: water,
+      waterGoal: _extras.water?.goal.glasses,
+    );
+  }
+
   @override
   Widget build(BuildContext context) => _buildBody();
 
@@ -451,6 +490,7 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
             activeContext: _activeContext,
             batteryPercent: _batteryPercent,
             heartRateBpm: _heartRateBpm,
+            heartLive: _heartLiveAt != null && DateTime.now().difference(_heartLiveAt!) < const Duration(seconds: 30),
             sendTestBuzz: widget.syncService.sendTestBuzz,
             featured: _featured,
             onOpenFeature: widget.onOpenFeature,
@@ -464,6 +504,24 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
             onCoachNudge: widget.onCoachNudge,
             onHideCoachNudge: widget.onHideCoachNudge,
             connectCard: _healthSkipped ? _ConnectHealthTile(onConnect: _connectHealth) : null,
+            shareCard: _extras.water == null
+                ? null
+                : WhatsAppShareButton(label: 'Share today on WhatsApp', text: _todaySummary),
+            weightCard: _extras.water == null
+                ? null
+                : WeightCard(
+                    store: widget.store,
+                    onlyWhenDue: true,
+                    refreshSignal: widget.refreshSignal,
+                    padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, 12, HuxSpacing.lg, 0),
+                  ),
+            waterCard: _extras.water == null
+                ? null
+                : _WaterTile(
+                    key: ValueKey('water-${_extras.water!.glasses}-${_extras.water!.goal.glasses}'),
+                    log: WaterLog(widget.store),
+                    today: _extras.water!,
+                  ),
             checkInCard: _askCheckIn
                 ? _SleepCheckInCard(
                     deviceNight: _deviceNightToday(),
@@ -527,7 +585,7 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.sync_problem_rounded,
+            Icon(Icons.sync_problem_rounded,
                 size: 40, color: HuxColors.mutedText),
             const SizedBox(height: HuxSpacing.md),
             Text("Couldn't sync your health data",
@@ -673,6 +731,7 @@ class _ReadoutBody extends StatelessWidget {
   final ActiveContext activeContext;
   final int? batteryPercent;
   final double? heartRateBpm;
+  final bool heartLive;
   final Future<void> Function() sendTestBuzz;
   final List<FeatureId> featured;
   final FeatureTap? onOpenFeature;
@@ -687,6 +746,9 @@ class _ReadoutBody extends StatelessWidget {
   final ValueChanged<CoachNudge>? onHideCoachNudge;
   final Widget? checkInCard;
   final Widget? connectCard;
+  final Widget? waterCard;
+  final Widget? weightCard;
+  final Widget? shareCard;
 
   const _ReadoutBody({
     required this.readout,
@@ -695,6 +757,7 @@ class _ReadoutBody extends StatelessWidget {
     required this.activeContext,
     required this.batteryPercent,
     required this.heartRateBpm,
+    this.heartLive = false,
     required this.sendTestBuzz,
     this.featured = const [],
     this.onOpenFeature,
@@ -709,6 +772,9 @@ class _ReadoutBody extends StatelessWidget {
     this.onHideCoachNudge,
     this.checkInCard,
     this.connectCard,
+    this.waterCard,
+    this.weightCard,
+    this.shareCard,
   });
 
   void _open(FeatureId id) => onOpenFeature?.call(id);
@@ -770,6 +836,10 @@ class _ReadoutBody extends StatelessWidget {
           chipText: chipText,
           onOpenProfile: onOpenProfile,
           onWhy: () => _why(context),
+          sleep: lastNight?.totalSleep,
+          restingBpm: lastRhr,
+          onSleep: () => _open(FeatureId.sleepRegularity),
+          onEffort: () => _open(FeatureId.effortTarget),
         ))),
         if (checkInCard != null) ...[gap, pad(HuxEntrance(index: 1, child: checkInCard!))],
         if (connectCard != null) ...[gap, pad(connectCard!)],
@@ -829,44 +899,37 @@ class _ReadoutBody extends StatelessWidget {
             ],
           ),
         )),
-        if (lastRhr != null || programs.isNotEmpty) ...[
+        if (waterCard != null) ...[
+          gap,
+          pad(HuxEntrance(index: 3, child: waterCard!)),
+        ],
+        if (weightCard != null) weightCard!,
+        if (lastRhr != null || heartRateBpm != null) ...[
+          gap,
+          pad(HuxEntrance(
+            index: 3,
+            child: _HeartTile(
+              bpm: heartRateBpm?.round(),
+              live: heartLive,
+              resting: lastRhr,
+              resting7: rhr,
+              hrvMs: lastNight?.avgHrvMs,
+              stress: readout.stressIndex,
+              onTap: () => _why(context),
+            ),
+          )),
+        ],
+        if (programs.isNotEmpty) ...[
           gap,
           pad(HuxEntrance(
             index: 3,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (lastRhr != null)
-                  Expanded(
-                    child: HuxTile(
-                      onTap: () => _why(context),
-                      semanticLabel: 'Resting heart $lastRhr bpm',
-                      child: ExcludeSemantics(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const HuxTileLabel('Resting heart'),
-                            const SizedBox(height: 8),
-                            HuxTileValue('$lastRhr', unit: 'bpm'),
-                            const SizedBox(height: 8),
-                            HuxSparkline(values: rhr, color: HuxColors.ringHeart),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                if (lastRhr != null && programs.isNotEmpty) const SizedBox(width: 12),
-                if (programs.isNotEmpty)
-                  Expanded(
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < programs.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 12),
-                          programs[i],
-                        ],
-                      ],
-                    ),
-                  ),
+                for (var i = 0; i < programs.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(child: programs[i]),
+                ],
               ],
             ),
           )),
@@ -887,6 +950,10 @@ class _ReadoutBody extends StatelessWidget {
         if (featured.isNotEmpty && onOpenFeature != null && onSeeAllFeatures != null) ...[
           const SizedBox(height: HuxSpacing.lg),
           pad(ForYouSection(featured: featured, onOpen: onOpenFeature!, onSeeAll: onSeeAllFeatures!)),
+        ],
+        if (shareCard != null) ...[
+          const SizedBox(height: HuxSpacing.sm),
+          shareCard!,
         ],
         const SizedBox(height: HuxSpacing.md),
         Center(child: _DataQualityCaption(quality: readout.dataQuality)),
@@ -990,7 +1057,25 @@ class _Hero extends StatelessWidget {
   final VoidCallback? onOpenProfile;
   final VoidCallback onWhy;
 
-  const _Hero({required this.readout, required this.name, required this.chipText, required this.onOpenProfile, required this.onWhy});
+  /// The three glass stats under the orb (each hidden without data).
+  final Duration? sleep;
+  final int? restingBpm;
+  final VoidCallback? onSleep;
+  final VoidCallback? onEffort;
+
+  const _Hero({
+    required this.readout,
+    required this.name,
+    required this.chipText,
+    required this.onOpenProfile,
+    required this.onWhy,
+    this.sleep,
+    this.restingBpm,
+    this.onSleep,
+    this.onEffort,
+  });
+
+  static String _sleepText(Duration d) => '${d.inHours} h ${(d.inMinutes % 60).toString().padLeft(2, '0')}';
 
   static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1031,10 +1116,45 @@ class _Hero extends StatelessWidget {
         : dayUsedIt
             ? 'You started at $morning this morning — the day used the rest.'
             : null;
+    final effort = readout.plan?.effort;
+    final dark = HuxPalette.current.dark;
+    final stats = <Widget>[
+      if (sleep != null && sleep!.inMinutes >= 60)
+        _HeroStat(object: Hux3D.moon, color: HuxColors.ringSleep, value: _sleepText(sleep!), label: 'Sleep', onTap: onSleep),
+      if (effort != null)
+        _HeroStat(
+            object: Hux3D.flame,
+            color: HuxColors.ringSteps,
+            value: '${effort.min}–${effort.max}',
+            label: 'Effort today',
+            onTap: onEffort),
+      if (restingBpm != null)
+        _HeroStat(object: Hux3D.heart, color: HuxColors.ringHeart, value: '$restingBpm', label: 'Resting bpm', onTap: onWhy),
+    ];
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
-      decoration: BoxDecoration(color: huxNight, borderRadius: BorderRadius.circular(28)),
-      child: Column(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: dark ? const Color(0xFF24123E) : huxNight, borderRadius: BorderRadius.circular(28)),
+      child: Stack(
+        children: [
+          // Two soft brand glows behind the content.
+          const Positioned(left: -50, top: 30, child: _HeroGlow(Color(0x61F567B5), 240)),
+          const Positioned(right: -70, bottom: -70, child: _HeroGlow(Color(0x575B6CF0), 230)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            // The buttons inside need a Material above them for ink.
+            child: Material(
+              type: MaterialType.transparency,
+              child: _content(context, first, now, charge, stateLabel, labelColor, dayUsedIt, dayNote, stats, dark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context, String? first, DateTime now, HuxCharge? charge, String stateLabel,
+      Color labelColor, bool dayUsedIt, String? dayNote, List<Widget> stats, bool dark) {
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -1046,10 +1166,32 @@ class _Hero extends StatelessWidget {
                     Text('${_days[now.weekday - 1]} ${now.day} ${_months[now.month - 1]}',
                         style: const TextStyle(fontSize: 15, color: huxNightMuted)),
                     Text(first == null || first.isEmpty ? _greeting(now.hour) : '${_greeting(now.hour)}, $first',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                        style: huxDisplay(21, color: Colors.white)),
                   ],
                 ),
               ),
+              // Quick light / dark switch (the full choice is in Profile).
+              Semantics(
+                button: true,
+                label: dark ? 'Switch to light theme' : 'Switch to dark theme',
+                child: InkWell(
+                  onTap: () => HuxThemeController.instance.setChoice(dark ? HuxThemeChoice.light : HuxThemeChoice.dark),
+                  customBorder: const CircleBorder(),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0x14FFFFFF),
+                      border: Border.all(color: const Color(0xFF4A3A63)),
+                    ),
+                    child: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                        size: 20, color: dark ? const Color(0xFFFFD98A) : const Color(0xFFC9CFFF)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               if (onOpenProfile != null)
                 Semantics(
                   button: true,
@@ -1084,22 +1226,41 @@ class _Hero extends StatelessWidget {
                 button: true,
                 label: charge?.value == null ? 'Charge not ready yet' : 'Charge ${charge!.value}, $stateLabel. See why.',
                 excludeSemantics: true,
-                child: GestureDetector(onTap: onWhy, child: HuxChargeOrb(value: charge?.value, size: 140)),
+                child: GestureDetector(onTap: onWhy, child: HuxChargeOrb(value: charge?.value, size: 140, animate: true)),
               ),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(dayUsedIt && !charge.shortSleep ? '$stateLabel now' : stateLabel,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Color.lerp(labelColor, Colors.white, 0.45),
-                        )),
-                    const SizedBox(height: 6),
-                    Text(readout.headline,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2)),
+                    // State as a pill with a dot: readable at a glance.
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(9, 4, 11, 4),
+                      decoration: BoxDecoration(
+                        color: labelColor.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: labelColor.withValues(alpha: 0.45)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 7, height: 7, decoration: BoxDecoration(color: labelColor, shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(dayUsedIt && !(charge?.shortSleep ?? false) ? '$stateLabel now' : stateLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color.lerp(labelColor, Colors.white, 0.55),
+                                )),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(readout.headline, style: huxDisplay(19, color: Colors.white, height: 1.22)),
                     if (dayNote != null) ...[
                       const SizedBox(height: 4),
                       Text(dayNote, style: const TextStyle(fontSize: 13, height: 1.3, color: Color(0xCCFFFFFF))),
@@ -1121,7 +1282,321 @@ class _Hero extends StatelessWidget {
               ),
             ],
           ),
+          if (stats.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                for (var i = 0; i < stats.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(child: stats[i]),
+                ],
+              ],
+            ),
+          ],
         ],
+    );
+  }
+}
+
+/// Heart: the latest reading with a beating heart and a moving trace.
+/// "LIVE" only while a connected ring is streaming; from the health app
+/// it is the latest synced reading, and says so.
+class _HeartTile extends StatefulWidget {
+  final int? bpm;
+  final bool live;
+  final int? resting;
+  final List<int?> resting7;
+  final int? hrvMs;
+  final int? stress;
+  final VoidCallback onTap;
+
+  const _HeartTile({
+    required this.bpm,
+    required this.live,
+    required this.resting,
+    required this.resting7,
+    required this.hrvMs,
+    required this.stress,
+    required this.onTap,
+  });
+
+  @override
+  State<_HeartTile> createState() => _HeartTileState();
+}
+
+class _HeartTileState extends State<_HeartTile> with SingleTickerProviderStateMixin {
+  static final bool _inTest = Platform.environment.containsKey('FLUTTER_TEST');
+
+  // One loop = one beat of the heart and one sweep of the trace.
+  late final AnimationController _c = AnimationController(vsync: this, duration: _beat);
+
+  Duration get _beat => Duration(milliseconds: (60000 / (widget.bpm ?? widget.resting ?? 60).clamp(40, 180)).round());
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final on = !reduce && !_inTest;
+    if (on && !_c.isAnimating) {
+      _c.repeat();
+    } else if (!on && _c.isAnimating) {
+      _c.stop();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_HeartTile old) {
+    super.didUpdateWidget(old);
+    if (_c.duration != _beat) {
+      _c.duration = _beat;
+      if (_c.isAnimating) _c.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  static String _stressWord(int v) => v < 34
+      ? 'Low'
+      : v < 67
+          ? 'Medium'
+          : 'High';
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = widget.bpm ?? widget.resting;
+    final resting = widget.resting;
+    final bpm = widget.bpm;
+    // Compared with YOUR resting heart, in plain words.
+    final (String word, HuxTone tone)? state = bpm == null || resting == null
+        ? null
+        : bpm <= resting + 15
+            ? ('Calm', HuxTone.good)
+            : bpm <= resting + 45
+                ? ('Active', HuxTone.neutral)
+                : ('High', HuxTone.watch);
+    final stats = <(String, String)>[
+      if (bpm != null && resting != null) ('At rest', '$resting bpm'),
+      if (widget.hrvMs != null) ('Night HRV', '${widget.hrvMs} ms'),
+      if (widget.stress != null) ('Stress now', _stressWord(widget.stress!)),
+    ];
+    return HuxTile(
+      onTap: widget.onTap,
+      semanticLabel: shown == null
+          ? 'Heart rate not available yet'
+          : '${bpm == null ? 'Resting heart' : 'Heart rate'} $shown beats per minute',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: HuxTileLabel(bpm == null ? 'Resting heart' : 'Heart now')),
+                if (widget.live)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: const Color(0xFFC8323A), borderRadius: BorderRadius.circular(8)),
+                    child: const Text('LIVE',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: Colors.white)),
+                  )
+                else if (bpm != null)
+                  Text('latest reading', style: TextStyle(fontSize: 13, color: huxMuted)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _c,
+                  builder: (context, child) {
+                    // Two quick pulses per loop, like a heartbeat.
+                    final t = _c.value;
+                    final pulse = t < 0.12
+                        ? t / 0.12
+                        : t < 0.24
+                            ? 1 - (t - 0.12) / 0.12
+                            : t < 0.36
+                                ? (t - 0.24) / 0.12 * 0.6
+                                : t < 0.48
+                                    ? 0.6 * (1 - (t - 0.36) / 0.12)
+                                    : 0.0;
+                    return Transform.scale(scale: 1 + 0.12 * pulse, child: child);
+                  },
+                  child: const Hux3DObject(Hux3D.heart, color: HuxColors.ringHeart, size: 52, animate: false),
+                ),
+                const SizedBox(width: 10),
+                HuxTileValue(shown == null ? '—' : '$shown', unit: 'bpm', size: 40),
+                const Spacer(),
+                if (state != null) HuxStatChip(state.$1, tone: state.$2),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (bpm != null)
+              SizedBox(
+                height: 54,
+                width: double.infinity,
+                child: AnimatedBuilder(
+                  animation: _c,
+                  builder: (context, _) => CustomPaint(painter: _HeartTracePainter(phase: _c.value)),
+                ),
+              )
+            else
+              HuxSparkline(values: widget.resting7, color: HuxColors.ringHeart),
+            if (stats.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  for (var i = 0; i < stats.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+                        decoration: BoxDecoration(color: HuxColors.bg, borderRadius: BorderRadius.circular(14)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(stats[i].$1, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: huxMuted)),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(stats[i].$2, style: huxDisplay(15)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A heartbeat-shaped trace that scrolls with [phase] (0..1 = one beat).
+class _HeartTracePainter extends CustomPainter {
+  final double phase;
+
+  _HeartTracePainter({required this.phase});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const beatW = 96.0;
+    final mid = size.height * 0.62;
+    final path = Path();
+    var x = -beatW * phase;
+    path.moveTo(x, mid);
+    while (x < size.width + beatW) {
+      path
+        ..lineTo(x + 26, mid)
+        ..lineTo(x + 33, mid - 7)
+        ..lineTo(x + 40, mid)
+        ..lineTo(x + 50, mid)
+        ..lineTo(x + 56, mid - size.height * 0.56)
+        ..lineTo(x + 64, mid + size.height * 0.34)
+        ..lineTo(x + 71, mid)
+        ..lineTo(x + beatW, mid);
+      x += beatW;
+    }
+    final rect = Offset.zero & size;
+    canvas.save();
+    canvas.clipRect(rect);
+    // Soft fill under the line, then the line itself in the brand sweep.
+    final fill = Path.from(path)
+      ..lineTo(size.width + beatW, size.height)
+      ..lineTo(-beatW, size.height)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x29E5484D), Color(0x00E5484D)],
+        ).createShader(rect),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..shader = const LinearGradient(colors: [Color(0xFFFF8FCB), Color(0xFFE5484D), Color(0xFF8B3FD0)]).createShader(rect),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_HeartTracePainter o) => o.phase != phase;
+}
+
+/// A soft round glow painted behind the hero's content.
+class _HeroGlow extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const _HeroGlow(this.color, this.size);
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
+          ),
+        ),
+      );
+}
+
+/// One glass stat inside the hero: 3D object, value, label.
+class _HeroStat extends StatelessWidget {
+  final Hux3D object;
+  final Color color;
+  final String value;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _HeroStat({required this.object, required this.color, required this.value, required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: onTap != null,
+      label: '$label $value',
+      excludeSemantics: true,
+      child: Material(
+        color: const Color(0x12FFFFFF),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: Color(0xFF4A3A63)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 10),
+            child: Column(
+              children: [
+                Hux3DObject(object, color: color, size: 36),
+                const SizedBox(height: 2),
+                FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: huxDisplay(15, color: Colors.white, height: 1.1))),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: huxNightMuted)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1160,7 +1635,7 @@ class _LastNightTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HuxTileLabel('Last night', trailing: Text('goal ${goal.inHours}h${goal.inMinutes % 60 == 0 ? '' : ' ${goal.inMinutes % 60}m'}',
-              style: const TextStyle(fontSize: 14, color: huxMuted))),
+              style: TextStyle(fontSize: 14, color: huxMuted))),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -1214,7 +1689,7 @@ class _StepsTile extends StatelessWidget {
                     (distanceM == null || distanceM! < 50 ? '' : ' · ${(distanceM! / 1000).toStringAsFixed(1)} km'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, color: huxMuted)),
+                style: TextStyle(fontSize: 14, color: huxMuted)),
           ],
         ),
       ),
@@ -1250,9 +1725,88 @@ class _ProteinTile extends StatelessWidget {
             HuxSegmentBar(value: food.proteinG, max: food.proteinGoalG, color: HuxColors.ringFood),
             const SizedBox(height: 8),
             Text(toGo > 0 ? '+$toGo g to go' : 'goal reached',
-                style: const TextStyle(fontSize: 14, color: huxMuted)),
+                style: TextStyle(fontSize: 14, color: huxMuted)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Water: tap + for each glass. Keeps its own count so a tap is instant.
+class _WaterTile extends StatefulWidget {
+  final WaterLog log;
+  final WaterToday today;
+
+  const _WaterTile({super.key, required this.log, required this.today});
+
+  @override
+  State<_WaterTile> createState() => _WaterTileState();
+}
+
+class _WaterTileState extends State<_WaterTile> {
+  static const _blue = Color(0xFF2F8FE0);
+  late int _glasses = widget.today.glasses;
+
+  Future<void> _add(int delta) async {
+    final before = _glasses;
+    setState(() => _glasses = (_glasses + delta).clamp(0, WaterLog.maxPerDay));
+    try {
+      final saved = await widget.log.add(delta);
+      if (mounted) setState(() => _glasses = saved);
+    } catch (_) {
+      if (mounted) setState(() => _glasses = before);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final goal = widget.today.goal;
+    final left = goal.glasses - _glasses;
+    final litres = (_glasses * WaterGoal.glassMl / 1000).toStringAsFixed(_glasses % 4 == 0 ? 0 : 2);
+    return HuxTile(
+      padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+      semanticLabel: 'Water $_glasses of ${goal.glasses} glasses',
+      child: Row(
+        children: [
+          const ExcludeSemantics(child: Hux3DObject(Hux3D.drop, color: _blue, size: 38)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ExcludeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const HuxTileLabel('Water'),
+                  const SizedBox(height: 4),
+                  HuxTileValue('$_glasses', unit: 'of ${goal.glasses} glasses'),
+                  const SizedBox(height: 8),
+                  HuxSegmentBar(value: _glasses.toDouble(), max: goal.glasses.toDouble(), segments: goal.glasses, color: _blue),
+                  const SizedBox(height: 6),
+                  Text(
+                    left <= 0
+                        ? 'Goal reached · $litres L'
+                        : goal.why ?? (_glasses == 0 ? 'Tap + for each glass (250 ml)' : '$left to go · $litres L so far'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, color: huxMuted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_glasses > 0)
+            IconButton(
+              tooltip: 'Remove a glass',
+              onPressed: () => _add(-1),
+              icon: Icon(Icons.remove_circle_outline_rounded, color: huxMuted),
+            ),
+          IconButton.filled(
+            tooltip: 'Add a glass',
+            onPressed: () => _add(1),
+            style: IconButton.styleFrom(backgroundColor: _blue, minimumSize: const Size(48, 48)),
+            icon: const Icon(Icons.add_rounded, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
@@ -1266,13 +1820,13 @@ class _LogMealTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => HuxTile(
         onTap: onTap,
-        child: const Column(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            HuxTileLabel('Food'),
-            SizedBox(height: 6),
-            Hux3DObject(Hux3D.bowl, color: HuxColors.ringFood, size: 52),
-            SizedBox(height: 6),
+            const HuxTileLabel('Food'),
+            const SizedBox(height: 6),
+            const Hux3DObject(Hux3D.bowl, color: HuxColors.ringFood, size: 52),
+            const SizedBox(height: 6),
             Text('Log a meal', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
           ],
         ),
@@ -1469,9 +2023,9 @@ class _CoachNoticedCard extends StatelessWidget {
                               fontSize: 13, fontWeight: FontWeight.w800, color: Color.lerp(look.color, huxInk, 0.35))),
                       const SizedBox(height: 2),
                       Text(nudge.headline,
-                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, height: 1.2, color: huxInk)),
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, height: 1.2, color: huxInk)),
                       const SizedBox(height: 4),
-                      Text(nudge.detail, style: const TextStyle(fontSize: 14, height: 1.35, color: huxMuted)),
+                      Text(nudge.detail, style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted)),
                     ],
                   ),
                 ),
@@ -1480,7 +2034,7 @@ class _CoachNoticedCard extends StatelessWidget {
                     tooltip: 'Not now',
                     visualDensity: VisualDensity.compact,
                     onPressed: onHide,
-                    icon: const Icon(Icons.close_rounded, size: 20, color: huxMuted),
+                    icon: Icon(Icons.close_rounded, size: 20, color: huxMuted),
                   ),
               ],
             ),
@@ -1597,9 +2151,9 @@ class _SleepCheckInCardState extends State<_SleepCheckInCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(device ? 'How rested do you feel?' : 'How did you sleep?',
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
                     Text(device ? 'Your watch saw the night — only you know how it felt.' : 'Two taps. Charge uses it.',
-                        style: const TextStyle(fontSize: 13, color: huxMuted)),
+                        style: TextStyle(fontSize: 13, color: huxMuted)),
                   ],
                 ),
               ),
@@ -1607,7 +2161,7 @@ class _SleepCheckInCardState extends State<_SleepCheckInCard> {
                 tooltip: 'Not now',
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.onSkip,
-                icon: const Icon(Icons.close_rounded, size: 20, color: huxMuted),
+                icon: Icon(Icons.close_rounded, size: 20, color: huxMuted),
               ),
             ],
           ),
@@ -1628,7 +2182,7 @@ class _SleepCheckInCardState extends State<_SleepCheckInCard> {
                   icon: const Icon(Icons.wb_sunny_outlined, size: 18),
                   label: Text('Up ${_t(_wake)}'),
                 ),
-                Text('= $lenText', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxMuted)),
+                Text('= $lenText', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: huxMuted)),
               ],
             ),
           ],
@@ -1642,7 +2196,7 @@ class _SleepCheckInCardState extends State<_SleepCheckInCard> {
                   label: Text(r.label),
                   selected: _feel == r,
                   showCheckmark: false,
-                  selectedColor: huxInk,
+                  selectedColor: huxSolid,
                   labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _feel == r ? Colors.white : huxInk),
                   onSelected: (_) => setState(() => _feel = r),
                 ),
@@ -1654,7 +2208,7 @@ class _SleepCheckInCardState extends State<_SleepCheckInCard> {
               Expanded(
                 child: Text(
                   device ? 'Stays on your phone.' : 'Stays on your phone. Charge starts after 3 nights.',
-                  style: const TextStyle(fontSize: 12, color: huxMuted),
+                  style: TextStyle(fontSize: 12, color: huxMuted),
                 ),
               ),
               Padding(
@@ -1693,13 +2247,13 @@ class _ConnectHealthTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Connect $app',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: huxInk)),
-                const Text('Adds steps (your phone counts them) and sleep from any watch.',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: huxInk)),
+                Text('Adds steps (your phone counts them) and sleep from any watch.',
                     style: TextStyle(fontSize: 13, color: huxMuted)),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: huxMuted),
+          Icon(Icons.chevron_right_rounded, color: huxMuted),
         ],
       ),
     );

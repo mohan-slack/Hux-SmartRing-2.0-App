@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../theme/hux_fonts.dart';
 
 import '../core/progress/monthly_report.dart';
 import '../theme/hux_tokens.dart';
@@ -57,7 +58,7 @@ class MonthCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text('${s.activeDays}',
-                  style: const TextStyle(fontSize: 64, fontWeight: FontWeight.w800, height: 1, color: Colors.white)),
+                  style: huxSora(textStyle: const TextStyle(fontSize: 64, fontWeight: FontWeight.w800, height: 1, color: Colors.white))),
               Padding(
                 padding: const EdgeInsets.only(left: 6, bottom: 8),
                 child: Text('of ${s.days} days\nshowing up',

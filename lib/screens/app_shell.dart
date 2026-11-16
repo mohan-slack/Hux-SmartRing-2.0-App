@@ -12,6 +12,7 @@
 /// refract (see hux_glass.dart for why panels elsewhere fake it).
 
 import 'package:flutter/material.dart';
+import '../theme/hux_fonts.dart';
 
 import '../core/auth/auth_service.dart';
 import '../core/environment/environment_service.dart';
@@ -20,6 +21,8 @@ import '../core/coach/coach_context.dart';
 import '../core/coach/coach_nudges.dart';
 import '../core/coach/weekly_checkin.dart';
 import '../core/meaning/daily_readout.dart';
+import '../core/meaning/hux_charge.dart';
+import '../core/nudges/wake_alarm.dart';
 import '../core/nudges/smart_notifier.dart';
 import '../core/progress/week_score_loader.dart';
 import '../core/cycle/cycle_health_source.dart';
@@ -48,6 +51,7 @@ import '../core/storage/health_store.dart';
 import '../core/sync/sync_service.dart';
 import '../theme/hux_glass.dart';
 import '../theme/hux_tokens.dart';
+import '../theme/hux_theme_controller.dart';
 import '../theme/hux_ui.dart';
 import '../widgets/hux/hux_3d.dart';
 import '../widgets/hux/hux_kit.dart';
@@ -230,7 +234,11 @@ class _AppShellState extends State<AppShell> {
   );
 
   /// Each readout: re-plan tonight's reminders and the sleep quiet hours.
+  /// Latest readout's Charge: journeys adapt to it.
+  HuxCharge? _charge;
+
   void _onReadout(DailyReadout r) {
+    _charge = r.charge;
     final n = widget.nudgeService;
     final bed = r.plan?.bedtime;
     if (n == null) return;
@@ -306,7 +314,15 @@ class _AppShellState extends State<AppShell> {
     final diet = (await widget.profileService?.loadProfile())?.diet;
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => JourneysScreen(journeys: _journeys, nudges: widget.nudgeService, diet: diet, cycle: _cycle),
+      builder: (_) => JourneysScreen(
+        journeys: _journeys,
+        nudges: widget.nudgeService,
+        diet: diet,
+        cycle: _cycle,
+        morningCharge: _charge?.morningCharge,
+        shortSleep: _charge?.shortSleep ?? false,
+        food: _foodLog,
+      ),
     ));
     _todayRefresh.value++;
   }
@@ -314,7 +330,14 @@ class _AppShellState extends State<AppShell> {
   /// From the Home card: straight to today's journey day.
   Future<void> _openJourneyToday() async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => JourneyTodayScreen(journeys: _journeys, nudges: widget.nudgeService, cycle: _cycle),
+      builder: (_) => JourneyTodayScreen(
+        journeys: _journeys,
+        nudges: widget.nudgeService,
+        cycle: _cycle,
+        morningCharge: _charge?.morningCharge,
+        shortSleep: _charge?.shortSleep ?? false,
+        food: _foodLog,
+      ),
     ));
     _todayRefresh.value++;
   }
@@ -451,13 +474,14 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     if (id == FeatureId.proteinGap) {
-      final diet = (await profiles?.loadProfile())?.diet;
+      final profile = await profiles?.loadProfile();
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => FoodScreen(
           foodLog: _foodLog,
           analyzer: widget.mealAnalyzer,
-          diet: diet,
+          diet: profile?.diet,
+          language: profile?.language,
           onMealLogged: widget.nudgeService == null
               ? null
               : (meal) => widget.nudgeService!.onMealLogged(meal.loggedAt.toLocal()),
@@ -480,6 +504,10 @@ class _AppShellState extends State<AppShell> {
       try {
         evening = await nudges?.eveningRemindersOn();
       } catch (_) {}
+      WakeAlarmSettings? wake;
+      try {
+        wake = await nudges?.wakeSettings();
+      } catch (_) {}
       if (!mounted) return;
       await showPlanSheet(
         context,
@@ -490,6 +518,8 @@ class _AppShellState extends State<AppShell> {
         onEveningReminders: nudges == null
             ? null
             : (on) => nudges.setEveningReminders(on, bed: plan?.bedtime?.bedtime),
+        wakeAlarm: wake,
+        onWakeAlarm: nudges?.saveWakeSettings,
       );
       return;
     }
@@ -559,7 +589,7 @@ class _AppShellState extends State<AppShell> {
                 label: '$title. $sub',
                 excludeSemantics: true,
                 child: Material(
-                  color: Color.alphaBlend(color.withValues(alpha: 0.13), Colors.white),
+                  color: Color.alphaBlend(color.withValues(alpha: 0.13), HuxColors.card),
                   borderRadius: BorderRadius.circular(22),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
@@ -574,12 +604,12 @@ class _AppShellState extends State<AppShell> {
                           Text(title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: huxInk)),
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: huxInk)),
                           const SizedBox(height: 2),
                           Text(sub,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14, color: huxMuted)),
+                              style: TextStyle(fontSize: 14, color: huxMuted)),
                         ],
                       ),
                     ),
@@ -594,9 +624,9 @@ class _AppShellState extends State<AppShell> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 4, bottom: 12),
-                  child: Text('Add', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                  child: Text('Add', style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
                 ),
                 Row(
                   children: [
@@ -651,10 +681,10 @@ class _AppShellState extends State<AppShell> {
                     const SizedBox(width: 10),
                     Expanded(
                         child: Text(label,
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: huxInk))),
-                    if (detail != null) Text(detail, style: const TextStyle(fontSize: 14, color: huxMuted)),
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: huxInk))),
+                    if (detail != null) Text(detail, style: TextStyle(fontSize: 14, color: huxMuted)),
                     const SizedBox(width: 4),
-                    const Icon(Icons.chevron_right_rounded, color: huxMuted, size: 20),
+                    Icon(Icons.chevron_right_rounded, color: huxMuted, size: 20),
                   ],
                 ),
               ),
@@ -686,7 +716,7 @@ class _AppShellState extends State<AppShell> {
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(color: huxNight, shape: BoxShape.circle),
                       child: Text(name[0].toUpperCase(),
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white)),
+                          style: huxSora(textStyle: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white))),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -696,12 +726,12 @@ class _AppShellState extends State<AppShell> {
                           Text(name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                              style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
                           if (email != null)
                             Text(email,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 14, color: huxMuted)),
+                                style: TextStyle(fontSize: 14, color: huxMuted)),
                         ],
                       ),
                     ),
@@ -709,11 +739,45 @@ class _AppShellState extends State<AppShell> {
                 ),
                 const SizedBox(height: 18),
                 HuxTile(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const HuxTileLabel('Appearance'),
+                      const SizedBox(height: 8),
+                      SegmentedButton<HuxThemeChoice>(
+                        showSelectedIcon: false,
+                        segments: [
+                          for (final t in HuxThemeChoice.values)
+                            ButtonSegment(
+                              value: t,
+                              label: Text(t.label),
+                              icon: Icon(switch (t) {
+                                HuxThemeChoice.auto => Icons.brightness_auto_rounded,
+                                HuxThemeChoice.light => Icons.light_mode_rounded,
+                                HuxThemeChoice.dark => Icons.dark_mode_rounded,
+                              }, size: 18),
+                            ),
+                        ],
+                        selected: {HuxThemeController.instance.choice},
+                        onSelectionChanged: (s) {
+                          Navigator.pop(c);
+                          HuxThemeController.instance.setChoice(s.first);
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Auto: light by day, dark from 7 PM to 6 AM.',
+                          style: TextStyle(fontSize: 13, color: huxMuted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                HuxTile(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
                       for (var i = 0; i < rows.length; i++) ...[
-                        if (i > 0) const Divider(height: 1, indent: 62, endIndent: 16, color: HuxColors.hairline),
+                        if (i > 0) Divider(height: 1, indent: 62, endIndent: 16, color: HuxColors.hairline),
                         rows[i],
                       ],
                     ],

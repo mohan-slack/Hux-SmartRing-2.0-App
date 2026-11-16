@@ -4,9 +4,14 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/cycle/cycle_service.dart';
 
+import '../../core/food/calorie_budget_service.dart';
+import '../../core/food/dinner_advice.dart';
+import '../../core/food/food_log_service.dart';
+import '../../core/journeys/adaptive_day.dart';
 import '../../core/journeys/journey_content.dart';
 import '../../core/journeys/journey_models.dart';
 import '../../core/journeys/journey_service.dart';
@@ -26,7 +31,23 @@ class JourneyTodayScreen extends StatefulWidget {
   /// Optional: offers a gentle workout + iron tip on period days.
   final CycleService? cycle;
 
-  const JourneyTodayScreen({super.key, required this.journeys, this.nudges, this.cycle});
+  /// This morning's Charge and short-night flag: low → lighter workout or
+  /// "move it to tomorrow". Null = no adapting.
+  final int? morningCharge;
+  final bool shortSleep;
+
+  /// Optional: a big meal earlier today → lighter dinner ideas.
+  final FoodLogService? food;
+
+  const JourneyTodayScreen({
+    super.key,
+    required this.journeys,
+    this.nudges,
+    this.cycle,
+    this.morningCharge,
+    this.shortSleep = false,
+    this.food,
+  });
 
   @override
   State<JourneyTodayScreen> createState() => _JourneyTodayScreenState();
@@ -47,6 +68,12 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
   /// No jumping, knee-friendly swaps (remembered).
   bool _lowImpact = false;
 
+  /// "Keep plan" tapped on today's Charge suggestion.
+  bool _keepPlan = false;
+
+  /// Set when a big meal earlier today calls for a lighter dinner.
+  DinnerAdvice? _dinner;
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +87,14 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
       s = await widget.journeys.active();
       low = await widget.journeys.lowImpact();
     } catch (_) {}
+    DinnerAdvice? dinner;
+    final food = widget.food;
+    if (food != null) {
+      try {
+        final target = await CalorieBudgetService(food.store).target();
+        dinner = DinnerAdvice.check(await food.mealsFor(DateTime.now()), targetKcal: target?.kcal);
+      } catch (_) {}
+    }
     try {
       gentle = await widget.cycle?.gentleToday() ?? false;
       period = await widget.cycle?.periodToday() ?? false;
@@ -71,6 +106,28 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
       _gentleOffered = gentle;
       _periodToday = period;
       _lowImpact = low;
+      _dinner = dinner;
+    });
+  }
+
+  Future<void> _move() async {
+    final title = widget.journeys.today(_s!).workout.title;
+    final s = await widget.journeys.moveToTomorrow();
+    await _syncReminders(s);
+    if (!mounted) return;
+    setState(() => _s = s);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('$title moved to tomorrow. Easy recovery today.')));
+  }
+
+  Future<void> _undoMove() async {
+    final s = await widget.journeys.undoMove();
+    await _syncReminders(s);
+    if (!mounted) return;
+    setState(() {
+      _s = s;
+      _keepPlan = true;
     });
   }
 
@@ -222,10 +279,22 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
     final doneToday = widget.journeys.doneToday(s);
     final quiet = widget.journeys.quietDays(s);
     final bed = widget.journeys.bedtimeFor(s);
-    final meals = widget.journeys.mealsToday(s);
+    final meals = widget.journeys.mealsToday(s, lightDinner: _dinner != null);
     final locked = doneToday || s.paused;
     final gentle = _gentleOffered && _useGentle && s.setup.id == JourneyId.fitIn30;
-    final base = gentle ? gentleWorkout : day.workout;
+    final movedToday = widget.journeys.isMovedDay(s);
+    // Today's Charge bends the plan: lighter, or move it to tomorrow.
+    final adapt = s.setup.id != JourneyId.fitIn30 || locked || gentle || movedToday || _keepPlan ||
+            s.ticks.contains(DayItem.move)
+        ? null
+        : AdaptiveDay.suggest(
+            planned: day.workout,
+            charge: widget.morningCharge,
+            shortSleep: widget.shortSleep,
+            canMove: widget.journeys.canMoveToday(s),
+          );
+    final planned = gentle ? gentleWorkout : day.workout;
+    final base = adapt?.kind == AdaptKind.lighter ? AdaptiveDay.lighter(planned) : planned;
     final canSwap = hasHighImpact(base);
     final workout = _lowImpact && canSwap ? lowImpactVersion(base) : base;
 
@@ -253,7 +322,7 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
               : doneToday
                   ? 'Day ${s.daysDone} done'
                   : 'Day ${s.currentDay}${day.challenge ? ' · challenge' : ''}',
-          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: huxInk),
+          style: huxSora(textStyle: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: huxInk)),
         ),
         const SizedBox(height: 14),
         _DayDots(total: s.def.days, done: s.daysDone, today: doneToday ? null : s.currentDay, color: color),
@@ -291,11 +360,14 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
           icon: Icons.restaurant_outlined,
           color: HuxColors.ringFood,
           label: 'Food',
-          value: nextMeal == null ? 'See today\'s meals' : '${slot.label}: ${nextMeal.name}',
+          value: nextMeal == null
+              ? 'See today\'s meals'
+              : '${slot.label}${slot == MealSlot.dinner && _dinner != null ? ' (light)' : ''}: ${nextMeal.name}',
           done: s.ticks.contains(DayItem.food),
           locked: locked,
           onTick: () => _toggle(DayItem.food),
           onDetails: () => _details(context, 'Today\'s meals', [
+            if (_dinner != null) _DetailNote(_dinner!.note),
             for (final e in meals.entries)
               for (final m in e.value)
                 _DetailRow('${e.key.label} · ${m.budget.symbol}', m.name,
@@ -306,6 +378,23 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
           ]),
         ),
         const SizedBox(height: 12),
+        if (movedToday && !locked) ...[
+          _AdaptCard(
+            note: day.focus,
+            secondary: s.ticks.contains(DayItem.move) ? null : 'Undo',
+            onSecondary: _undoMove,
+          ),
+          const SizedBox(height: 8),
+        ] else if (adapt != null) ...[
+          _AdaptCard(
+            note: adapt.note,
+            primary: adapt.kind == AdaptKind.move ? adapt.action : null,
+            onPrimary: _move,
+            secondary: adapt.kind == AdaptKind.move ? 'Keep plan' : 'Full session',
+            onSecondary: () => setState(() => _keepPlan = true),
+          ),
+          const SizedBox(height: 8),
+        ],
         _ItemTile(
           icon: Icons.fitness_center_outlined,
           color: color,
@@ -327,7 +416,7 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
               if (!locked)
                 FilledButton.icon(
                   onPressed: () => _startWorkout(workout, lowImpact: _lowImpact && canSwap),
-                  style: FilledButton.styleFrom(backgroundColor: huxInk, minimumSize: const Size(0, 44), shape: const StadiumBorder()),
+                  style: FilledButton.styleFrom(backgroundColor: huxSolid, minimumSize: const Size(0, 44), shape: const StadiumBorder()),
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: const Text('Start'),
                 ),
@@ -339,7 +428,7 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
                   tooltip: 'No jumping, knee-friendly swaps',
                   selected: _lowImpact,
                   showCheckmark: false,
-                  selectedColor: huxInk,
+                  selectedColor: huxSolid,
                   labelStyle: TextStyle(fontWeight: FontWeight.w700, color: _lowImpact ? Colors.white : huxInk),
                   onSelected: locked ? null : _setLowImpact,
                 ),
@@ -361,7 +450,7 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
               child: Text(widget.journeys.restPassAvailable(s) ? 'Not today (use rest pass)' : 'Not today'),
             ),
           ),
-        const Text('Stop any move that hurts.',
+        Text('Stop any move that hurts.',
             textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: huxMuted)),
       ],
     );
@@ -378,7 +467,7 @@ class _JourneyTodayScreenState extends State<JourneyTodayScreen> {
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               children: [
-                Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+                Text(title, style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
                 const SizedBox(height: 12),
                 ...rows,
               ],
@@ -417,10 +506,10 @@ class _DayDots extends StatelessWidget {
                   color: d <= done
                       ? color
                       : d == today
-                          ? Colors.white
+                          ? HuxColors.card
                           : (d % 7 == 0 || d == total)
-                              ? const Color(0xFFFCE8F3)
-                              : const Color(0xFFE4E0EC),
+                              ? HuxColors.softPink
+                              : HuxColors.hairline,
                   border: d == today ? Border.all(color: color, width: 3) : null,
                 ),
               ),
@@ -475,11 +564,11 @@ class _ItemTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
+                    Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: huxMuted)),
                     Text(value,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: huxInk)),
+                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: huxInk)),
                   ],
                 ),
               ),
@@ -497,7 +586,7 @@ class _ItemTile extends StatelessWidget {
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: done ? const Color(0xFFE7F6EE) : Colors.white,
+                      color: done ? HuxColors.softGood : HuxColors.card,
                       border: done ? null : Border.all(color: const Color(0xFFD9D4E2), width: 2),
                       borderRadius: BorderRadius.circular(22),
                     ),
@@ -532,12 +621,60 @@ class _DetailRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxMuted)),
-            Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: huxInk)),
-            if (sub != null) Text(sub!, style: const TextStyle(fontSize: 14, color: huxMuted)),
+            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: huxMuted)),
+            Text(value, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: huxInk)),
+            if (sub != null) Text(sub!, style: TextStyle(fontSize: 14, color: huxMuted)),
           ],
         ),
       );
+}
+
+/// Today's plan, bent to today's Charge — one line and one or two buttons.
+class _AdaptCard extends StatelessWidget {
+  final String note;
+  final String? primary;
+  final VoidCallback? onPrimary;
+  final String? secondary;
+  final VoidCallback? onSecondary;
+
+  const _AdaptCard({required this.note, this.primary, this.onPrimary, this.secondary, this.onSecondary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      decoration: BoxDecoration(
+        color: HuxColors.stretched.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.battery_3_bar_rounded, size: 20, color: HuxColors.stretched),
+              const SizedBox(width: 8),
+              Expanded(child: Text(note, style: TextStyle(fontSize: 14, height: 1.35, color: huxInk))),
+            ],
+          ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            children: [
+              if (secondary != null) TextButton(onPressed: onSecondary, child: Text(secondary!)),
+              if (primary != null)
+                FilledButton(
+                  onPressed: onPrimary,
+                  style: FilledButton.styleFrom(backgroundColor: huxSolid, shape: const StadiumBorder()),
+                  child: Text(primary!),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DetailNote extends StatelessWidget {
@@ -548,7 +685,7 @@ class _DetailNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: 10),
-        child: Text(text, style: const TextStyle(fontSize: 14, color: huxMuted, height: 1.4)),
+        child: Text(text, style: TextStyle(fontSize: 14, color: huxMuted, height: 1.4)),
       );
 }
 

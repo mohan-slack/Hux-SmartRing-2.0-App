@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/coach/coach_notes.dart';
@@ -259,7 +260,7 @@ class _CoachScreenState extends State<CoachScreen> {
           context: context,
           isScrollControlled: true,
           showDragHandle: true,
-          backgroundColor: Colors.white,
+          backgroundColor: HuxColors.card,
           builder: (_) => _NotesSheet(notes: widget.coach.notes),
         );
         // The chips at the top show what's shared: refresh them.
@@ -460,7 +461,7 @@ class _CoachScreenState extends State<CoachScreen> {
                             _topic == CoachTopic.general
                                 ? 'Anything about your day. For deeper help, pick a specialist above.'
                                 : 'Knows your ${_topic == CoachTopic.sleep ? 'nights and bedtime' : _topic == CoachTopic.food ? 'meals and protein' : 'steps and effort'}. This chat stays separate.',
-                            style: const TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
+                            style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
                           ),
                         ],
                       ),
@@ -478,9 +479,9 @@ class _CoachScreenState extends State<CoachScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(s.text,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
                         ),
-                        const Icon(Icons.arrow_forward_rounded, color: huxMuted, size: 18),
+                        Icon(Icons.arrow_forward_rounded, color: huxMuted, size: 18),
                       ],
                     ),
                   ),
@@ -526,7 +527,7 @@ class _CoachScreenState extends State<CoachScreen> {
                     color: HuxColors.card,
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(color: HuxColors.glassStroke),
-                    boxShadow: const [BoxShadow(color: HuxColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+                    boxShadow: [BoxShadow(color: HuxColors.shadow, blurRadius: 16, offset: const Offset(0, 4))],
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -590,8 +591,8 @@ class _TopicPill extends StatelessWidget {
       selected: selected,
       label: '${topic.label} coach',
       child: Material(
-        color: selected ? huxInk : HuxColors.card,
-        shape: StadiumBorder(side: BorderSide(color: selected ? huxInk : HuxColors.glassStroke)),
+        color: selected ? huxSolid : HuxColors.card,
+        shape: StadiumBorder(side: BorderSide(color: selected ? huxSolid : HuxColors.glassStroke)),
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
@@ -765,7 +766,7 @@ class _ConsentView extends StatelessWidget {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: HuxColors.card,
       builder: (c) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.7,
@@ -774,7 +775,7 @@ class _ConsentView extends StatelessWidget {
           controller: scroll,
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
           children: [
-            const Text('How the coach works', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+            Text('How the coach works', style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
             const SizedBox(height: 12),
             const Text(
               'To give advice that fits you, the coach needs a short summary of your HUX numbers. Your message and '
@@ -786,7 +787,7 @@ class _ConsentView extends StatelessWidget {
             const SizedBox(height: 16),
             _SharedList(lines: shared),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Never shared: your name, email, phone number, location, photos, or minute-by-minute readings. '
               'You can stop sharing any time from the menu — that also deletes the chat on this phone.',
               style: TextStyle(fontSize: 14, height: 1.4, color: huxMuted),
@@ -805,9 +806,9 @@ class _ConsentView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, maxLines: 1, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
+                Text(value, maxLines: 1, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: huxInk)),
                 const SizedBox(height: 2),
-                Text(label, maxLines: 1, style: const TextStyle(fontSize: 13, color: huxMuted)),
+                Text(label, maxLines: 1, style: TextStyle(fontSize: 13, color: huxMuted)),
               ],
             ),
           ),
@@ -820,10 +821,10 @@ class _ConsentView extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxSpacing.lg),
             children: [
-              const Text('Ask about your day',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.15, color: huxInk)),
+              Text('Ask about your day',
+                  style: huxSora(textStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.15, color: huxInk))),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Your message and a short summary of your numbers go to Groq (USA) to write the reply. '
                 'Not stored by HUX or Groq.',
                 style: TextStyle(fontSize: 15, height: 1.4, color: huxMuted),
@@ -848,13 +849,13 @@ class _ConsentView extends StatelessWidget {
                   for (final l in shared)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
-                      child: Text(_chip(l), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: huxInk)),
+                      decoration: BoxDecoration(color: HuxColors.card, borderRadius: BorderRadius.circular(999)),
+                      child: Text(_chip(l), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: huxInk)),
                     ),
                 ],
               ),
               const SizedBox(height: 14),
-              const Text('Never: name, email, phone, location, photos.',
+              Text('Never: name, email, phone, location, photos.',
                   style: TextStyle(fontSize: 14, color: huxMuted)),
               Align(
                 alignment: Alignment.centerLeft,
@@ -960,9 +961,9 @@ class _Bubble extends StatelessWidget {
           Expanded(
             child: Container(
               padding: const EdgeInsets.fromLTRB(HuxSpacing.md, HuxSpacing.md, HuxSpacing.md, HuxSpacing.xs),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: HuxColors.card,
-                borderRadius: BorderRadius.only(
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(6),
                   topRight: Radius.circular(20),
                   bottomLeft: Radius.circular(20),
@@ -986,7 +987,7 @@ class _Bubble extends StatelessWidget {
                           tooltip: 'Report this reply',
                           visualDensity: VisualDensity.compact,
                           iconSize: 18,
-                          icon: const Icon(Icons.outlined_flag, color: HuxColors.mutedText),
+                          icon: Icon(Icons.outlined_flag, color: HuxColors.mutedText),
                           onPressed: onReport,
                         ),
                     ],
@@ -1180,9 +1181,9 @@ class _NotesSheetState extends State<_NotesSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Coach notes', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk)),
+          Text('Coach notes', style: huxSora(textStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: huxInk))),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Things the coach should always keep in mind. Sent with each message, like the rest of what HUX shares. '
             'Only you add or remove them.',
             style: TextStyle(fontSize: 14, height: 1.35, color: huxMuted),
@@ -1195,10 +1196,10 @@ class _NotesSheetState extends State<_NotesSheet> {
               decoration: BoxDecoration(color: HuxColors.bg, borderRadius: BorderRadius.circular(14)),
               child: Row(
                 children: [
-                  Expanded(child: Text(n, style: const TextStyle(fontSize: 15, color: huxInk))),
+                  Expanded(child: Text(n, style: TextStyle(fontSize: 15, color: huxInk))),
                   IconButton(
                     tooltip: 'Remove',
-                    icon: const Icon(Icons.close_rounded, size: 20, color: huxMuted),
+                    icon: Icon(Icons.close_rounded, size: 20, color: huxMuted),
                     onPressed: () async {
                       await widget.notes.remove(i);
                       await _reload();
@@ -1226,7 +1227,7 @@ class _NotesSheetState extends State<_NotesSheet> {
               ),
           ],
           const SizedBox(height: 8),
-          const Text("Please don't add medicines or diagnoses — the coach gives wellness tips, not medical advice.",
+          Text("Please don't add medicines or diagnoses — the coach gives wellness tips, not medical advice.",
               style: TextStyle(fontSize: 12, color: huxMuted)),
         ],
       ),

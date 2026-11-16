@@ -126,7 +126,7 @@ question."
 | Financial features | None |
 | Data safety | As in 1.2 |
 | Health apps declaration | As in 1.3 |
-| Permissions declarations | None needed: no SMS, call log, background location, exact alarm, all-files access or accessibility |
+| Permissions declarations | None needed: no SMS, call log, background location, all-files access or accessibility. `SCHEDULE_EXACT_ALARM` (gentle wake alarm only) is user-granted in Settings and needs no Play declaration; HUX does NOT use `USE_EXACT_ALARM` |
 | Foreground service | None |
 
 **IARC content-rating answers:**

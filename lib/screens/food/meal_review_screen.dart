@@ -168,7 +168,7 @@ class _MealReviewScreenState extends State<MealReviewScreen> {
             child: Column(
               children: [
                 for (var i = 0; i < _analysis.items.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, color: HuxColors.hairline),
+                  if (i > 0) Divider(height: 1, color: HuxColors.hairline),
                   _ItemRow(
                     entry: _analysis.items[i],
                     onMinus: () => _setQty(i, _analysis.items[i].quantity - 0.5),
@@ -233,7 +233,7 @@ class _ItemRow extends StatelessWidget {
               if (ai) const HuxPill(label: 'AI estimate', color: HuxColors.ringSleep, icon: Icons.auto_awesome),
               IconButton(
                 tooltip: 'Remove',
-                icon: const Icon(Icons.close_rounded, size: 20, color: HuxColors.mutedText),
+                icon: Icon(Icons.close_rounded, size: 20, color: HuxColors.mutedText),
                 onPressed: onRemove,
               ),
             ],

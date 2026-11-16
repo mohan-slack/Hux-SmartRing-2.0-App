@@ -121,7 +121,7 @@ class _WalkNudgeScreenState extends State<WalkNudgeScreen> {
                               ? () => _pickTime(s.lunch, (t) => _save(s.copyWith(lunch: t)))
                               : null,
                         ),
-                        const Divider(height: 1, color: HuxColors.hairline),
+                        Divider(height: 1, color: HuxColors.hairline),
                         HuxListRow(
                           icon: Icons.dinner_dining_outlined,
                           color: HuxColors.ringSleep,
@@ -134,7 +134,7 @@ class _WalkNudgeScreenState extends State<WalkNudgeScreen> {
                               ? () => _pickTime(s.dinner, (t) => _save(s.copyWith(dinner: t)))
                               : null,
                         ),
-                        const Divider(height: 1, color: HuxColors.hairline),
+                        Divider(height: 1, color: HuxColors.hairline),
                         HuxListRow(
                           icon: Icons.restaurant_rounded,
                           color: color,
@@ -154,7 +154,7 @@ class _WalkNudgeScreenState extends State<WalkNudgeScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.bedtime_outlined, size: 16, color: HuxColors.mutedText),
+                    Icon(Icons.bedtime_outlined, size: 16, color: HuxColors.mutedText),
                     const SizedBox(width: HuxSpacing.sm),
                     Expanded(
                       child: Text(

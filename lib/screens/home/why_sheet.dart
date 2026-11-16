@@ -4,10 +4,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/home/home_insights.dart';
 import '../../core/meaning/daily_readout.dart';
 import '../../core/ring/ring_models.dart';
+import '../../theme/hux_tokens.dart';
 import '../../widgets/hux/hux_kit.dart';
 
 Future<void> showWhySheet(
@@ -21,7 +23,7 @@ Future<void> showWhySheet(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    backgroundColor: Colors.white,
+    backgroundColor: HuxColors.card,
     builder: (c) => DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.78,
@@ -83,8 +85,8 @@ class WhySheetBody extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(charge == null ? 'Still learning' : 'Why $charge?',
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: huxInk)),
-                  const Text('vs your own last 14 days', style: TextStyle(fontSize: 15, color: huxMuted)),
+                      style: huxSora(textStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: huxInk))),
+                  Text('vs your own last 14 days', style: TextStyle(fontSize: 15, color: huxMuted)),
                 ],
               ),
             ),
@@ -93,8 +95,8 @@ class WhySheetBody extends StatelessWidget {
         const SizedBox(height: 20),
         if (insights.why.isNotEmpty) ...[
           for (final f in insights.why) _FactorRow(f),
-          const Padding(
-            padding: EdgeInsets.only(top: 4, bottom: 20),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -128,12 +130,12 @@ class WhySheetBody extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
                     child: Icon(Icons.radio_button_unchecked_rounded, size: 18, color: huxMuted),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(a, style: const TextStyle(fontSize: 16, color: huxInk, height: 1.35))),
+                  Expanded(child: Text(a, style: TextStyle(fontSize: 16, color: huxInk, height: 1.35))),
                 ],
               ),
             ),
@@ -149,12 +151,12 @@ class WhySheetBody extends StatelessWidget {
               for (final (label, value) in body)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(color: const Color(0xFFF4F2F7), borderRadius: BorderRadius.circular(14)),
+                  decoration: BoxDecoration(color: HuxColors.cardElevated, borderRadius: BorderRadius.circular(14)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(label, style: const TextStyle(fontSize: 13, color: huxMuted)),
-                      Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
+                      Text(label, style: TextStyle(fontSize: 13, color: huxMuted)),
+                      Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
                     ],
                   ),
                 ),
@@ -168,13 +170,13 @@ class WhySheetBody extends StatelessWidget {
             tilePadding: EdgeInsets.zero,
             childrenPadding: const EdgeInsets.only(bottom: 8),
             expandedCrossAxisAlignment: CrossAxisAlignment.start,
-            title: const Text('Read the full explanation',
+            title: Text('Read the full explanation',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk)),
             children: [
               Text(readout.meaning, style: const TextStyle(fontSize: 15, height: 1.45, color: Color(0xFF3A3646))),
               if (readout.charge?.reason != null) ...[
                 const SizedBox(height: 8),
-                Text(readout.charge!.reason!, style: const TextStyle(fontSize: 14, color: huxMuted)),
+                Text(readout.charge!.reason!, style: TextStyle(fontSize: 14, color: huxMuted)),
               ],
             ],
           ),
@@ -250,13 +252,13 @@ class _MiniTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: const Color(0xFFF4F2F7), borderRadius: BorderRadius.circular(18)),
+        decoration: BoxDecoration(color: HuxColors.cardElevated, borderRadius: BorderRadius.circular(18)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
-            Text(caption, style: const TextStyle(fontSize: 14, color: huxMuted)),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
+            Text(caption, style: TextStyle(fontSize: 14, color: huxMuted)),
           ],
         ),
       );

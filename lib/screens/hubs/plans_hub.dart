@@ -6,6 +6,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../theme/hux_fonts.dart';
 
 import '../../core/profile/feature_catalog.dart';
 import '../../theme/hux_tokens.dart';
@@ -27,7 +28,7 @@ class PlansHub extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(HuxSpacing.lg, HuxSpacing.sm, HuxSpacing.lg, HuxGlass.navClearance),
       children: [
-        const Text('Plans', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: huxInk)),
+        Text('Plans', style: huxSora(textStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: huxInk))),
         const SizedBox(height: 16),
         if (onOpenJourneys != null) ...[
           _JourneysTile(onTap: onOpenJourneys!),
@@ -96,9 +97,9 @@ class PlansHub extends StatelessWidget {
           child: Column(
             children: [
               _NudgeRow('After meals', 'Short walk', () => onOpenFeature(FeatureId.walkAfterMeal)),
-              const Divider(height: 1, indent: 16, endIndent: 16, color: HuxColors.hairline),
+              Divider(height: 1, indent: 16, endIndent: 16, color: HuxColors.hairline),
               _NudgeRow('Sit too long', 'Desk days', () => onOpenFeature(FeatureId.sitTooLong)),
-              const Divider(height: 1, indent: 16, endIndent: 16, color: HuxColors.hairline),
+              Divider(height: 1, indent: 16, endIndent: 16, color: HuxColors.hairline),
               _NudgeRow('Air & heat', 'Your city', () => onOpenFeature(FeatureId.airAndHeatAlerts)),
             ],
           ),
@@ -156,21 +157,21 @@ class _JourneysTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Journeys',
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-                          Text('One card a day', style: TextStyle(fontSize: 13, color: huxNightMuted)),
+                              style: huxSora(textStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white))),
+                          const Text('One card a day', style: TextStyle(fontSize: 13, color: huxNightMuted)),
                         ],
                       ),
                     ),
-                    Hux3DObject(Hux3D.moon, color: HuxColors.ringSleep, size: 50),
-                    SizedBox(width: 4),
-                    Hux3DObject(Hux3D.medal, color: Color(0xFFF567B5), size: 50),
+                    const Hux3DObject(Hux3D.moon, color: HuxColors.ringSleep, size: 50),
+                    const SizedBox(width: 4),
+                    const Hux3DObject(Hux3D.medal, color: Color(0xFFF567B5), size: 50),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -246,7 +247,7 @@ class _PlanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Color.alphaBlend(color.withValues(alpha: 0.12), Colors.white),
+      color: Color.alphaBlend(color.withValues(alpha: 0.12), HuxColors.card),
       borderRadius: BorderRadius.circular(22),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -270,7 +271,7 @@ class _PlanTile extends StatelessWidget {
                       Text(value,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: huxInk)),
                     ],
                   ),
                 ),
@@ -387,10 +388,10 @@ class _NudgeRow extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
           child: Row(
             children: [
-              Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk))),
-              Text(detail, style: const TextStyle(fontSize: 14, color: huxMuted)),
+              Expanded(child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: huxInk))),
+              Text(detail, style: TextStyle(fontSize: 14, color: huxMuted)),
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_right_rounded, color: huxMuted, size: 20),
+              Icon(Icons.chevron_right_rounded, color: huxMuted, size: 20),
             ],
           ),
         ),

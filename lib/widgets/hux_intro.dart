@@ -12,7 +12,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/hux_fonts.dart';
 
 enum IntroMode { off, full, quick }
 
@@ -205,7 +205,7 @@ class _IntroFrame extends StatelessWidget {
               child: Text(
                 'Know your charge.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.urbanist(
+                style: huxSora(
                   fontSize: math.min(l.size.width * 0.045, 20),
                   fontWeight: FontWeight.w600,
                   color: Colors.white.withValues(alpha: 0.92 * pg),

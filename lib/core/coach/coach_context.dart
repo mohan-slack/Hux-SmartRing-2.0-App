@@ -9,6 +9,8 @@ import '../cycle/cycle_service.dart';
 import '../meaning/day_plan.dart';
 import '../meaning/profile_tuning.dart';
 import '../meaning/sleep_debt.dart';
+import '../food/calorie_budget_service.dart';
+import '../water/water_log.dart';
 import 'coach_notes.dart';
 import '../food/food_log_service.dart';
 import '../meaning/readout_service.dart';
@@ -61,6 +63,13 @@ class CoachContext {
   /// Last 7 nights' shortfall vs need, in minutes (null = too few nights).
   final int? sleepDebtMin;
 
+  /// Calorie target (only when the user set one up) and kcal logged today.
+  final int? kcalTarget;
+  final int? kcalToday;
+
+  /// Water glasses (250 ml) logged today; null when none logged.
+  final int? waterGlasses;
+
   /// Lines the user asked the coach to keep in mind (Coach notes).
   final List<String> notes;
 
@@ -92,6 +101,9 @@ class CoachContext {
     this.lastMealMinAgo,
     this.sleepDataOdd = false,
     this.sleepDebtMin,
+    this.kcalTarget,
+    this.kcalToday,
+    this.waterGlasses,
     this.notes = const [],
   });
 
@@ -123,6 +135,9 @@ class CoachContext {
       'lastMealMinAgo': lastMealMinAgo,
       if (sleepDataOdd) 'sleepDataOdd': true,
       'sleepDebtMin': sleepDebtMin,
+      if (kcalTarget != null) 'kcalTarget': kcalTarget,
+      if (kcalTarget != null) 'kcalToday': kcalToday,
+      if (waterGlasses != null) 'waterGlasses': waterGlasses,
       if (notes.isNotEmpty) 'notes': notes,
     };
     m.removeWhere((_, v) => v == null);
@@ -150,6 +165,8 @@ class CoachContext {
       if (cyclePhase != null) 'Cycle phase: $cyclePhase',
       if (mealsToday != null) 'Meals logged today: $mealsToday',
       if (sleepDataOdd) 'Sleep data: looked wrong, not shared',
+      if (kcalTarget != null) 'Calories today: ${kcalToday ?? 0} of $kcalTarget kcal',
+      if (waterGlasses != null) 'Water today: $waterGlasses glasses',
       if (sleepDebtMin != null) 'Sleep debt this week: ${hm(sleepDebtMin!)}',
       for (final n in notes) 'You told the coach: $n',
       'Time: ${localTime ?? partOfDay}${weekday != null ? ', $weekday' : ''}',
@@ -246,20 +263,31 @@ class CoachContextLoader {
       // Streak is optional context.
     }
 
-    int? protein, proteinGoal, meals, lastMealAgo;
+    int? protein, proteinGoal, meals, lastMealAgo, kcal, kcalTarget;
     try {
       final food = FoodLogService(store);
       final today = await food.mealsFor(at);
       meals = today.length;
-      protein = today.isEmpty ? 0 : (await food.totalFor(at)).proteinG.round();
+      final total = today.isEmpty ? null : await food.totalFor(at);
+      protein = total?.proteinG.round() ?? 0;
+      kcal = total?.kcal.round() ?? 0;
       if (today.isNotEmpty) {
         final last = today.map((m) => m.loggedAt).reduce((a, b) => a.isAfter(b) ? a : b);
         final ago = at.difference(last).inMinutes;
         if (ago >= 0) lastMealAgo = ago;
       }
       proteinGoal = (await food.proteinGoal()).round();
+      kcalTarget = (await CalorieBudgetService(store).target())?.kcal;
     } catch (_) {
       // Food is optional context.
+    }
+
+    int? water;
+    try {
+      final g = await WaterLog(store, now: () => at).today();
+      if (g > 0) water = g;
+    } catch (_) {
+      // Optional.
     }
 
     String? phase;
@@ -297,6 +325,9 @@ class CoachContextLoader {
       lastMealMinAgo: lastMealAgo,
       sleepDataOdd: odd,
       sleepDebtMin: debt,
+      kcalTarget: kcalTarget,
+      waterGlasses: water,
+      kcalToday: kcalTarget == null ? null : kcal,
       notes: await _notes(),
     );
   }

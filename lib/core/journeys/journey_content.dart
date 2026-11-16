@@ -185,7 +185,7 @@ Workout _fitWorkout(int day, FitnessLevel level) {
   final beginner = level == FitnessLevel.beginner;
 
   if ({4, 11, 18, 25}.contains(day)) {
-    return Workout(title: 'Easy recovery', warmup: _warmup, main: _windDown.main, cooldown: _cooldown);
+    return recoveryWorkout;
   }
   if (day % 7 == 0 || day == 30) {
     // Challenge: how many in 60 s — beat it next week.
@@ -241,6 +241,9 @@ const _sleepTips = [
   'Your new bedtime should feel normal now — protect it.',
   'Last day: pick the 2 habits you\'ll keep.',
 ];
+
+/// Easy recovery (also used when a low-Charge day moves its workout).
+final Workout recoveryWorkout = Workout(title: 'Easy recovery', warmup: _warmup, main: _windDown.main, cooldown: _cooldown);
 
 /// The lighter session offered on the first period days (Cycle).
 const Workout gentleWorkout = Workout(title: 'Gentle day', warmup: _warmup, main: [

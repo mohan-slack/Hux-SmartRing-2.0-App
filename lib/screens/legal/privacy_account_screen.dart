@@ -239,7 +239,7 @@ class _PrivacyAccountScreenState extends State<PrivacyAccountScreen> {
                       onChanged: _setCoach,
                     ),
                   if (widget.coach != null && widget.foodLog != null)
-                    const Divider(height: 1, color: HuxColors.hairline),
+                    Divider(height: 1, color: HuxColors.hairline),
                   if (widget.foodLog != null)
                     switchRow(
                       icon: Icons.photo_camera_outlined,
@@ -270,7 +270,7 @@ class _PrivacyAccountScreenState extends State<PrivacyAccountScreen> {
                     subtitle: 'A copy of everything HUX keeps, as a file',
                     onTap: _download,
                   ),
-                  const Divider(height: 1, color: HuxColors.hairline),
+                  Divider(height: 1, color: HuxColors.hairline),
                   HuxListRow(
                     icon: Icons.phonelink_erase_rounded,
                     color: HuxColors.stretched,
@@ -278,7 +278,7 @@ class _PrivacyAccountScreenState extends State<PrivacyAccountScreen> {
                     subtitle: 'Keeps your account',
                     onTap: _deleteLocal,
                   ),
-                  const Divider(height: 1, color: HuxColors.hairline),
+                  Divider(height: 1, color: HuxColors.hairline),
                   HuxListRow(
                     icon: Icons.delete_forever_rounded,
                     color: HuxColors.rundown,

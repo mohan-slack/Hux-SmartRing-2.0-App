@@ -181,7 +181,7 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                   child: Column(
                     children: [
                       for (var w = 1; w <= plan.weeks; w++) ...[
-                        if (w > 1) const Divider(height: 1, color: HuxColors.hairline),
+                        if (w > 1) Divider(height: 1, color: HuxColors.hairline),
                         _WeekRow(
                           week: w,
                           detail: _describe(plan.sessions.firstWhere((s) => s.week == w)),

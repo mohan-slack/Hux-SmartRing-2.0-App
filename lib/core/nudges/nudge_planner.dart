@@ -154,6 +154,12 @@ class NudgeIds {
   /// Tonight's timing, from the target bedtime.
   static const lastCaffeine = 1601;
   static const dinnerBy = 1602;
+
+  /// Gentle wake alarm: heads-up, the chime, one backup.
+  static const wakeSoon = 1701;
+  static const wakeNow = 1702;
+  static const wakeBackup = 1703;
+  static const allWake = [wakeSoon, wakeNow, wakeBackup];
   static const walkLunch = 1001;
   static const walkDinner = 1002;
   static const walkAfterLogged = 1003;

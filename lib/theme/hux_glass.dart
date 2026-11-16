@@ -30,12 +30,12 @@ class HuxBackground extends StatelessWidget {
   /// near-white page colour, with a faint pink glow top-left.
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          stops: [0.0, 0.45],
+          stops: const [0.0, 0.45],
           colors: [HuxColors.bgTop, HuxColors.bg],
         ),
       ),
@@ -45,7 +45,7 @@ class HuxBackground extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(-1.1, -1.05),
+                center: const Alignment(-1.1, -1.05),
                 radius: 1.0,
                 colors: [HuxColors.bgGlowPink, Colors.transparent],
               ),
@@ -54,7 +54,7 @@ class HuxBackground extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(1.2, -0.6),
+                center: const Alignment(1.2, -0.6),
                 radius: 1.1,
                 colors: [HuxColors.bgGlowPurple, Colors.transparent],
               ),
